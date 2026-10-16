@@ -16,8 +16,11 @@ public final class UILocalization: @unchecked Sendable {
     public init(applicationResourcesURL: URL? = Bundle.main.resourceURL) {
         // SwiftPM's generated accessor looks beside the executable and in its
         // build directory. A distributed macOS app keeps resources in Contents/Resources.
-        let packaged = applicationResourcesURL?.appendingPathComponent("Mora_FinanceCore.bundle")
-        let resourceBundle = packaged.flatMap { Bundle(url: $0) } ?? Bundle.module
+        let executableResources = Bundle.main.executableURL?.deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("Resources")
+        let resourceBundle = [applicationResourcesURL, executableResources].compactMap { root in
+            root.flatMap { Bundle(url: $0.appendingPathComponent("Mora_FinanceCore.bundle")) }
+        }.first ?? Bundle.module
         let data = resourceBundle.url(forResource: "en", withExtension: "json", subdirectory: "Localization")
             .flatMap { try? Data(contentsOf: $0) }
         exact = data.flatMap { try? JSONDecoder().decode([String: String].self, from: $0) } ?? [:]
