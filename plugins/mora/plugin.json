@@ -1,0 +1,29 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "mora",
+  "version": "1.1.0",
+  "description": "Личные финансы Mora: счета, расходы, доходы, переводы, импорт и отчеты через чат.",
+  "author": {"name": "Mora"},
+  "keywords": ["finance", "macos", "mcp", "personal-finance"],
+  "extensions": {
+    "com.openai": {
+      "onboardingSkill": "./skills/mora-setup/SKILL.md",
+      "interface": {
+        "displayName": "Mora",
+        "shortDescription": "Финансы Mora через чат",
+        "longDescription": "Просматривайте счета и отчеты Mora, записывайте расходы, доходы и переводы, импортируйте CSV, создавайте бюджеты и цели. Помощник уточняет неясные категории, проверяет данные до записи и не дублирует повторные запросы. База хранится на вашем Mac. Плагин ведет учет и не проводит банковские платежи.",
+        "developerName": "Mora",
+        "category": "Finance",
+        "capabilities": ["Read", "Write"],
+        "brandColor": "#316E59",
+        "composerIcon": "./assets/icon.png",
+        "logo": "./assets/icon.png",
+        "defaultPrompt": [
+          "Покажи мои счета и остатки в Mora.",
+          "Запиши сегодняшние расходы в Mora.",
+          "На что я больше всего потратил в этом месяце?"
+        ]
+      }
+    }
+  }
+}

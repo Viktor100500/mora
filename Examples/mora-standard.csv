@@ -1,0 +1,4 @@
+date,merchant,amount,currency,account,category,type,note,tags,id,to_account,to_amount
+2026-10-01,Зарплата,245000.00,RUB,Основной счет,Зарплата,income,Октябрь,работа,example-001,,
+2026-10-02,"Кафе, завтрак",-1250.50,RUB,Основной счет,Кафе и рестораны,expense,Встреча,личное|кафе,example-002,,
+2026-10-03,Продукты,-4500.00,RUB,Основной счет,Продукты,expense,На неделю,личное,example-003,,

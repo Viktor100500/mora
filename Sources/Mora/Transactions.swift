@@ -1,0 +1,302 @@
+import SwiftUI
+import FinanceCore
+
+struct TransactionsView: View {
+    @EnvironmentObject var store: FinanceStore
+    var month: Date
+    @Binding var sheet: EditorSheet?
+    @State private var search = ""
+    @State private var accountID: UUID?
+    @State private var categoryFilter = "all"
+    @State private var kindFilter = "all"
+    @State private var allTime = false
+    @State private var selection: Set<UUID> = []
+    @State private var confirmDelete = false
+    @Environment(\.colorScheme) private var scheme
+    private var filtered: [Transaction] {
+        let source = allTime ? store.ledger.transactions : store.reportTransactions(in: month)
+        return source.filter { t in
+            (accountID == nil || t.accountID == accountID || t.destinationAccountID == accountID) &&
+            (kindFilter == "all" || t.kind.rawValue == kindFilter) &&
+            (categoryFilter == "all" || (categoryFilter == "none" ? t.categoryID == nil && t.kind != .transfer : t.categoryID?.uuidString == categoryFilter)) &&
+            (search.isEmpty || (t.merchant + " " + t.note + " " + t.tags.joined(separator: " ")).localizedCaseInsensitiveContains(search))
+        }.sorted {
+            if $0.date != $1.date { return $0.date > $1.date }
+            if $0.merchant != $1.merchant { return $0.merchant < $1.merchant }
+            return $0.id.uuidString < $1.id.uuidString
+        }
+    }
+    var body: some View {
+        // One snapshot per update; scrolling the system List doesn't refilter the ledger.
+        let rows = filtered
+        VStack(spacing: 18) {
+            Card(padding: 16) {
+                VStack(spacing: 14) {
+                    HStack(spacing: 12) {
+                        HStack { Image(systemName: "magnifyingglass").foregroundStyle(.secondary); TextField(L("Поиск по описанию, заметкам и тегам"), text: $search).textFieldStyle(.plain) }.padding(10).background(Color.primary.opacity(0.04)).clipShape(RoundedRectangle(cornerRadius: 9))
+                        Button { sheet = .transaction(nil) } label: { Label(L("Добавить"), systemImage: "plus") }.buttonStyle(.borderedProminent).tint(.moraGreen)
+                        Menu { Button(L("Экспортировать найденные операции")) { store.exportCSV(rows) }; Button(L("Экспортировать все операции")) { store.exportCSV() } } label: { Image(systemName: "square.and.arrow.up") }.menuStyle(.borderlessButton).fixedSize().help(L("Экспорт CSV"))
+                    }
+                    HStack(spacing: 16) {
+                        Picker(L("Тип"), selection: $kindFilter) { Text(L("Все типы")).tag("all"); ForEach(TransactionKind.allCases) { Text(L($0.title)).tag($0.rawValue) } }.labelsHidden().frame(maxWidth: 160)
+                        Picker(L("Счет"), selection: $accountID) { Text(L("Все счета")).tag(Optional<UUID>.none); ForEach(store.ledger.accounts) { Text($0.name).tag(Optional($0.id)) } }.labelsHidden().frame(maxWidth: 200)
+                        Picker(L("Категория"), selection: $categoryFilter) { Text(L("Все категории")).tag("all"); Text(L("Без категории")).tag("none"); ForEach(store.ledger.categories) { Text($0.name + ($0.kind == .income ? L(" · доход") : "")).tag($0.id.uuidString) } }.labelsHidden().frame(maxWidth: 220)
+                        Spacer(); Toggle(L("Все время"), isOn: $allTime).toggleStyle(.switch).controlSize(.small).font(.caption)
+                    }
+                }
+            }
+            if !selection.isEmpty {
+                HStack {
+                    Text(L("Выбрано: \(selection.count)")).font(.callout.weight(.medium))
+                    Menu(L("Назначить категорию")) {
+                        ForEach(store.ledger.categories) { c in Button(c.name + (c.kind == .income ? L(" · доход") : "")) {
+                            store.update { ledger in for i in ledger.transactions.indices where selection.contains(ledger.transactions[i].id) && ledger.transactions[i].kind == c.kind { ledger.transactions[i].categoryID = c.id } }
+                            selection = []
+                        } }
+                        Divider(); Button(L("Убрать категорию")) { store.update { ledger in for i in ledger.transactions.indices where selection.contains(ledger.transactions[i].id) { ledger.transactions[i].categoryID = nil } }; selection = [] }
+                    }.fixedSize()
+                    Button(L("Дублировать")) { duplicateTransactions(selection) }
+                    Spacer(); Button(L("Удалить"), role: .destructive) { confirmDelete = true }; Button(L("Снять выбор")) { selection = [] }
+                }.padding(14).background(Color.moraGreen.opacity(0.08)).clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Toggle(isOn: Binding(get: { !rows.isEmpty && Set(rows.map(\.id)).isSubset(of: selection) }, set: { selection = $0 ? Set(rows.map(\.id)) : [] })) { EmptyView() }.toggleStyle(.checkbox)
+                    Text(L("\(rows.count) операций")).font(.callout.weight(.medium))
+                    Spacer()
+                    Text(L("Описание / категория / счет")).font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Text(L("Сумма")).font(.caption).foregroundStyle(.secondary)
+                }.padding(.horizontal, 22).padding(.vertical, 16)
+                Divider()
+                if rows.isEmpty {
+                    EmptyState(icon: "arrow.left.arrow.right", title: L("Операций не найдено"), text: search.isEmpty ? L("Добавьте операцию или импортируйте выписку. Также можно изменить фильтры и период.") : L("Попробуйте другой запрос или сбросьте фильтры."), button: L("Добавить операцию")) { sheet = .transaction(nil) }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    // List owns the only scroll view on this screen. Each ID has one
+                    // row, with a stable minimum height and room for long descriptions.
+                    List {
+                        ForEach(rows) { t in
+                            HStack(spacing: 12) {
+                                Toggle(isOn: Binding(get: { selection.contains(t.id) }, set: { if $0 { selection.insert(t.id) } else { selection.remove(t.id) } })) { EmptyView() }.toggleStyle(.checkbox)
+                                    .accessibilityLabel(L("Выбрать: \(t.merchant)"))
+                                TransactionRow(transaction: t, ledger: store.ledger, merchantLines: nil)
+                                    .contentShape(Rectangle()).onTapGesture { sheet = .transaction(t) }
+                                Button { sheet = .transaction(t) } label: { Image(systemName: "pencil").font(.caption).foregroundStyle(.secondary) }.buttonStyle(.plain).help(L("Редактировать"))
+                            }
+                            .frame(minHeight: 72)
+                            .listRowInsets(EdgeInsets(top: 4, leading: 18, bottom: 4, trailing: 18))
+                            .listRowBackground(Color.clear)
+                            .contextMenu {
+                                Button(L("Редактировать")) { sheet = .transaction(t) }
+                                Button(L("Дублировать")) { duplicateTransactions([t.id]) }
+                                if t.kind != .transfer { Button(L("Разделить по категориям")) { sheet = .split(t) } }
+                                Button(L("Создать похожую")) { var copy = t; copy.id = UUID(); copy.externalID = nil; copy.recurrenceID = nil; copy.importBatchID = nil; copy.date = Calendar.current.startOfDay(for: Date()); sheet = .transaction(copy) }
+                                Button(L("Удалить"), role: .destructive) { store.deleteTransaction(t.id) }
+                            }
+                        }
+                    }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .environment(\.defaultMinListRowHeight, 80)
+                }
+                Divider()
+                let income = rows.filter { $0.kind == .income && store.ledger.isActive($0) }.reduce(Decimal(0)) { $0 + (store.ledger.value($1) ?? 0) }
+                let expense = rows.filter { $0.kind == .expense && store.ledger.isActive($0) }.reduce(Decimal(0)) { $0 - (store.ledger.value($1) ?? 0) }
+                HStack {
+                    Text(L("По текущему фильтру")).foregroundStyle(.secondary)
+                    Spacer()
+                    FinancialText(L("Доходы: \(DisplayMoney.string(income, currency: store.ledger.preferences.baseCurrency))"))
+                    FinancialText(L("Расходы: \(DisplayMoney.string(expense, currency: store.ledger.preferences.baseCurrency))"))
+                }.font(.caption).padding(.horizontal, 22).padding(.vertical, 16)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(scheme == .dark ? Color(nsColor: .controlBackgroundColor) : .white)
+            .clipShape(RoundedRectangle(cornerRadius: 18))
+            .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.primary.opacity(0.055), lineWidth: 1))
+        }
+        .onChange(of: rows.map(\.id)) { _, ids in selection.formIntersection(ids) }
+        .confirmationDialog(L("Удалить \(selection.count) операций?"), isPresented: $confirmDelete, titleVisibility: .visible) { Button(L("Удалить операции"), role: .destructive) { if store.update({ $0.transactions.removeAll { selection.contains($0.id) } }) { selection = [] } } } message: { Text(L("Это изменение можно отменить через меню «Финансы».")) }
+    }
+
+    private func duplicateTransactions(_ ids: Set<UUID>) {
+        var copyIDs = Set<UUID>()
+        if store.update({ ledger in
+            let copies = ledger.transactions.filter { ids.contains($0.id) }.map { original in
+                var copy = original
+                copy.id = UUID()
+                copy.externalID = nil
+                copy.recurrenceID = nil
+                copy.importBatchID = nil
+                copyIDs.insert(copy.id)
+                return copy
+            }
+            ledger.transactions.append(contentsOf: copies)
+        }) {
+            selection = copyIDs
+        }
+    }
+}
+
+struct TransactionEditor: View {
+    @EnvironmentObject var store: FinanceStore
+    @Environment(\.dismiss) var dismiss
+    var transaction: Transaction?
+    @State private var merchant: String
+    @State private var amount: String
+    @State private var kind: TransactionKind
+    @State private var date: Date
+    @State private var accountID: UUID?
+    @State private var categoryID: UUID?
+    @State private var destinationID: UUID?
+    @State private var destinationAmount: String
+    @State private var note: String
+    @State private var tags: String
+    @State private var currency: String
+    @State private var conversion: CardConversion?
+    @State private var conversionKey = ""
+    @State private var conversionError: String?
+    @State private var fetchingConversion = false
+    init(transaction: Transaction?) {
+        self.transaction = transaction
+        _merchant = State(initialValue: transaction?.merchant ?? ""); _amount = State(initialValue: transaction.map { Money.plain(abs($0.conversion?.originalAmount ?? $0.amount)) } ?? "")
+        _kind = State(initialValue: transaction?.kind ?? .expense); _date = State(initialValue: transaction?.date ?? Calendar.current.startOfDay(for: Date()))
+        _accountID = State(initialValue: transaction?.accountID); _categoryID = State(initialValue: transaction?.categoryID)
+        _destinationID = State(initialValue: transaction?.destinationAccountID); _destinationAmount = State(initialValue: transaction?.destinationAmount.map(Money.plain) ?? "")
+        _note = State(initialValue: transaction?.note ?? ""); _tags = State(initialValue: transaction?.tags.joined(separator: ", ") ?? "")
+        _currency = State(initialValue: transaction?.conversion?.originalCurrency ?? "")
+    }
+    private var account: Account? { accountID.flatMap { store.ledger.account($0) } }
+    private var destination: Account? { destinationID.flatMap { store.ledger.account($0) } }
+    private var sameCurrency: Bool { account?.currency == destination?.currency }
+    private var standaloneTransfer: Bool { transaction?.isStandaloneTransfer == true && kind == .transfer }
+    private var purchaseCurrency: String { currency.isEmpty ? (account?.currency ?? "") : currency }
+    private var needsConversion: Bool { kind != .transfer && account != nil && purchaseCurrency != account?.currency }
+    private var quoteKey: String { "\(amount)|\(purchaseCurrency)|\(account?.currency ?? "")|\(Dates.string(date))|\(kind.rawValue)|\(accountID?.uuidString ?? "")|\(Money.plain(account?.bankFeePercent ?? 0))" }
+    private var canSave: Bool {
+        !merchant.trimmingCharacters(in: .whitespaces).isEmpty && (Money.parse(amount) ?? 0) > 0 && accountID != nil && (!needsConversion || (conversion != nil && conversionKey == quoteKey && !fetchingConversion)) && (kind != .transfer || standaloneTransfer || (destinationID != nil && destinationID != accountID && (sameCurrency || (Money.parse(destinationAmount) ?? 0) > 0)))
+    }
+    var body: some View {
+        ModalFrame(title: transaction == nil ? L("Новая операция") : L("Редактировать операцию"), canSave: canSave, save: save) {
+            VStack(alignment: .leading, spacing: 18) {
+                if store.ledger.accounts.isEmpty { Text(L("Сначала добавьте счет в разделе «Счета».")).foregroundStyle(.orange) }
+                Picker(L("Тип"), selection: $kind) { ForEach(TransactionKind.allCases) { Text(L($0.title)).tag($0) } }.pickerStyle(.segmented).disabled(standaloneTransfer)
+                Form {
+                    TextField(L("Описание"), text: $merchant)
+                    TextField(L("Сумма"), text: $amount).financialField()
+                    if kind != .transfer {
+                        Picker(L("Валюта покупки"), selection: $currency) {
+                            Text(L("Валюта счета\(account.map { " · " + $0.currency } ?? "")")).tag("")
+                            ForEach(Locale.commonISOCurrencyCodes.sorted(), id: \.self) { code in Text(code).tag(code) }
+                        }
+                    } else { LabeledContent(L("Валюта списания"), value: account?.currency ?? L("Выберите счет")) }
+                    DatePicker(L("Дата"), selection: $date, displayedComponents: .date)
+                    Picker(kind == .transfer && !standaloneTransfer ? L("Со счета") : L("Счет"), selection: $accountID) { Text(L("Выберите счет")).tag(Optional<UUID>.none); ForEach(store.ledger.accounts.filter { !$0.archived || $0.id == transaction?.accountID }) { Text($0.name + " · " + $0.currency).tag(Optional($0.id)) } }
+                    if standaloneTransfer {
+                        LabeledContent(L("Удаленный счет"), value: transaction?.removedTransferAccountName ?? "")
+                    } else if kind == .transfer {
+                        Picker(L("На счет"), selection: $destinationID) { Text(L("Выберите счет")).tag(Optional<UUID>.none); ForEach(store.ledger.accounts.filter { $0.id != accountID && (!$0.archived || $0.id == destinationID) }) { Text($0.name + " · " + $0.currency).tag(Optional($0.id)) } }
+                        if !sameCurrency { HStack { TextField(L("Сумма зачисления"), text: $destinationAmount).financialField(); Text(destination?.currency ?? "").foregroundStyle(.secondary) } }
+                    } else {
+                        Picker(L("Категория"), selection: $categoryID) { Text(L("Автоматически / без категории")).tag(Optional<UUID>.none); ForEach(store.ledger.categories.filter { $0.kind == kind }) { Text($0.name).tag(Optional($0.id)) } }
+                    }
+                    TextField(L("Заметка"), text: $note, axis: .vertical).lineLimit(2...4)
+                    TextField(L("Теги через запятую"), text: $tags)
+                }
+                if needsConversion {
+                    if fetchingConversion { ProgressView(L("Получаем курс Visa…")).controlSize(.small) }
+                    else if let conversion, conversionKey == quoteKey, let converted = try? conversion.convertedAmount() {
+                        VStack(alignment: .leading, spacing: 5) {
+                            FinancialText("\(kind == .income ? L("Будет зачислено") : L("Будет списано")): \(DisplayMoney.string(abs(converted), currency: conversion.accountCurrency))").font(.callout.weight(.semibold))
+                            FinancialText(L("Visa · 1 \(conversion.originalCurrency) = \(Money.plain(conversion.rate)) \(conversion.accountCurrency) · \(Dates.string(conversion.date))")).font(.caption).foregroundStyle(.secondary)
+                            Text(conversion.feePercent == 0 ? L("Без банковской комиссии") : L("Банковская комиссия: \(Money.plain(conversion.feePercent))% · включена в сумму")).font(.caption).foregroundStyle(.secondary)
+                        }
+                    } else if let conversionError {
+                        Text(conversionError).font(.callout).foregroundStyle(.red)
+                        Button(L("Повторить получение курса")) { Task { await refreshConversion() } }
+                    }
+                }
+                if kind == .transfer { Text(L("Переводы изменяют остатки счетов и не включаются в доходы и расходы.")).font(.caption).foregroundStyle(.secondary) }
+                if date > Date() { Text(L("Будущая операция попадет в отчет за свой месяц. Остатки счетов изменятся в дату операции.")).font(.caption).foregroundStyle(.secondary) }
+            }
+        }
+        .task(id: quoteKey) { await refreshConversion() }
+        .onChange(of: kind) { _, new in if store.ledger.category(categoryID)?.kind != new { categoryID = nil } }
+        .onChange(of: accountID) { _, id in if destinationID == id { destinationID = nil } }
+    }
+    @MainActor private func refreshConversion() async {
+        conversion = nil; conversionError = nil; fetchingConversion = false
+        guard needsConversion, let amount = Money.parse(amount), amount > 0, let account else { return }
+        let key = quoteKey
+        let signed = kind == .income ? amount : -amount
+        fetchingConversion = true
+        do {
+            let quote: CardConversion
+            if transaction?.accountID == accountID, let saved = transaction?.conversion, saved.originalAmount == signed,
+               saved.originalCurrency == purchaseCurrency, saved.accountCurrency == account.currency,
+               Dates.string(saved.date) == Dates.string(date) { quote = saved }
+            else { quote = try await VisaRateClient.shared.conversion(amount: signed, from: purchaseCurrency, to: account.currency, date: date).applyingFee(of: account) }
+            try Task.checkCancellation()
+            guard key == quoteKey else { return }
+            conversion = quote; conversionKey = key; fetchingConversion = false
+        } catch is CancellationError { }
+        catch { guard key == quoteKey else { return }; conversionError = error.localizedDescription; fetchingConversion = false }
+    }
+    private func save() {
+        guard let amount = Money.parse(amount), amount > 0, let accountID else { return }
+        var value = transaction ?? Transaction(date: date, merchant: merchant, amount: -amount, accountID: accountID)
+        value.date = Calendar.current.startOfDay(for: date); value.merchant = merchant.trimmingCharacters(in: .whitespaces); value.amount = kind == .income ? amount : -amount; value.kind = kind; value.accountID = accountID
+        if standaloneTransfer { value.amount = (transaction?.amount ?? 0) > 0 ? amount : -amount }
+        value.categoryID = kind == .transfer ? nil : categoryID ?? store.ledger.matchingCategory(merchant: merchant, kind: kind)
+        value.destinationAccountID = kind == .transfer && !standaloneTransfer ? destinationID : nil; value.destinationAmount = kind == .transfer && !standaloneTransfer ? (sameCurrency ? amount : Money.parse(destinationAmount)) : nil
+        value.note = note; value.tags = Array(Set(tags.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })).sorted()
+        value.conversion = nil
+        if needsConversion {
+            guard conversionKey == quoteKey, let conversion, let converted = try? conversion.convertedAmount() else { return }
+            value.amount = converted; value.conversion = conversion
+        }
+        if store.update({ ledger in
+            let existing = transaction.flatMap { original in ledger.transactions.first { $0.id == original.id } }
+            guard transaction == nil || existing != nil else { throw LedgerError.invalid(L("Операция уже удалена.")) }
+            guard ledger.account(accountID)?.archived == false || existing?.accountID == accountID else { throw LedgerError.invalid(L("Верните счет из архива перед добавлением операций.")) }
+            if let destinationID = value.destinationAccountID {
+                guard ledger.account(destinationID)?.archived == false || existing?.destinationAccountID == destinationID else { throw LedgerError.invalid(L("Верните счет из архива перед добавлением операций.")) }
+            }
+            replaceOrAppend(value, in: &ledger.transactions)
+        }) { dismiss() }
+    }
+}
+
+struct SplitEditor: View {
+    @EnvironmentObject var store: FinanceStore
+    @Environment(\.dismiss) var dismiss
+    var transaction: Transaction
+    @State private var firstAmount = ""
+    @State private var firstCategory: UUID?
+    @State private var secondCategory: UUID?
+    private var remainder: Decimal { abs(transaction.amount) - (Money.parse(firstAmount) ?? 0) }
+    var body: some View {
+        ModalFrame(title: L("Разделить операцию"), subtitle: transaction.merchant + " · " + DisplayMoney.string(abs(transaction.amount), currency: store.ledger.account(transaction.accountID)?.currency ?? "RUB"), canSave: (Money.parse(firstAmount) ?? 0) > 0 && remainder > 0, save: save) {
+            Form {
+                TextField(L("Сумма первой части"), text: $firstAmount).financialField()
+                Picker(L("Первая категория"), selection: $firstCategory) { Text(L("Без категории")).tag(Optional<UUID>.none); ForEach(store.ledger.categories.filter { $0.kind == transaction.kind }) { Text($0.name).tag(Optional($0.id)) } }
+                LabeledContent(L("Вторая часть")) { FinancialText(DisplayMoney.string(remainder, currency: store.ledger.account(transaction.accountID)?.currency ?? "RUB")) }
+                Picker(L("Вторая категория"), selection: $secondCategory) { Text(L("Без категории")).tag(Optional<UUID>.none); ForEach(store.ledger.categories.filter { $0.kind == transaction.kind }) { Text($0.name).tag(Optional($0.id)) } }
+                Text(L("Исходная операция будет заменена двумя частями. Общая сумма и остаток счета сохранятся.")).font(.caption).foregroundStyle(.secondary)
+            }
+        }.onAppear { firstCategory = transaction.categoryID }
+    }
+    private func save() {
+        guard let amount = Money.parse(firstAmount), amount > 0, remainder > 0 else { return }
+        var first = transaction, second = transaction
+        let sign: Decimal = transaction.kind == .income ? 1 : -1
+        first.amount = sign * amount; first.categoryID = firstCategory
+        second.id = UUID(); second.amount = sign * remainder; second.categoryID = secondCategory; second.externalID = transaction.externalID.map { $0 + ":split:" + second.id.uuidString }; second.recurrenceID = nil
+        if let conversion = transaction.conversion {
+            let context = L("Исходная покупка: \(Money.plain(conversion.originalAmount)) \(conversion.originalCurrency); Visa \(Money.plain(conversion.rate)) на \(Dates.string(conversion.date)).")
+            first.note += "\n" + context; second.note += "\n" + context
+            first.conversion = nil; second.conversion = nil
+        }
+        if store.update({ ledger in ledger.transactions.removeAll { $0.id == transaction.id }; ledger.transactions.append(contentsOf: [first, second]) }) { dismiss() }
+    }
+}

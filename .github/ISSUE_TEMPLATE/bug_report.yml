@@ -1,0 +1,25 @@
+name: Bug report / Ошибка
+description: Report a reproducible issue without personal financial data.
+title: '[Bug] '
+body:
+  - type: markdown
+    attributes:
+      value: 'Do not attach bank statements, personal ledgers, tokens, emails or real account details. Use synthetic examples and redact screenshots.'
+  - type: input
+    id: version
+    attributes:
+      label: Mora and macOS versions
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true

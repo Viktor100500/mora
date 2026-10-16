@@ -1,0 +1,56 @@
+Mora — Source-Available and Application License
+Version 1.0, 16 October 2026
+Copyright (c) 2026 Viktor100500. All rights reserved.
+
+1. Ownership and scope
+
+Mora's original source code, application, documentation, name and artwork remain
+the property of their respective copyright holders. Publication of source code
+is for transparency; this is not an open-source license. Third-party components
+remain subject to their own licenses. No rights beyond those stated below or
+required by applicable law are granted.
+
+2. Permitted use
+
+You may download, install and use official, unmodified Mora releases for your
+own personal use or your organization's internal use, including professional
+use. You may keep reasonable backup copies. You may inspect the published source
+and build an unmodified copy for that same use. You may make private changes
+solely to test, audit or repair your own installation, without distributing or
+providing those changes to others.
+
+GitHub users may view and fork the repository on GitHub to the extent allowed
+by GitHub's Terms of Service. That platform permission does not grant a general
+right to distribute, sublicense or commercialize the code or application.
+
+3. Reserved rights
+
+Without a separate written license from the copyright holder, you may not sell,
+redistribute, sublicense or publish copies or modified versions of Mora; reuse
+its code or artwork in another distributed product; or provide it to third
+parties as a hosted, managed, paid or white-label service. Share a link to the
+official repository or release instead of redistributing the application.
+Do not remove ownership notices or use the Mora name or branding to suggest
+that an unofficial product is endorsed by its author.
+
+These restrictions do not limit any non-waivable rights under applicable law.
+
+4. Donations and separate commercial terms
+
+A donation is voluntary support. It does not purchase ownership, exclusive
+rights, support, future features or permission to redistribute the software.
+The copyright holder may offer their own commercial releases, services or
+separate licenses. A later pricing change does not retroactively withdraw the
+permissions granted here for a version you already received under these terms.
+
+5. No warranty; limitations
+
+To the extent permitted by applicable law, the software is provided "as is",
+without warranties of any kind. You are responsible for backups, verifying
+financial records, and the services you connect. Mora is a bookkeeping tool,
+not a bank or a payment service. The copyright holders are not liable for loss,
+data loss or other damages arising from use, except where that exclusion is
+not permitted by law. Mandatory consumer rights remain unaffected.
+
+For permissions outside this license, contact the maintainer through the
+official GitHub repository. Do not post private financial data or credentials.

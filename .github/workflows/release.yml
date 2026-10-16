@@ -1,0 +1,53 @@
+name: Release preview
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing version tag, for example v1.5.0'
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  package:
+    strategy:
+      matrix:
+        runner: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+      - name: Test
+        run: swift test
+      - name: Build clean release
+        run: zsh scripts/build-public-release.sh HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mora-${{ matrix.runner }}
+          path: build/releases/*
+          if-no-files-found: error
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Publish preview
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          gh release create "$RELEASE_TAG" artifacts/* --verify-tag \
+            --prerelease --title "Mora ${RELEASE_TAG#v} · macOS preview" \
+            --notes-file docs/RELEASE-NOTES.md
