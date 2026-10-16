@@ -13,8 +13,12 @@ public final class UILocalization: @unchecked Sendable {
     private let templates: [(regex: NSRegularExpression, english: String)]
     private var cache: [String: String] = [:]
     private let lock = NSLock()
-    public init() {
-        let data = Bundle.module.url(forResource: "en", withExtension: "json", subdirectory: "Localization")
+    public init(applicationResourcesURL: URL? = Bundle.main.resourceURL) {
+        // SwiftPM's generated accessor looks beside the executable and in its
+        // build directory. A distributed macOS app keeps resources in Contents/Resources.
+        let packaged = applicationResourcesURL?.appendingPathComponent("Mora_FinanceCore.bundle")
+        let resourceBundle = packaged.flatMap { Bundle(url: $0) } ?? Bundle.module
+        let data = resourceBundle.url(forResource: "en", withExtension: "json", subdirectory: "Localization")
             .flatMap { try? Data(contentsOf: $0) }
         exact = data.flatMap { try? JSONDecoder().decode([String: String].self, from: $0) } ?? [:]
         templates = exact.filter { $0.key.contains("{0}") }.sorted {

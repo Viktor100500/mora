@@ -23,4 +23,17 @@ final class UILocalizationTests: XCTestCase {
         }
         XCTAssertEqual(UILocalization.shared.text("Wholefoods Brooklyn #10220", language: .english), "Wholefoods Brooklyn #10220")
     }
+    func testDistributedApplicationLoadsItsEmbeddedResourceBundle() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("MoraPackagedResources-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let bundle = directory.appendingPathComponent("Mora_FinanceCore.bundle")
+        let localization = bundle.appendingPathComponent("Localization")
+        try FileManager.default.createDirectory(at: localization, withIntermediateDirectories: true)
+        let info: [String: Any] = ["CFBundleIdentifier": "test.mora.resources", "CFBundlePackageType": "BNDL"]
+        try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(to: bundle.appendingPathComponent("Info.plist"))
+        try JSONEncoder().encode(["Тест": "Embedded resource"]).write(to: localization.appendingPathComponent("en.json"))
+        let localizationClient = UILocalization(applicationResourcesURL: directory)
+        XCTAssertEqual(localizationClient.text("Тест", language: .english), "Embedded resource")
+    }
+
 }

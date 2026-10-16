@@ -2,6 +2,7 @@
 
 ## 1.5.0 — Public preview
 
+- Load translations from the installed application bundle without depending on a development checkout.
 - First-run welcome screen with Russian/English language selection and reporting currency.
 - Clean personal ledger setup and a guided path to the first account.
 - Per-account foreign-currency conversion fee; saved operations retain their historical fee.
