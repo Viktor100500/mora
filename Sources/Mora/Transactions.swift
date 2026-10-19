@@ -140,8 +140,10 @@ struct TransactionsView: View {
 
 struct TransactionEditor: View {
     @EnvironmentObject var store: FinanceStore
+    @EnvironmentObject private var cloud: CloudSync
     @Environment(\.dismiss) var dismiss
     var transaction: Transaction?
+    private let walletCapture: CloudCapture?
     @State private var merchant: String
     @State private var amount: String
     @State private var kind: TransactionKind
@@ -157,40 +159,48 @@ struct TransactionEditor: View {
     @State private var conversionKey = ""
     @State private var conversionError: String?
     @State private var fetchingConversion = false
-    init(transaction: Transaction?) {
+    @State private var saving = false
+    init(transaction: Transaction? = nil, walletCapture: CloudCapture? = nil, ledger: Ledger? = nil) {
         self.transaction = transaction
-        _merchant = State(initialValue: transaction?.merchant ?? ""); _amount = State(initialValue: transaction.map { Money.plain(abs($0.conversion?.originalAmount ?? $0.amount)) } ?? "")
-        _kind = State(initialValue: transaction?.kind ?? .expense); _date = State(initialValue: transaction?.date ?? Calendar.current.startOfDay(for: Date()))
-        _accountID = State(initialValue: transaction?.accountID); _categoryID = State(initialValue: transaction?.categoryID)
+        self.walletCapture = walletCapture
+        let draft = walletCapture.map { WalletReviewDraft(capture: $0, ledger: ledger ?? .empty, locale: L10n.locale) }
+        _merchant = State(initialValue: transaction?.merchant ?? draft?.merchant ?? ""); _amount = State(initialValue: transaction.map { Money.plain(abs($0.conversion?.originalAmount ?? $0.amount)) } ?? draft?.amount ?? "")
+        _kind = State(initialValue: transaction?.kind ?? .expense); _date = State(initialValue: transaction?.date ?? draft?.date ?? Calendar.current.startOfDay(for: Date()))
+        _accountID = State(initialValue: transaction?.accountID ?? draft?.accountID); _categoryID = State(initialValue: transaction?.categoryID)
         _destinationID = State(initialValue: transaction?.destinationAccountID); _destinationAmount = State(initialValue: transaction?.destinationAmount.map(Money.plain) ?? "")
-        _note = State(initialValue: transaction?.note ?? ""); _tags = State(initialValue: transaction?.tags.joined(separator: ", ") ?? "")
-        _currency = State(initialValue: transaction?.conversion?.originalCurrency ?? "")
+        _note = State(initialValue: transaction?.note ?? draft?.note ?? ""); _tags = State(initialValue: transaction?.tags.joined(separator: ", ") ?? draft?.tags.joined(separator: ", ") ?? "")
+        _currency = State(initialValue: transaction?.conversion?.originalCurrency ?? draft?.currency ?? "")
     }
     private var account: Account? { accountID.flatMap { store.ledger.account($0) } }
     private var destination: Account? { destinationID.flatMap { store.ledger.account($0) } }
     private var sameCurrency: Bool { account?.currency == destination?.currency }
+    private var suggestedCategory: UUID? { store.ledger.suggestedCategory(merchant: merchant, kind: kind) }
+    private var automaticCategoryLabel: String {
+        suggestedCategory.flatMap { store.ledger.category($0) }.map { L("Автоматически: \($0.name)") } ?? L("Автоматически / без категории")
+    }
     private var standaloneTransfer: Bool { transaction?.isStandaloneTransfer == true && kind == .transfer }
     private var purchaseCurrency: String { currency.isEmpty ? (account?.currency ?? "") : currency }
-    private var needsConversion: Bool { kind != .transfer && account != nil && purchaseCurrency != account?.currency }
+    private var needsConversion: Bool { kind != .transfer && currency != WalletReviewDraft.unknownCurrency && account != nil && purchaseCurrency != account?.currency }
     private var quoteKey: String { "\(amount)|\(purchaseCurrency)|\(account?.currency ?? "")|\(Dates.string(date))|\(kind.rawValue)|\(accountID?.uuidString ?? "")|\(Money.plain(account?.bankFeePercent ?? 0))" }
     private var canSave: Bool {
-        !merchant.trimmingCharacters(in: .whitespaces).isEmpty && (Money.parse(amount) ?? 0) > 0 && accountID != nil && (!needsConversion || (conversion != nil && conversionKey == quoteKey && !fetchingConversion)) && (kind != .transfer || standaloneTransfer || (destinationID != nil && destinationID != accountID && (sameCurrency || (Money.parse(destinationAmount) ?? 0) > 0)))
+        !saving && (walletCapture == nil || !cloud.busy) && (kind == .transfer || currency != WalletReviewDraft.unknownCurrency) && !merchant.trimmingCharacters(in: .whitespaces).isEmpty && (Money.parse(amount) ?? 0) > 0 && accountID != nil && (!needsConversion || (conversion != nil && conversionKey == quoteKey && !fetchingConversion)) && (kind != .transfer || standaloneTransfer || (destinationID != nil && destinationID != accountID && (sameCurrency || (Money.parse(destinationAmount) ?? 0) > 0)))
     }
     var body: some View {
-        ModalFrame(title: transaction == nil ? L("Новая операция") : L("Редактировать операцию"), canSave: canSave, save: save) {
+        ModalFrame(title: walletCapture != nil ? L("Проверить покупку") : transaction == nil ? L("Новая операция") : L("Редактировать операцию"), canSave: canSave, save: save) {
             VStack(alignment: .leading, spacing: 18) {
                 if store.ledger.accounts.isEmpty { Text(L("Сначала добавьте счет в разделе «Счета».")).foregroundStyle(.orange) }
-                Picker(L("Тип"), selection: $kind) { ForEach(TransactionKind.allCases) { Text(L($0.title)).tag($0) } }.pickerStyle(.segmented).disabled(standaloneTransfer)
+                Picker(L("Тип"), selection: $kind) { ForEach(TransactionKind.allCases) { Text(L($0.title)).tag($0) } }.pickerStyle(.segmented).disabled(standaloneTransfer || saving)
                 Form {
-                    TextField(L("Описание"), text: $merchant)
+                    TextField(L("Название"), text: $merchant)
                     TextField(L("Сумма"), text: $amount).financialField()
                     if kind != .transfer {
                         Picker(L("Валюта покупки"), selection: $currency) {
+                            if walletCapture != nil { Text(L("Выберите валюту покупки")).tag(WalletReviewDraft.unknownCurrency) }
                             Text(L("Валюта счета\(account.map { " · " + $0.currency } ?? "")")).tag("")
                             ForEach(Locale.commonISOCurrencyCodes.sorted(), id: \.self) { code in Text(code).tag(code) }
                         }
                     } else { LabeledContent(L("Валюта списания"), value: account?.currency ?? L("Выберите счет")) }
-                    DatePicker(L("Дата"), selection: $date, displayedComponents: .date)
+                    EuropeanDatePicker(title: L("Дата"), selection: $date)
                     Picker(kind == .transfer && !standaloneTransfer ? L("Со счета") : L("Счет"), selection: $accountID) { Text(L("Выберите счет")).tag(Optional<UUID>.none); ForEach(store.ledger.accounts.filter { !$0.archived || $0.id == transaction?.accountID }) { Text($0.name + " · " + $0.currency).tag(Optional($0.id)) } }
                     if standaloneTransfer {
                         LabeledContent(L("Удаленный счет"), value: transaction?.removedTransferAccountName ?? "")
@@ -198,11 +208,11 @@ struct TransactionEditor: View {
                         Picker(L("На счет"), selection: $destinationID) { Text(L("Выберите счет")).tag(Optional<UUID>.none); ForEach(store.ledger.accounts.filter { $0.id != accountID && (!$0.archived || $0.id == destinationID) }) { Text($0.name + " · " + $0.currency).tag(Optional($0.id)) } }
                         if !sameCurrency { HStack { TextField(L("Сумма зачисления"), text: $destinationAmount).financialField(); Text(destination?.currency ?? "").foregroundStyle(.secondary) } }
                     } else {
-                        Picker(L("Категория"), selection: $categoryID) { Text(L("Автоматически / без категории")).tag(Optional<UUID>.none); ForEach(store.ledger.categories.filter { $0.kind == kind }) { Text($0.name).tag(Optional($0.id)) } }
+                        Picker(L("Категория"), selection: $categoryID) { Text(automaticCategoryLabel).tag(Optional<UUID>.none); ForEach(store.ledger.categories.filter { $0.kind == kind }) { Text($0.name).tag(Optional($0.id)) } }
                     }
                     TextField(L("Заметка"), text: $note, axis: .vertical).lineLimit(2...4)
                     TextField(L("Теги через запятую"), text: $tags)
-                }
+                }.disabled(saving)
                 if needsConversion {
                     if fetchingConversion { ProgressView(L("Получаем курс Visa…")).controlSize(.small) }
                     else if let conversion, conversionKey == quoteKey, let converted = try? conversion.convertedAmount() {
@@ -243,17 +253,26 @@ struct TransactionEditor: View {
         catch { guard key == quoteKey else { return }; conversionError = error.localizedDescription; fetchingConversion = false }
     }
     private func save() {
-        guard let amount = Money.parse(amount), amount > 0, let accountID else { return }
+        guard canSave, let amount = Money.parse(amount), amount > 0, let accountID else { return }
         var value = transaction ?? Transaction(date: date, merchant: merchant, amount: -amount, accountID: accountID)
-        value.date = Calendar.current.startOfDay(for: date); value.merchant = merchant.trimmingCharacters(in: .whitespaces); value.amount = kind == .income ? amount : -amount; value.kind = kind; value.accountID = accountID
+        value.date = walletCapture == nil ? Calendar.current.startOfDay(for: date) : date; value.merchant = merchant.trimmingCharacters(in: .whitespaces); value.amount = kind == .income ? amount : -amount; value.kind = kind; value.accountID = accountID
         if standaloneTransfer { value.amount = (transaction?.amount ?? 0) > 0 ? amount : -amount }
-        value.categoryID = kind == .transfer ? nil : categoryID ?? store.ledger.matchingCategory(merchant: merchant, kind: kind)
+        value.categoryID = kind == .transfer ? nil : categoryID ?? suggestedCategory
         value.destinationAccountID = kind == .transfer && !standaloneTransfer ? destinationID : nil; value.destinationAmount = kind == .transfer && !standaloneTransfer ? (sameCurrency ? amount : Money.parse(destinationAmount)) : nil
         value.note = note; value.tags = Array(Set(tags.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })).sorted()
         value.conversion = nil
         if needsConversion {
             guard conversionKey == quoteKey, let conversion, let converted = try? conversion.convertedAmount() else { return }
             value.amount = converted; value.conversion = conversion
+        }
+        if let walletCapture {
+            saving = true
+            Task { @MainActor in
+                let success = await cloud.review(walletCapture, transaction: value)
+                saving = false
+                if success { dismiss() }
+            }
+            return
         }
         if store.update({ ledger in
             let existing = transaction.flatMap { original in ledger.transactions.first { $0.id == original.id } }

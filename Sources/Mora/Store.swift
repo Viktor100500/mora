@@ -2,35 +2,61 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 import FinanceCore
+import CryptoKit
 
 typealias Transaction = FinanceCore.Transaction
 typealias Category = FinanceCore.Category
 
 @MainActor
 final class FinanceStore: ObservableObject {
-    @Published private(set) var ledger: Ledger { didSet { reports = ReportCache() } }
+    @Published private(set) var ledger: Ledger {
+        didSet {
+            reports = ReportCache(); notificationTokenCache = nil
+            let missing = ledger.missingCurrencies
+            if !missing.isEmpty, missing != oldValue.missingCurrencies {
+                notifications.record(L("В итогах не учтены валюты без курса: \(missing.joined(separator: ", "))"),
+                                     kind: .warning, actions: [.settings])
+            }
+        }
+    }
     @Published private(set) var isDemo: Bool
-    @Published var error: String?
-    @Published var notice: String? { didSet { noticeImportID = nil; noticeAccountChange = false } }
-    @Published private(set) var noticeAccountChange = false
-    @Published private(set) var noticeImportID: UUID?
+    @Published var error: String? {
+        didSet { if let error, error != oldValue { notifications.record(error, kind: .error) } }
+    }
+    @Published private(set) var activeNotice: AppNotification?
+    var notice: String? {
+        get { activeNotice?.message }
+        set { if let newValue { showNotice(newValue) } else { activeNotice = nil } }
+    }
+    let notifications: AppNotifications
     var undoCount: Int { ledger.undoCount }
     var redoCount: Int { ledger.redoCount }
     @Published private(set) var updatingRates = false
-    @Published private(set) var rateUpdateError: String?
+    @Published private(set) var rateUpdateError: String? {
+        didSet {
+            if let rateUpdateError, rateUpdateError != oldValue {
+                notifications.record(rateUpdateError, kind: .warning, actions: [.settings])
+            }
+        }
+    }
     private var lastRateAttempt: Date?
     private var lastDiskVersion: DiskVersion?
     private struct DiskVersion: Equatable { let modified: Date; let size: UInt64; let inode: UInt64 }
     private var writeBlocked = false
+    private var notificationTokenCache: String?
+    private var lastUpdateChanged = false
     var reports = ReportCache()
     let fileURL: URL
 
-    init() {
+    init(directory customDirectory: URL? = nil) {
         let args = CommandLine.arguments
         let directory: URL
-        if let i = args.firstIndex(of: "--data-dir"), args.indices.contains(i + 1) { directory = URL(fileURLWithPath: args[i + 1]) }
+        if let customDirectory { directory = customDirectory }
+        else if let i = args.firstIndex(of: "--data-dir"), args.indices.contains(i + 1) { directory = URL(fileURLWithPath: args[i + 1]) }
         else { directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Mora", isDirectory: true) }
         fileURL = directory.appendingPathComponent("ledger.json")
+        notifications = AppNotifications(fileURL: args.contains("--demo") ? nil : directory.appendingPathComponent("notification-history.json"))
+        defer { if let error { notifications.record(error, kind: .error) } }
         // Let MCP reject writes while an older GUI without coordinated saves is open.
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -50,6 +76,40 @@ final class FinanceStore: ObservableObject {
                 } else { ledger = .empty; isDemo = false; writeBlocked = true; self.error = L("Не удалось открыть данные: \(error.localizedDescription). Исходный файл сохранен; восстановите резервную копию в настройках.") }
             }
         } else { ledger = .demo(); isDemo = true }
+    }
+    func showNotice(_ message: String, actions: [AppNotificationAction] = []) {
+        activeNotice = notifications.record(message, actions: actions)
+    }
+    var notificationStateToken: String {
+        if let notificationTokenCache { return notificationTokenCache }
+        guard let data = try? LedgerFile.encode(ledger) else { return "" }
+        let token = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        notificationTokenCache = token
+        return token
+    }
+    var undoNotificationActions: [AppNotificationAction] {
+        undoCount > 0 && !notificationStateToken.isEmpty ? [.undo(notificationStateToken)] : []
+    }
+    private var updatedUndoActions: [AppNotificationAction] { lastUpdateChanged ? undoNotificationActions : [] }
+    func canPerformNotificationAction(_ action: AppNotificationAction) -> Bool {
+        switch action {
+        case .undo(let token): return undoCount > 0 && !token.isEmpty && token == notificationStateToken
+        case .redo(let token): return redoCount > 0 && !token.isEmpty && token == notificationStateToken
+        case .rollbackImport(let id): return (try? ledger.importRollbackPreview(id)) != nil
+        default: return true
+        }
+    }
+    func performHistoryAction(_ action: AppNotificationAction) {
+        reloadFromDisk()
+        guard canPerformNotificationAction(action) else {
+            error = L("Это действие больше недоступно: данные уже изменились.")
+            return
+        }
+        switch action {
+        case .undo: undo()
+        case .redo: redo()
+        default: break
+        }
     }
     func reloadFromDisk() {
         guard !writeBlocked, !(isDemo && CommandLine.arguments.contains("--demo")), FileManager.default.fileExists(atPath: fileURL.path) else { return }
@@ -102,14 +162,17 @@ final class FinanceStore: ObservableObject {
 
     @discardableResult
     func update(_ action: (inout Ledger) throws -> Void) -> Bool {
+        lastUpdateChanged = false
         do {
             guard !writeBlocked else { throw LedgerError.invalid(L("Исходный файл не удалось прочитать. Сначала восстановите исправную резервную копию в настройках; текущий файл не будет перезаписан.")) }
             reloadFromDisk()
             var next = ledger
             try action(&next); try next.validate()
+            let changed = next != ledger
             if !isDemo { next = try LedgerFile.save(next, to: fileURL, expected: ledger) }
             else if next != ledger { next.recordChange(from: ledger) }
             ledger = next
+            lastUpdateChanged = changed
             return true
         } catch { self.error = error.localizedDescription; return false }
     }
@@ -119,7 +182,7 @@ final class FinanceStore: ObservableObject {
         do {
             if isDemo { try ledger.undoLastChange() }
             else { ledger = try LedgerFile.undo(at: fileURL, expected: ledger) }
-            notice = L("Изменение отменено")
+            showNotice(L("Изменение отменено"), actions: [.redo(notificationStateToken)])
         } catch { self.error = error.localizedDescription }
     }
     func redo() {
@@ -128,7 +191,7 @@ final class FinanceStore: ObservableObject {
         do {
             if isDemo { try ledger.redoLastChange() }
             else { ledger = try LedgerFile.redo(at: fileURL, expected: ledger) }
-            notice = L("Изменение возвращено")
+            showNotice(L("Изменение возвращено"), actions: undoNotificationActions)
         } catch { self.error = error.localizedDescription }
     }
     @discardableResult func startClean(baseCurrency: String = "RUB") -> Bool {
@@ -153,14 +216,13 @@ final class FinanceStore: ObservableObject {
     func deleteTransaction(_ id: UUID) { update { $0.transactions.removeAll { $0.id == id } } }
     func setAccountArchived(_ id: UUID, archived: Bool) {
         if update({ try $0.setAccountArchived(id, archived: archived) }) {
-            notice = archived ? L("Счет архивирован и исключен из расчетов") : L("Счет возвращен из архива")
-            noticeAccountChange = true
+            showNotice(archived ? L("Счет архивирован и исключен из расчетов") : L("Счет возвращен из архива"),
+                       actions: updatedUndoActions + [.settings])
         }
     }
     func deleteArchivedAccount(_ id: UUID) {
         if update({ try $0.deleteArchivedAccount(id) }) {
-            notice = L("Счет удален. Удаление можно отменить в настройках.")
-            noticeAccountChange = true
+            showNotice(L("Счет удален. Удаление можно отменить в настройках."), actions: updatedUndoActions + [.settings])
         }
     }
     @discardableResult
@@ -174,8 +236,8 @@ final class FinanceStore: ObservableObject {
                                               totalRows: prepared.rows.count, excluded: prepared.excluded, duplicates: prepared.duplicates, invalid: prepared.invalid)
         }
         if success, let batch {
-            notice = L("Добавлено: \(prepared.imported). Исключено: \(prepared.excluded). Повторы: \(prepared.duplicates). Ошибки: \(prepared.invalid).")
-            noticeImportID = batch.id
+            showNotice(L("Добавлено: \(prepared.imported). Исключено: \(prepared.excluded). Повторы: \(prepared.duplicates). Ошибки: \(prepared.invalid)."),
+                       actions: [.rollbackImport(batch.id), .imports])
         }
         return success
     }
@@ -194,15 +256,15 @@ final class FinanceStore: ObservableObject {
             prepared = result
         }
         if success, let result = prepared, let batch {
-            notice = L("Добавлено: \(result.imported). Исключено: \(result.excluded). Повторы: \(result.duplicates). Ошибки: \(result.invalid).")
-            noticeImportID = batch.id
+            showNotice(L("Добавлено: \(result.imported). Исключено: \(result.excluded). Повторы: \(result.duplicates). Ошибки: \(result.invalid)."),
+                       actions: [.rollbackImport(batch.id), .imports])
         }
         return success
     }
     func rollbackImport(_ id: UUID, allowModified: Bool = false) {
         var removed = 0
         if update({ removed = try $0.rollbackImport(id, allowModified: allowModified) }) {
-            notice = L("Импорт отменен. Удалено операций: \(removed).")
+            showNotice(L("Импорт отменен. Удалено операций: \(removed)."), actions: updatedUndoActions + [.imports])
         }
     }
     func deleteCategory(_ id: UUID) {
@@ -221,7 +283,7 @@ final class FinanceStore: ObservableObject {
             ledger.transactions.append(Transaction(date: payment.nextDate, merchant: payment.name, amount: -payment.amount, accountID: payment.accountID, categoryID: payment.categoryID, kind: .expense, externalID: id, recurrenceID: payment.id))
             ledger.recurring[index].nextDate = payment.followingDate()
         }
-        if success { notice = L("Платеж добавлен в операции") }
+        if success { showNotice(L("Платеж добавлен в операции"), actions: updatedUndoActions) }
     }
     func applyRules() {
         var count = 0
@@ -230,7 +292,7 @@ final class FinanceStore: ObservableObject {
                 if let id = ledger.matchingCategory(merchant: ledger.transactions[i].merchant, kind: ledger.transactions[i].kind) { ledger.transactions[i].categoryID = id; count += 1 }
             }
         }
-        if success { notice = L("Категоризировано операций: \(count)") }
+        if success { showNotice(L("Категоризировано операций: \(count)"), actions: updatedUndoActions) }
     }
     func exportCSV(_ transactions: [Transaction]? = nil) {
         let panel = NSSavePanel(); panel.allowedContentTypes = [.commaSeparatedText]; panel.nameFieldStringValue = "Mora-\(Dates.string(Date())).csv"

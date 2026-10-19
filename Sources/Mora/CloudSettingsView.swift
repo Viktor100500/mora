@@ -37,28 +37,39 @@ struct CloudSettingsView: View {
     @State private var confirmLocal = false
     @State private var confirmDisconnect = false
     @State private var selectedCapture: CloudCapture?
+    @State private var handledNotification: UUID?
     private var accounts: [Account] { store.ledger.accounts.filter { !$0.archived } }
     var body: some View {
+        ScrollViewReader { scrollProxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                Text("Общая база и Apple Pay").font(.title2.bold())
+                HStack {
+                    Text("Общая база и Apple Pay").font(.title2.bold())
+                    Spacer()
+                    // Keep the scroll content's geometry stable during periodic syncs.
+                    ProgressView("Подключаемся к облаку…")
+                        .labelsHidden().controlSize(.small)
+                        .frame(width: 16, height: 16)
+                        .opacity(cloud.busy ? 1 : 0)
+                        .accessibilityHidden(!cloud.busy)
+                }
                 Text("У каждого свой вход. Счета, операции, категории и планы доступны участникам одной общей базы. На этом Mac остается копия для работы без интернета.").font(.callout).foregroundStyle(.secondary)
                 if store.isDemo {
                     Label("Сначала начните свой учет в главном окне и создайте счет. Демо нельзя подключить к облаку.", systemImage: "info.circle").foregroundStyle(.orange)
                 }
                 if let error = cloud.error { Label(error, systemImage: "exclamationmark.triangle").font(.callout).foregroundStyle(.orange).textSelection(.enabled) }
-                if cloud.busy { ProgressView("Подключаемся к облаку…").controlSize(.small) }
                 if !cloud.signedIn { signInCard }
                 else {
                     HStack { Label(cloud.email, systemImage: "person.crop.circle"); Spacer(); Button("Отключить облако…") { confirmDisconnect = true } }
                     if cloud.householdID == nil { householdCard }
-                    else { syncCard; inviteCard; phoneCard; inboxCard }
+                    else { syncCard; inviteCard; phoneCard; inboxCard.id("wallet-inbox") }
                 }
                 Text("Первое подключение требует бесплатного проекта Supabase и установки схемы Mora. Оплата iPhone передает доступные сведения о покупке; это не банковская выписка. Автоматизация настраивается отдельно на каждом телефоне.").font(.caption).foregroundStyle(.secondary)
                 Link("Настройка автоматизации Apple", destination: URL(string: "https://support.apple.com/en-ng/guide/shortcuts/apd65c67538a/ios")!).font(.caption)
             }.padding(24).frame(maxWidth: 780).frame(maxWidth: .infinity)
         }
         .frame(minWidth: 660, minHeight: 580)
+        .modifier(FeedbackFooter())
         .onAppear {
             url = cloud.projectURL
             key = cloud.publicKey
@@ -67,6 +78,8 @@ struct CloudSettingsView: View {
             if account == nil { account = accounts.first?.id }
             if cloud.signedIn { Task { await cloud.refreshLists() } }
         }
+        .onReceive(store.notifications.$navigation) { request in navigate(request, scrollProxy: scrollProxy) }
+        .onChange(of: cloud.pending) { _, _ in navigate(store.notifications.navigation, scrollProxy: scrollProxy) }
         .confirmationDialog("Открыть общую базу вместо текущей?", isPresented: $confirmJoin, titleVisibility: .visible) {
             Button("Сохранить копию и подключиться") { Task { await cloud.join(code: code); code = "" } }
         } message: { Text("Текущие данные этого Mac сохранятся в отдельный файл before-cloud. После подключения будут открыты счета и операции общей базы. Автоматического объединения двух независимых баз нет.") }
@@ -77,9 +90,25 @@ struct CloudSettingsView: View {
             Button("Сохранить копию и заменить") { Task { await cloud.keepLocalVersion() } }
         } message: { Text("Сначала облачная версия сохранится в отдельный файл на этом Mac. Затем версия этого Mac станет общей для всех участников. При новых облачных правках замена будет остановлена.") }
         .confirmationDialog("Отключить облако на этом Mac?", isPresented: $confirmDisconnect, titleVisibility: .visible) {
-            Button("Отключить") { cloud.disconnect(); password = "" }
+            Button("Отключить") { password = ""; Task { await cloud.disconnect() } }
         } message: { Text("Локальные данные останутся на Mac. Ключи телефонов продолжат работать до отзыва в общей базе. Другие участники сохранят доступ.") }
-        .sheet(item: $selectedCapture) { capture in CloudCaptureEditor(capture: capture).environmentObject(cloud).environmentObject(store) }
+        .sheet(item: $selectedCapture) { capture in TransactionEditor(walletCapture: capture, ledger: store.ledger).modifier(FeedbackFooter()).modifier(FinanceErrorAlert()).environmentObject(cloud).environmentObject(store) }
+        }
+    }
+    private func navigate(_ request: NotificationNavigation?, scrollProxy: ScrollViewProxy) {
+        guard let request, request.id != handledNotification else { return }
+        switch request.destination {
+        case .page: return
+        case .inbox: break
+        case .capture(let id):
+            guard let capture = cloud.pending.first(where: { $0.id == id }) else { return }
+            selectedCapture = capture
+        }
+        handledNotification = request.id
+        Task { @MainActor in
+            await Task.yield()
+            scrollProxy.scrollTo("wallet-inbox", anchor: .top)
+        }
     }
     private var signInCard: some View {
         Card {
@@ -206,10 +235,26 @@ struct CloudSettingsView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(capture.merchant.isEmpty ? "Продавец не получен" : capture.merchant)
                             FinancialText("\(capture.amount) \(capture.currency) · \(capture.label)").font(.caption).foregroundStyle(.secondary)
-                            Text(capture.reason ?? "Проверьте покупку").font(.caption).foregroundStyle(.orange)
+                            Text(L(capture.reason ?? "Проверьте покупку")).font(.caption).foregroundStyle(.orange)
                         }
                         Spacer()
-                        Button("Проверить…") { selectedCapture = capture }.disabled(cloud.busy)
+                        HStack(spacing: 8) {
+                            Button("Проверить…") { selectedCapture = capture }
+                            Button(role: .destructive) {
+                                Task {
+                                    await cloud.resolve(capture, account: capture.account_id,
+                                                        amount: "", merchant: capture.merchant, dismiss: true)
+                                }
+                            } label: {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(Color.red.opacity(0.8))
+                                    .frame(width: 28, height: 28)
+                                    .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
+                            }.buttonStyle(.plain)
+                                .help(L("Удалить из входящих без возможности восстановления"))
+                                .accessibilityLabel(L("Удалить покупку из входящих"))
+                        }.disabled(cloud.busy)
                     }
                 }
             }
@@ -217,49 +262,4 @@ struct CloudSettingsView: View {
     }
     private func copy(_ text: String) { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string) }
 
-}
-
-private struct CloudCaptureEditor: View {
-    let capture: CloudCapture
-    @EnvironmentObject private var cloud: CloudSync
-    @EnvironmentObject private var store: FinanceStore
-    @Environment(\.dismiss) private var dismiss
-    @State private var amount = ""
-    @State private var merchant = ""
-    @State private var account: UUID?
-    var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Проверить покупку").font(.title2.bold())
-            Text("\(capture.label) · \(capture.date.formatted(date: .abbreviated, time: .shortened))")
-            Text(capture.reason ?? "Проверьте сумму и счет").font(.callout).foregroundStyle(.orange)
-            TextField("Продавец", text: $merchant).textFieldStyle(.roundedBorder)
-            Picker("Счет", selection: $account) {
-                Text("Выберите счет").tag(Optional<UUID>.none)
-                ForEach(store.ledger.accounts.filter { !$0.archived }) { Text("\($0.name) · \($0.currency)").tag(Optional($0.id)) }
-            }
-            TextField("Сумма списания в валюте выбранного счета", text: $amount).textFieldStyle(.roundedBorder).financialField()
-            Text("Если валюта покупки отличается, введите сумму списания из банка. Исходные данные остаются в облаке; курс автоматически не угадывается.").font(.caption).foregroundStyle(.secondary)
-            if let error = cloud.error { Text(error).font(.caption).foregroundStyle(.orange) }
-            HStack {
-                Button("Пропустить покупку", role: .destructive) { save(dismissOnly: true) }
-                Spacer()
-                Button("Закрыть") { dismiss() }
-                Button("Добавить расход") { save(dismissOnly: false) }.buttonStyle(.borderedProminent)
-                    .disabled(account == nil || (Money.parse(amount) ?? 0) <= 0 || merchant.trimmingCharacters(in: .whitespaces).isEmpty)
-            }.disabled(cloud.busy)
-        }.padding(24).frame(width: 560)
-        .onAppear {
-            amount = capture.amount; merchant = capture.merchant
-            account = store.ledger.account(capture.account_id)?.archived == false ? capture.account_id : store.ledger.accounts.first(where: { !$0.archived })?.id
-            if let account, capture.currency != store.ledger.account(account)?.currency { amount = "" }
-        }
-        .onChange(of: account) { _, _ in amount = "" }
-    }
-    private func save(dismissOnly: Bool) {
-        Task {
-            await cloud.resolve(capture, account: account ?? capture.account_id,
-                amount: Money.parse(amount).map(Money.plain) ?? "", merchant: merchant, dismiss: dismissOnly)
-            if cloud.error == nil { dismiss() }
-        }
-    }
 }

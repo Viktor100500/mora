@@ -17,14 +17,28 @@ final class CloudSync: ObservableObject {
     @Published private(set) var pending: [CloudCapture] = []
     @Published private(set) var lastSync: Date?
     @Published private(set) var conflict = false
-    @Published var error: String?
+    @Published var error: String? {
+        didSet {
+            if let error, error != oldValue { store?.notifications.record(error, kind: .error, actions: [.inbox]) }
+        }
+    }
     @Published var invitation: String?
     @Published var issuedToken: String?
     private weak var store: FinanceStore?
+    private let transport: URLSession
+    private let sessionWriter: (Data, String) throws -> Void
+    private var operationInProgress = false
+    private var operationWaiters: [CheckedContinuation<Void, Never>] = []
     private var session: CloudSession?
     private var settings: Settings?
     private var failureCount = 0
     private var nextAttempt = Date.distantPast
+    init(store: FinanceStore? = nil, transport: URLSession = .shared,
+         sessionWriter: @escaping (Data, String) throws -> Void = { try CloudKeychain.write($0, account: $1) }) {
+        self.store = store
+        self.transport = transport
+        self.sessionWriter = sessionWriter
+    }
     private struct Settings: Codable {
         var configuration: CloudConfiguration
         var email: String
@@ -47,6 +61,9 @@ final class CloudSync: ObservableObject {
         let p_household_id: UUID; let p_capture_id: UUID; let p_account_id: UUID
         let p_amount: String; let p_merchant: String; let p_dismiss: Bool
     }
+    private struct ReviewBody: Encodable {
+        let p_household_id: UUID; let p_capture_id: UUID; let p_transaction: Transaction
+    }
     var projectURL: String { settings?.configuration.projectURL.absoluteString ?? "" }
     var publicKey: String { settings?.configuration.publicKey ?? "" }
     var captureURL: String { projectURL.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/rest/v1/rpc/mora_capture_payment" }
@@ -61,7 +78,7 @@ final class CloudSync: ObservableObject {
         self.store = store
         load()
         while !Task.isCancelled {
-            if enabled && signedIn && !store.isDemo && Date() >= nextAttempt { await synchronize() }
+            if enabled && signedIn && !store.isDemo && Date() >= nextAttempt { await synchronize(inBackground: true) }
             do { try await Task.sleep(for: .seconds(8)) } catch { return }
         }
     }
@@ -89,20 +106,39 @@ final class CloudSync: ObservableObject {
         try write(settings, to: configURL)
     }
     private func persistSession(_ value: CloudSession) throws {
-        try CloudKeychain.write(JSONEncoder().encode(value), account: keychainAccount)
-        session = value; signedIn = true
+        try sessionWriter(JSONEncoder().encode(value), keychainAccount)
+        session = value
+        if !signedIn { signedIn = true }
     }
-    private func operation(_ action: () async throws -> Void) async {
-        guard !busy else { return }
-        busy = true; error = nil
-        defer { busy = false }
-        do { try await action() }
+    private func operation(inBackground: Bool = false, _ action: () async throws -> Void) async {
+        if inBackground && operationInProgress { return }
+        // A click during a background request waits instead of being dropped.
+        while operationInProgress {
+            await withCheckedContinuation { operationWaiters.append($0) }
+            if Task.isCancelled { return }
+        }
+        guard !Task.isCancelled else { return }
+        operationInProgress = true
+        if !inBackground { busy = true }
+        defer {
+            operationInProgress = false
+            if !inBackground { busy = false }
+            let waiters = operationWaiters
+            operationWaiters.removeAll()
+            for waiter in waiters { waiter.resume() }
+        }
+        do {
+            try await action()
+            if error != nil { error = nil }
+        }
         catch is CancellationError { }
-        catch { self.error = error.localizedDescription }
+        catch {
+            if self.error != error.localizedDescription { self.error = error.localizedDescription }
+        }
     }
     private func rpc<B: Encodable, R: Decodable>(_ function: String, _ body: B) async throws -> R {
         guard let settings, var session else { throw CloudAPIError.unauthorized }
-        let api = CloudAPI(configuration: settings.configuration)
+        let api = CloudAPI(configuration: settings.configuration, transport: transport)
         if session.expires_at < Date().timeIntervalSince1970 + 60 {
             session = try await refreshedSession(api, token: session.refresh_token); try persistSession(session)
         }
@@ -125,7 +161,7 @@ final class CloudSync: ObservableObject {
         await operation {
             guard let projectURL = URL(string: url.trimmingCharacters(in: .whitespacesAndNewlines)) else { throw CloudAPIError.invalidResponse }
             let configuration = try CloudConfiguration(projectURL: projectURL, publicKey: key)
-            let value = try await CloudAPI(configuration: configuration).signIn(email: email.trimmingCharacters(in: .whitespacesAndNewlines), password: password)
+            let value = try await CloudAPI(configuration: configuration, transport: self.transport).signIn(email: email.trimmingCharacters(in: .whitespacesAndNewlines), password: password)
             // Reauthentication may resume only the same user's same project.
             let sameIdentity = self.settings?.userID == value.user.id && self.settings?.configuration == configuration
             if self.settings?.householdID != nil && !sameIdentity {
@@ -148,8 +184,18 @@ final class CloudSync: ObservableObject {
         }
     }
     private func loadLists(_ id: UUID) async throws {
-        phoneTokens = try await rpc("mora_list_phone_tokens", HouseholdBody(p_household_id: id))
-        pending = try await rpc("mora_list_pending", HouseholdBody(p_household_id: id))
+        let tokens: [CloudPhoneToken] = try await rpc("mora_list_phone_tokens", HouseholdBody(p_household_id: id))
+        if phoneTokens != tokens { phoneTokens = tokens }
+        _ = try await loadPending(id)
+    }
+    @discardableResult
+    private func loadPending(_ id: UUID) async throws -> Bool {
+        let captures: [CloudCapture] = try await rpc("mora_list_pending", HouseholdBody(p_household_id: id))
+        // Also reconcile an empty first response against history from a previous launch.
+        store?.notifications.reconcileWallet(captures, householdID: id)
+        guard pending != captures else { return false }
+        pending = captures
+        return true
     }
     private func diskLedger() throws -> Ledger {
         guard let store, !store.isDemo else { throw LedgerError.invalid("Сначала начните свой учет и создайте счет. Демо в облако не загружается.") }
@@ -210,9 +256,9 @@ final class CloudSync: ObservableObject {
         try attach(envelope)
     }
 
-    func synchronize() async {
+    func synchronize(inBackground: Bool = false) async {
         guard enabled, householdID != nil else { return }
-        await operation {
+        await operation(inBackground: inBackground) {
             do {
                 try await self.syncNow()
                 self.failureCount = 0; self.nextAttempt = Date().addingTimeInterval(8)
@@ -229,8 +275,9 @@ final class CloudSync: ObservableObject {
         let base = saved.snapshot
         let status: Status = try await rpc("mora_get_status", HouseholdBody(p_household_id: id))
         if status.version == saved.version, try CloudMerge.same(diskLedger(), base) {
-            if status.pending_count != pending.count { pending = try await rpc("mora_list_pending", HouseholdBody(p_household_id: id)) }
-            lastSync = Date(); conflict = false
+            // Equal counts can hide a replaced capture or a corrected reason.
+            if try await loadPending(id) { lastSync = Date() }
+            if conflict { conflict = false }
             return
         }
         for _ in 0..<3 {
@@ -241,7 +288,7 @@ final class CloudSync: ObservableObject {
             let merged: Ledger
             do { merged = try CloudMerge.merge(base: base, local: local, remote: remote.snapshot) }
             catch {
-                conflict = true
+                if !conflict { conflict = true }
                 if let directory { try write(remote, to: directory.appendingPathComponent("cloud-conflict-remote.json")) }
                 throw error
             }
@@ -252,8 +299,10 @@ final class CloudSync: ObservableObject {
             }
             _ = try LedgerFile.applyCloud(remote.snapshot, at: store.fileURL, mergeAgainst: local)
             try saveCheckpoint(remote)
-            store.reloadFromDisk(); lastSync = Date(); conflict = false
-            pending = try await rpc("mora_list_pending", HouseholdBody(p_household_id: id))
+            store.reloadFromDisk()
+            let capturesChanged = try await loadPending(id)
+            if try capturesChanged || !CloudMerge.same(base, remote.snapshot) { lastSync = Date() }
+            if conflict { conflict = false }
             return
         }
         throw LedgerError.invalid("Общая база сейчас изменяется с другого устройства. Повторим синхронизацию автоматически.")
@@ -302,19 +351,40 @@ final class CloudSync: ObservableObject {
             try await self.syncNow()
         }
     }
+    func review(_ capture: CloudCapture, transaction: Transaction) async -> Bool {
+        var saved = false
+        await operation {
+            guard let id = self.householdID, let store = self.store else { throw CloudAPIError.unauthorized }
+            try await self.syncNow()
+            let local = try self.diskLedger()
+            let value = try WalletReviewDraft.transaction(transaction, for: capture, in: local)
+            let envelope: CloudEnvelope = try await self.rpc("mora_review_capture",
+                ReviewBody(p_household_id: id, p_capture_id: capture.id, p_transaction: value))
+            guard envelope.household_id == id else { throw CloudAPIError.invalidResponse }
+            try envelope.snapshot.validate()
+            _ = try LedgerFile.applyCloud(envelope.snapshot, at: store.fileURL, mergeAgainst: local)
+            try self.saveCheckpoint(envelope)
+            store.reloadFromDisk()
+            _ = try await self.loadPending(id)
+            self.lastSync = Date()
+            store.showNotice(L("Покупка из Wallet добавлена в операции"))
+            saved = true
+        }
+        if !saved, let error { store?.error = error }
+        return saved
+    }
     func pause(_ paused: Bool) {
         enabled = !paused; settings?.enabled = enabled
         do { try persistSettings() } catch { self.error = error.localizedDescription }
     }
-    func disconnect() {
-        guard !busy else { return }
-        do {
+    func disconnect() async {
+        await operation {
             try CloudKeychain.delete(account: keychainAccount)
             settings?.enabled = false; settings?.householdID = nil; settings?.householdName = ""
             try persistSettings()
             session = nil; signedIn = false; enabled = false; householdID = nil; householdName = ""
             households = []; pending = []; phoneTokens = []; invitation = nil; issuedToken = nil; conflict = false; error = nil
-        } catch { self.error = error.localizedDescription }
+        }
     }
 }
 

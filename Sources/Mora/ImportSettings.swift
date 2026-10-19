@@ -134,14 +134,20 @@ struct SettingsView: View {
             Card {
                 VStack(alignment: .leading, spacing: 22) {
                     SectionHeading(title: L("Валюты и отображение"), subtitle: L("Все отчеты и бюджеты используют базовую валюту"))
-                    HStack {
+                    HStack(spacing: 12) {
                         Text(L("Базовая валюта")).font(.callout); Spacer()
-                        Picker(L("Базовая валюта"), selection: $selectedBase) { ForEach(Array(Set(currencyList + Array(ledger.preferences.rates.keys))).sorted(), id: \.self) { Text($0).tag($0) } }.labelsHidden().frame(width: 180)
-                        Button(L("Применить")) { if !store.update({ try $0.changeBaseCurrency(to: selectedBase) }) { selectedBase = ledger.preferences.baseCurrency } }.disabled(selectedBase == ledger.preferences.baseCurrency)
+                        HStack(spacing: 8) {
+                            Picker(L("Базовая валюта"), selection: $selectedBase) {
+                                ForEach(Array(Set(currencyList + Array(ledger.preferences.rates.keys))).sorted(), id: \.self) { Text($0).tag($0) }
+                            }.pickerStyle(.menu).labelsHidden().fixedSize()
+                            Button(L("Применить")) {
+                                if !store.update({ try $0.changeBaseCurrency(to: selectedBase) }) { selectedBase = ledger.preferences.baseCurrency }
+                            }.buttonStyle(.bordered).disabled(selectedBase == ledger.preferences.baseCurrency)
+                        }.controlSize(.regular).fixedSize()
                     }
                     Text(L("При смене базовой валюты лимиты бюджетов и суммы целей пересчитываются по текущему курсу.")).font(.caption).foregroundStyle(.secondary)
                     Divider()
-                    HStack { Text(L("Оформление")).font(.callout); Spacer(); Picker(L("Оформление"), selection: Binding(get: { ledger.preferences.appearance }, set: { value in store.update { $0.preferences.appearance = value } })) { Text(L("Как в системе")).tag("system"); Text(L("Светлое")).tag("light"); Text(L("Темное")).tag("dark") }.labelsHidden().frame(width: 210) }
+                    HStack { Text(L("Оформление")).font(.callout); Spacer(); Picker(L("Оформление"), selection: Binding(get: { ledger.preferences.appearance }, set: { value in store.update { $0.preferences.appearance = value } })) { Text(L("Как в системе")).tag("system"); Text(L("Светлое")).tag("light"); Text(L("Темное")).tag("dark") }.pickerStyle(.menu).labelsHidden().fixedSize() }
                 }
             }
             Card {
@@ -227,6 +233,7 @@ struct SettingsView: View {
                 }
             }
             CloudSettingsCard()
+            SupportSettingsCard()
             Card {
                 HStack { Image(systemName: "leaf.fill").font(.system(size: 32)).foregroundStyle(Color.moraGreen); VStack(alignment: .leading, spacing: 6) { Text("Mora \(version)").font(.headline); Text(L("Личный учет финансов на Mac.")).font(.caption).foregroundStyle(.secondary) }; Spacer() }
             }

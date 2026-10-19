@@ -8,6 +8,22 @@ enum L10n {
     static var locale: Locale { language.locale }
 }
 
+/// Keep day/month/year order independently of the interface language, and let
+/// the native field use its intrinsic width so the four-digit year stays visible.
+struct EuropeanDatePicker: View {
+    var title: String
+    @Binding var selection: Date
+    var body: some View {
+        LabeledContent(title) {
+            DatePicker("", selection: $selection, displayedComponents: .date)
+                .labelsHidden().datePickerStyle(.stepperField)
+                .environment(\.locale, Locale(identifier: "en_GB"))
+                .fixedSize().frame(minWidth: 160, alignment: .leading)
+                .accessibilityLabel(title)
+        }
+    }
+}
+
 struct LanguageSettingsCard: View {
     @AppStorage("mora.language") private var language = "ru"
     var body: some View {
@@ -18,7 +34,7 @@ struct LanguageSettingsCard: View {
                 Picker(L("Язык"), selection: $language) {
                     Text("Русский").tag("ru")
                     Text("English").tag("en")
-                }.labelsHidden().frame(width: 210)
+                }.pickerStyle(.menu).labelsHidden().fixedSize()
             }
         }
     }

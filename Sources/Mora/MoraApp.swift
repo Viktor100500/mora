@@ -28,6 +28,9 @@ struct MoraApp: App {
         .defaultSize(width: 1320, height: 900)
         .windowStyle(.titleBar)
         .commands {
+            CommandGroup(replacing: .help) {
+                FeedbackButton()
+            }
             CommandGroup(replacing: .newItem) {
                 Button(L("Новая операция")) { sheet = .transaction(nil) }.keyboardShortcut("n")
                 Button(L("Импортировать CSV…")) { importFile() }.keyboardShortcut("i")
@@ -110,11 +113,7 @@ struct ContentView: View {
                         Image(systemName: "checkmark.circle").foregroundStyle(Color.moraGreen)
                         Text(notice).font(.callout)
                         Spacer()
-                        if let id = store.noticeImportID {
-                            Button(L("Отменить импорт")) { requestRollback(id) }.font(.callout)
-                            Button(L("История импортов")) { page = .imports }.font(.callout)
-                        }
-                        if store.noticeAccountChange { Button(L("Отмена в настройках")) { page = .settings }.font(.callout) }
+                        if let event = store.activeNotice { NotificationActions(event: event) }
                         Button { store.notice = nil } label: { Image(systemName: "xmark") }.buttonStyle(.plain).accessibilityLabel(L("Закрыть уведомление"))
                     }.padding(.horizontal, 30).padding(.vertical, 10).background(Color.moraGreen.opacity(0.08))
                 }
@@ -161,6 +160,9 @@ struct ContentView: View {
             }
         }
         .onReceive(dataRefresh) { _ in store.reloadFromDisk() }
+        .onReceive(store.notifications.$navigation) { request in
+            if case .page(let destination) = request?.destination { page = destination }
+        }
         .task(id: "\(store.ledger.preferences.automaticRates)-\(store.isDemo)") {
             guard store.ledger.preferences.automaticRates else { return }
             while !Task.isCancelled {
@@ -188,6 +190,14 @@ struct ContentView: View {
                 }.menuStyle(.borderlessButton).fixedSize().help(L("Импорт из CSV или через AI-агента"))
                 Button { sheet = .transaction(nil) } label: { Label(L("Новая операция"), systemImage: "plus") }.help(L("Добавить операцию · ⌘N"))
             }
+            if #available(macOS 26.0, *) {
+                ToolbarSpacer(.fixed, placement: .primaryAction)
+                ToolbarItem(placement: .primaryAction) {
+                    notificationControl
+                }.sharedBackgroundVisibility(.hidden)
+            } else {
+                ToolbarItem(placement: .primaryAction) { notificationControl }
+            }
         }
         .sheet(item: $sheet) { value in
             Group {
@@ -214,7 +224,7 @@ struct ContentView: View {
                 case .csv(let table, let name): ImportView(table: table, filename: name)
                 case .aiImport: AIImportView()
                 }
-            }.modifier(FinanceErrorAlert()).environmentObject(store).environment(\.locale, L10n.locale).tint(.moraGreen)
+            }.modifier(FeedbackFooter()).modifier(FinanceErrorAlert()).environmentObject(store).environmentObject(cloud).environment(\.locale, L10n.locale).tint(.moraGreen)
         }
         .modifier(FinanceErrorAlert(active: sheet == nil))
         .confirmationDialog(L("Начать свой учет?"), isPresented: $confirmStart, titleVisibility: .visible) {
@@ -260,6 +270,11 @@ struct ContentView: View {
                 FinancialText(DisplayMoney.string(store.reportNetWorth, currency: currency)).font(.system(size: 22, weight: .semibold, design: .rounded)).minimumScaleFactor(0.7).lineLimit(1)
                 Text(L("\(store.ledger.accounts.count) счетов · \(currency)")).font(.caption2).foregroundStyle(.secondary)
             }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(Color.moraGreen.opacity(0.05)).clipShape(RoundedRectangle(cornerRadius: 14)).padding(16)
+            VStack(alignment: .leading, spacing: 12) {
+                FeedbackContact(compact: true)
+                DonationButton().buttonStyle(.plain).foregroundStyle(.secondary)
+            }.font(.system(size: 13)).frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 20).padding(.vertical, 12)
             HStack(spacing: 8) {
                 Button { page = .settings } label: { Label(L("Настройки"), systemImage: "slider.horizontal.3").font(.system(size: 13)).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle()) }.buttonStyle(.plain)
                 Button { withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) { hideAmounts.toggle() } } label: {
@@ -267,6 +282,12 @@ struct ContentView: View {
                 }.buttonStyle(.plain).help(hideAmounts ? L("Показать суммы") : L("Скрыть суммы для скриншота")).accessibilityLabel(hideAmounts ? L("Показать суммы") : L("Скрыть суммы"))
             }.foregroundStyle(.secondary).padding(.horizontal, 20).padding(.bottom, 16)
         }
+    }
+    private var notificationControl: some View {
+        HStack(spacing: 18) {
+            Divider().frame(height: 20)
+            AppNotificationBell(notifications: store.notifications)
+        }.padding(.leading, 16).padding(.trailing, 4)
     }
     private var demoBanner: some View {
         HStack { Image(systemName: "sparkles"); Text(L("Это демо: изучите приложение на примере")).font(.system(size: 12)); Spacer(); Button(L("Начать свой учет")) { confirmStart = true }.font(.system(size: 12, weight: .semibold)).buttonStyle(.plain).underline() }.foregroundStyle(Color.moraGreen).padding(.horizontal, 30).padding(.vertical, 12).background(Color.moraGreen.opacity(0.10))

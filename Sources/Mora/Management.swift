@@ -189,7 +189,7 @@ struct GoalEditor: View {
     init(goal: Goal?) { self.goal = goal; _name = State(initialValue: goal?.name ?? ""); _target = State(initialValue: goal.map { Money.plain($0.target) } ?? ""); _saved = State(initialValue: goal.map { Money.plain($0.saved) } ?? "0"); _deadline = State(initialValue: goal?.deadline ?? Calendar.current.date(byAdding: .year, value: 1, to: Date())!); _icon = State(initialValue: goal?.icon ?? "flag") }
     var body: some View {
         ModalFrame(title: goal == nil ? L("Новая цель") : L("Обновить цель"), subtitle: L("Все суммы в \(store.ledger.preferences.baseCurrency)"), canSave: !name.trimmingCharacters(in: .whitespaces).isEmpty && (Money.parse(target) ?? 0) > 0 && (Money.parse(saved) ?? -1) >= 0, save: save) {
-            Form { TextField(L("Название"), text: $name); TextField(L("Целевая сумма"), text: $target).financialField(); TextField(L("Уже накоплено"), text: $saved).financialField(); DatePicker(L("Срок"), selection: $deadline, displayedComponents: .date); Picker(L("Значок"), selection: $icon) { ForEach(["flag", "airplane", "house", "car", "shield.lefthalf.filled", "graduationcap", "gift"], id: \.self) { Image(systemName: $0).tag($0) } } }
+            Form { TextField(L("Название"), text: $name); TextField(L("Целевая сумма"), text: $target).financialField(); TextField(L("Уже накоплено"), text: $saved).financialField(); EuropeanDatePicker(title: L("Срок"), selection: $deadline); Picker(L("Значок"), selection: $icon) { ForEach(["flag", "airplane", "house", "car", "shield.lefthalf.filled", "graduationcap", "gift"], id: \.self) { Image(systemName: $0).tag($0) } } }
         }
     }
     private func save() {
@@ -250,7 +250,7 @@ struct RecurringEditor: View {
                 Picker(L("Счет"), selection: $accountID) { Text(L("Выберите счет")).tag(Optional<UUID>.none); ForEach(store.ledger.accounts.filter { !$0.archived || $0.id == accountID }) { Text($0.name + " · " + $0.currency).tag(Optional($0.id)) } }
                 Picker(L("Категория"), selection: $categoryID) { Text(L("Без категории")).tag(Optional<UUID>.none); ForEach(store.ledger.categories.filter { $0.kind == .expense }) { Text($0.name).tag(Optional($0.id)) } }
                 Picker(L("Повтор"), selection: $frequency) { ForEach(Frequency.allCases) { Text(L($0.title)).tag($0) } }
-                DatePicker(L("Следующий платеж"), selection: $date, displayedComponents: .date)
+                EuropeanDatePicker(title: L("Следующий платеж"), selection: $date)
             }
         }.onAppear { if accountID == nil { accountID = store.ledger.accounts.first(where: { !$0.archived })?.id } }
     }

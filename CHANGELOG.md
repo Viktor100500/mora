@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Keep background cloud polling silent when the data has not changed.
+- Review Wallet purchases in the full transaction form, including currency conversion, category, notes and tags; save atomically without duplicate transactions.
+- Accept formatted Wallet amounts and explain missing purchase currencies accurately.
+- Suggest categories from merchant rules, previous transactions and familiar merchant names.
+- Add persistent notification history with available actions and a review indicator in the main window.
+- Add quick removal of unapproved Wallet purchases.
+- Show the developer contact beside feedback and add support methods with click-to-copy details.
+- Separate notifications from transaction creation, align settings controls, and use day/month/year date fields with room for the full year.
+
 ## 1.5.0 — Public preview
 
 - Load translations from the installed application bundle without depending on a development checkout.

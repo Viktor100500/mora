@@ -9,7 +9,8 @@ let package = Package(
         .target(name: "FinanceCore", resources: [.copy("Resources/Localization")]),
         .executableTarget(name: "Mora", dependencies: ["FinanceCore"]),
         .executableTarget(name: "MoraBridge", dependencies: ["FinanceCore"]),
-        .testTarget(name: "FinanceCoreTests", dependencies: ["FinanceCore"])
+        .testTarget(name: "FinanceCoreTests", dependencies: ["FinanceCore"]),
+        .testTarget(name: "MoraTests", dependencies: ["Mora"])
     ],
     swiftLanguageModes: [.v5]
 )
