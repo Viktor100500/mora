@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Copy the support email address with a confirmation when clicked; keep the feedback button opening the email app.
+- Make AI import automatic: use available MCP, the bundled native bridge without MCP installation, or a CSV file for import.
+- Keep the original AI import dialog, open native ChatGPT with a prefilled draft, and leave an editable request section for chat instructions and attachments.
+- Collect missing import details in one question and interpret selected screenshot rows as new imports unless correction is explicitly requested.
+
 - Keep background cloud polling silent when the data has not changed.
 - Review Wallet purchases in the full transaction form, including currency conversion, category, notes and tags; save atomically without duplicate transactions.
 - Accept formatted Wallet amounts and explain missing purchase currencies accurately.

@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "mora",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Личные финансы Mora: счета, расходы, доходы, переводы, импорт и отчеты через чат.",
   "author": {"name": "Mora"},
   "keywords": ["finance", "macos", "mcp", "personal-finance"],

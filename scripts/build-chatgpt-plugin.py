@@ -29,6 +29,7 @@ def build(output: Path, python: Path, bridge: Path) -> Path:
         "Prompts/mora-mcp.md": ROOT / "Prompts/mora-mcp.md",
         "Prompts/mora-csv.md": ROOT / "Prompts/mora-csv.md",
         "skills/mora-finance/references/workflow.md": ROOT / "Prompts/mora-mcp.md",
+        "skills/mora-finance/references/csv.md": ROOT / "Prompts/mora-csv.md",
         "bin/MoraBridge": bridge,
         "assets/icon.png": ROOT / "build/Mora.iconset/icon_128x128@2x.png",
         "README.md": ROOT / "plugins/mora/README.md",

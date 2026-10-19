@@ -27,6 +27,7 @@ struct FeedbackFooter: ViewModifier {
 }
 
 struct FeedbackContact: View {
+    @EnvironmentObject private var store: FinanceStore
     var compact = false
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -35,8 +36,15 @@ struct FeedbackContact: View {
         }.buttonStyle(.plain).foregroundStyle(.secondary)
     }
     private var email: some View {
-        Link(SupportContact.email, destination: SupportContact.emailURL)
-            .font(.system(size: 10)).fixedSize().help(SupportContact.email)
+        Button {
+            NSPasteboard.general.clearContents()
+            if NSPasteboard.general.setString(SupportContact.email, forType: .string) {
+                store.notice = L("Адрес почты скопирован")
+            }
+        } label: {
+            Text(SupportContact.email)
+        }
+        .font(.system(size: 10)).fixedSize().help(L("Скопировать адрес почты"))
     }
 }
 

@@ -867,5 +867,16 @@
   "Спасибо за поддержку! Нажмите на реквизиты, чтобы скопировать их.": "Thank you for your support! Click the payment details to copy them.",
   "Скопировать реквизиты": "Copy payment details",
   "Скопировано": "Copied",
-  "Выберите удобный способ поддержки": "Choose a way to support Mora"
+  "Адрес почты скопирован": "Email address copied",
+  "Скопировать адрес почты": "Copy email address",
+  "Выберите удобный способ поддержки": "Choose a way to support Mora",
+  "Автоматически": "Automatic",
+  "Импорт выписок и скриншотов без обязательной настройки MCP": "Import statements and screenshots without requiring MCP setup",
+  "Агент использует доступное подключение или встроенный компонент Mora. Без доступа к Mac подготовит CSV. Промпт включает названия счетов, их валюты и категории.": "The agent uses an available connection or the built-in Mora component. Without access to your Mac, it prepares a CSV. The prompt includes account names, currencies and categories.",
+  "Агент запишет операции через доступный MCP или встроенный компонент Mora. Недостающие данные уточнит в чате.": "The agent will record transactions using available MCP tools or the built-in Mora component and ask for missing details in chat.",
+  "В приложении агента откроется черновик. Допишите свой запрос в конце промпта и приложите скриншоты или выписку перед отправкой.": "A draft will open in the agent app. Add your request at the end of the prompt and attach screenshots or a statement before sending.",
+  "Приложение {0} не найдено. Установите его или вставьте скопированный промпт в свой чат.": "The {0} app was not found. Install it or paste the copied prompt into your chat.",
+  "Не удалось открыть {0}: {1}. Промпт скопирован.": "Could not open {0}: {1}. The prompt has been copied.",
+  "{0}: открыт черновик с промптом. Добавьте свой запрос и вложения.": "{0}: a draft with the prompt is open. Add your request and attachments.",
+  "Приложение {0} открыто. Вставьте скопированный промпт в новый чат.": "The {0} app is open. Paste the copied prompt into a new chat."
 }

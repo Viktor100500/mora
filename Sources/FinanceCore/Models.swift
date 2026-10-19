@@ -147,6 +147,7 @@ public struct Preferences: Codable, Equatable {
         showGoals = try values.decodeIfPresent(Bool.self, forKey: .showGoals) ?? false
         showRecurring = try values.decodeIfPresent(Bool.self, forKey: .showRecurring) ?? false
         aiAgent = try values.decodeIfPresent(String.self, forKey: .aiAgent) ?? "chatgpt"
+        if aiAgent == "codex" { aiAgent = "chatgpt" }
     }
 }
 

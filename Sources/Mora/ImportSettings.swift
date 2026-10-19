@@ -212,11 +212,11 @@ struct SettingsView: View {
             }
             Card {
                 VStack(alignment: .leading, spacing: 20) {
-                    SectionHeading(title: L("AI-помощник"), subtitle: L("Промпты для подготовки CSV и записи операций через MCP"))
+                    SectionHeading(title: L("AI-помощник"), subtitle: L("Импорт выписок и скриншотов без обязательной настройки MCP"))
                     HStack { Text(L("AI-агент для импорта")); Spacer(); Picker(L("AI-агент"), selection: Binding(get: { ledger.preferences.aiAgent }, set: { value in store.update { $0.preferences.aiAgent = value } })) { ForEach(AIAgent.allCases) { Text(L($0.title)).tag($0.rawValue) } }.labelsHidden().frame(width: 180) }
                     HStack { Label(L("Промпт для CSV"), systemImage: "text.bubble"); Spacer(); Button(L("Скопировать")) { copyAIPrompt("mora-csv", includeContext: true) } }
-                    HStack { Label(L("Инструкция для MCP"), systemImage: "point.3.connected.trianglepath.dotted"); Spacer(); Button(L("Скопировать")) { copyAIPrompt("mora-mcp", includeContext: false) } }
-                    Text(L("Для CSV в промпт добавляются названия активных счетов, их валюты и категории. Для прямой записи подключите Mora MCP к своему AI-агенту.")).font(.caption).foregroundStyle(.secondary)
+                    HStack { Label(L("Инструкция для MCP"), systemImage: "point.3.connected.trianglepath.dotted"); Spacer(); Button(L("Скопировать")) { copyAIPrompt("mora-mcp", includeContext: true) } }
+                    Text(L("Агент использует доступное подключение или встроенный компонент Mora. Без доступа к Mac подготовит CSV. Промпт включает названия счетов, их валюты и категории.")).font(.caption).foregroundStyle(.secondary)
                 }
             }
             Card {
@@ -254,7 +254,8 @@ struct SettingsView: View {
     private func saveRate() { guard let rate = Money.parse(rateAmount), rate > 0 else { return }; let code = rateCurrency.trimmingCharacters(in: .whitespaces).uppercased(); if store.update({ $0.preferences.rates[code] = rate }) { rateAmount = ""; store.notice = L("Курс \(code) обновлен") } }
     private func copyAIPrompt(_ name: String, includeContext: Bool) {
         do {
-            let text = try AIPrompt.text(name, ledger: ledger, includeContext: includeContext)
+            let context = store.isDemo ? Ledger.empty : ledger
+            let text = try AIPrompt.text(name, ledger: context, includeContext: includeContext, dataDirectory: store.fileURL.deletingLastPathComponent())
             AIPrompt.copy(text)
             store.notice = L("Промпт скопирован")
         } catch { store.error = error.localizedDescription }
