@@ -4,6 +4,26 @@
 
 - Build future public releases for Apple Silicon only, using local pre-release tests instead of rerunning tests in the release workflow.
 
+## 1.5.5 — 2026-10-19
+
+- Use matching Liquid Glass materials and heights for Import, New transaction and Notifications; increase the toolbar's trailing inset.
+
+## 1.5.4 — 2026-10-18
+
+- Remove required-field asterisks; highlight missing fields after saving and disable Save until the next form edit.
+- Give the day/month/year control enough width for the full date and stepper.
+- Increase import button padding and give New transaction and Notifications matching circular Liquid Glass controls.
+
+## 1.5.3 — 2026-10-18
+
+- Start transaction entry with the account; show the currency only after an account is selected, default to its actual currency code and keep currency optional.
+
+## 1.5.2 — 2026-10-18
+
+- Suggest tags from saved transactions when focusing the tags field; filter while typing and select multiple tags without case duplicates.
+- Mark required transaction fields and explain missing or invalid values beside each field after attempting to save.
+- Preselect the only active account or the most recently used active account for new manual transactions.
+
 ## 1.5.1 — 2026-10-18
 
 - Copy the support email address with a confirmation when clicked; keep the feedback button opening the email app.

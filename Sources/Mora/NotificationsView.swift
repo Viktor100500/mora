@@ -15,10 +15,11 @@ struct AppNotificationBell: View {
         Button { presented.toggle() } label: {
             Image(systemName: needsReview ? "bell.fill" : "bell")
                 .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(needsReview ? NotificationStyle.attention : Color.secondary)
-                .frame(width: 30, height: 30)
+                .foregroundStyle(needsReview ? NotificationStyle.attention : Color.primary)
+                .frame(width: 36, height: 36)
                 .background(needsReview ? NotificationStyle.attention.opacity(0.12) : .clear,
-                            in: RoundedRectangle(cornerRadius: 9))
+                            in: Circle())
+                .contentShape(Circle())
                 .overlay(alignment: .topTrailing) {
                     if needsReview {
                         Image(systemName: "exclamationmark").font(.system(size: 8, weight: .heavy))
@@ -29,12 +30,26 @@ struct AppNotificationBell: View {
                     }
                 }
         }
-        .buttonStyle(.plain)
+        .modifier(ToolbarGlassStyle(shape: Circle()))
         .help(L("Уведомления приложения"))
         .accessibilityLabel(L("Уведомления приложения"))
         .accessibilityValue(needsReview ? L("Покупок на проверке: \(cloud.pending.count)") : L("Непрочитанных: \(notifications.unreadCount)"))
         .popover(isPresented: $presented, arrowEdge: .bottom) {
             NotificationsPanel(notifications: notifications, close: { presented = false })
+        }
+    }
+}
+
+struct ToolbarGlassStyle<S: InsettableShape>: ViewModifier {
+    let shape: S
+    @ViewBuilder func body(content: Content) -> some View {
+        if #available(macOS 26.0, *) {
+            content.buttonStyle(.plain).background(.regularMaterial, in: shape)
+                .glassEffect(.regular.interactive(), in: shape)
+                .overlay(shape.strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5).allowsHitTesting(false))
+        } else {
+            content.buttonStyle(.plain).background(.regularMaterial, in: shape)
+                .overlay(shape.strokeBorder(Color.primary.opacity(0.08), lineWidth: 1).allowsHitTesting(false))
         }
     }
 }

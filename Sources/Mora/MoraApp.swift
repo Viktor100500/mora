@@ -178,25 +178,17 @@ struct ContentView: View {
         }
         .navigationTitle(L("Mora — личные финансы"))
         .toolbar {
-            ToolbarItemGroup(placement: .primaryAction) {
-                Menu {
-                    Button(L("Из CSV-файла…"), systemImage: "tablecells") { if let file = openCSV(store: store) { sheet = .csv(file.0, file.1) } }
-                    Button(L("Через AI-агента…"), systemImage: "text.bubble") { sheet = .aiImport }
-                } label: {
-                    HStack(spacing: 7) { Image(systemName: "square.and.arrow.down"); Text(L("Импорт")) }
-                        .font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
-                        .padding(.horizontal, 14).padding(.vertical, 7).frame(minWidth: 108)
-                        .background(Color.moraGreen, in: RoundedRectangle(cornerRadius: 8))
-                }.menuStyle(.borderlessButton).fixedSize().help(L("Импорт из CSV или через AI-агента"))
-                Button { sheet = .transaction(nil) } label: { Label(L("Новая операция"), systemImage: "plus") }.help(L("Добавить операцию · ⌘N"))
-            }
             if #available(macOS 26.0, *) {
+                ToolbarItem(placement: .primaryAction) { HStack { importControl } }
+                    .sharedBackgroundVisibility(.hidden)
                 ToolbarSpacer(.fixed, placement: .primaryAction)
-                ToolbarItem(placement: .primaryAction) {
-                    notificationControl
-                }.sharedBackgroundVisibility(.hidden)
+                ToolbarItem(placement: .primaryAction) { transactionControls }
+                    .sharedBackgroundVisibility(.hidden)
             } else {
-                ToolbarItem(placement: .primaryAction) { notificationControl }
+                ToolbarItemGroup(placement: .primaryAction) {
+                    importControl
+                    transactionControls
+                }
             }
         }
         .sheet(item: $sheet) { value in
@@ -213,7 +205,7 @@ struct ContentView: View {
                             }
                         }
                     }, explore: { didSeeWelcome = true; sheet = nil })
-                case .transaction(let t): TransactionEditor(transaction: t)
+                case .transaction(let t): TransactionEditor(transaction: t, ledger: store.ledger)
                 case .split(let t): SplitEditor(transaction: t)
                 case .account(let a): AccountEditor(account: a)
                 case .budget(let b): BudgetEditor(budget: b)
@@ -283,11 +275,31 @@ struct ContentView: View {
             }.foregroundStyle(.secondary).padding(.horizontal, 20).padding(.bottom, 16)
         }
     }
-    private var notificationControl: some View {
-        HStack(spacing: 18) {
-            Divider().frame(height: 20)
+    private var importControl: some View {
+        Menu {
+            Button(L("Из CSV-файла…"), systemImage: "tablecells") { if let file = openCSV(store: store) { sheet = .csv(file.0, file.1) } }
+            Button(L("Через AI-агента…"), systemImage: "text.bubble") { sheet = .aiImport }
+        } label: {
+            HStack(spacing: 8) { Image(systemName: "square.and.arrow.down"); Text(L("Импорт")) }
+                .font(.system(size: 14, weight: .medium)).foregroundStyle(Color.primary)
+        }
+        .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+        .tint(Color.primary).foregroundStyle(Color.primary)
+        .padding(.horizontal, 18).frame(height: 36)
+        .modifier(ToolbarGlassStyle(shape: Capsule()))
+        .help(L("Импорт из CSV или через AI-агента"))
+    }
+    private var transactionControls: some View {
+        HStack(spacing: 10) {
+            Button { sheet = .transaction(nil) } label: {
+                Image(systemName: "plus").font(.system(size: 16, weight: .medium))
+                    .frame(width: 36, height: 36).contentShape(Circle())
+            }
+            .modifier(ToolbarGlassStyle(shape: Circle()))
+            .accessibilityLabel(L("Новая операция"))
+            .help(L("Добавить операцию · ⌘N"))
             AppNotificationBell(notifications: store.notifications)
-        }.padding(.leading, 16).padding(.trailing, 4)
+        }.padding(.trailing, 16)
     }
     private var demoBanner: some View {
         HStack { Image(systemName: "sparkles"); Text(L("Это демо: изучите приложение на примере")).font(.system(size: 12)); Spacer(); Button(L("Начать свой учет")) { confirmStart = true }.font(.system(size: 12, weight: .semibold)).buttonStyle(.plain).underline() }.foregroundStyle(Color.moraGreen).padding(.horizontal, 30).padding(.vertical, 12).background(Color.moraGreen.opacity(0.10))

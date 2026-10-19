@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import FinanceCore
 
 func L(_ value: String) -> String { UILocalization.shared.text(value, language: L10n.language) }
@@ -8,19 +9,47 @@ enum L10n {
     static var locale: Locale { language.locale }
 }
 
-/// Keep day/month/year order independently of the interface language, and let
-/// the native field use its intrinsic width so the four-digit year stays visible.
+/// Size the native control itself, including room for the year and stepper.
 struct EuropeanDatePicker: View {
     var title: String
     @Binding var selection: Date
     var body: some View {
         LabeledContent(title) {
-            DatePicker("", selection: $selection, displayedComponents: .date)
-                .labelsHidden().datePickerStyle(.stepperField)
-                .environment(\.locale, Locale(identifier: "en_GB"))
-                .fixedSize().frame(minWidth: 160, alignment: .leading)
-                .accessibilityLabel(title)
+            EuropeanDateField(title: title, selection: $selection)
+                .frame(width: 128, height: 26)
         }
+    }
+}
+
+private struct EuropeanDateField: NSViewRepresentable {
+    let title: String
+    @Binding var selection: Date
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+    func makeNSView(context: Context) -> NSDatePicker {
+        let picker = NSDatePicker()
+        picker.datePickerStyle = .textFieldAndStepper
+        picker.datePickerElements = .yearMonthDay
+        picker.datePickerMode = .single
+        picker.locale = Locale(identifier: "en_GB")
+        picker.font = .systemFont(ofSize: NSFont.systemFontSize)
+        picker.controlSize = .regular
+        picker.isBezeled = true
+        picker.drawsBackground = true
+        picker.target = context.coordinator
+        picker.action = #selector(Coordinator.changed(_:))
+        return picker
+    }
+    func updateNSView(_ picker: NSDatePicker, context: Context) {
+        context.coordinator.parent = self
+        if picker.dateValue != selection { picker.dateValue = selection }
+        picker.isEnabled = context.environment.isEnabled
+        picker.setAccessibilityLabel(title)
+    }
+    final class Coordinator: NSObject {
+        var parent: EuropeanDateField
+        init(_ parent: EuropeanDateField) { self.parent = parent }
+        @objc func changed(_ picker: NSDatePicker) { parent.selection = picker.dateValue }
     }
 }
 
