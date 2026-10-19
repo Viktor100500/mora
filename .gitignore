@@ -47,6 +47,7 @@ mcp/client-config.json
 **/ledger.json*
 **/cloud-settings.json
 **/cloud-checkpoint.json
+**/notification-history.json
 **/cloud-project.json
 **/MoraCloud.json
 **/mcp-http-token

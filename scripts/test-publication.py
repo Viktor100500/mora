@@ -20,6 +20,7 @@ class PublicationTests(unittest.TestCase):
 
     def testRejectsFinancialFilesAndMachinePaths(self):
         self.assertTrue(self.inspect('outputs/ledger.json'))
+        self.assertTrue(self.inspect('Sources/notification-history.json'))
         self.assertTrue(self.inspect('mcp/client-config.json'))
         self.assertTrue(self.inspect('Sources/link', mode='120000'))
         private_path = b'/' + b'Users/' + b'example-person/file'
@@ -33,6 +34,15 @@ class PublicationTests(unittest.TestCase):
         self.assertTrue(self.inspect('README.md', b'person' + b'@' + b'private.invalid'))
         self.assertFalse(self.inspect('README.md', b'test@example.test'))
         self.assertFalse(self.inspect('scripts/GenerateIcon.swift', b'icon_128x128@2x.png'))
+
+    def testPublicSupportContactIsAllowedOnlyInItsUISourceAndAppBinary(self):
+        address = checks.PUBLIC_SUPPORT_EMAIL.encode()
+        self.assertFalse(self.inspect('Sources/Mora/Support.swift', address))
+        self.assertTrue(self.inspect('README.md', address))
+        self.assertTrue(self.inspect('Sources/Mora/Support.swift', b'private' + b'@' + b'private.invalid'))
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertFalse(checks.inspect([('Contents/MacOS/Mora', '100755', address)], bundle=True))
+            self.assertTrue(checks.inspect([('Contents/Resources/private.txt', '100644', address)], bundle=True))
 
     def testChecksGitIndexRatherThanUnstagedWorkingCopy(self):
         previous = checks.ROOT

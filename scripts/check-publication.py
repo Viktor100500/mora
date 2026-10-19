@@ -15,7 +15,7 @@ import sys
 ROOT = Path(__file__).resolve().parent.parent
 PUBLIC_FILES = {'.gitignore', '.gitattributes', 'README.md', 'CHANGELOG.md', 'CONTRIBUTING.md', 'SECURITY.md', 'LICENSE', 'Package.swift'}
 PUBLIC_DIRS = {'.github', '.githooks', 'Examples', 'Prompts', 'Resources', 'Sources', 'Tests', 'cloud', 'docs', 'mcp', 'plugins', 'scripts'}
-PRIVATE_NAMES = {'ledger.json', 'cloud-settings.json', 'cloud-checkpoint.json', 'cloud-project.json', 'MoraCloud.json', 'client-config.json', 'runtime.sh', 'mcp-http-token', '.DS_Store'}
+PRIVATE_NAMES = {'ledger.json', 'notification-history.json', 'cloud-settings.json', 'cloud-checkpoint.json', 'cloud-project.json', 'MoraCloud.json', 'client-config.json', 'runtime.sh', 'mcp-http-token', '.DS_Store'}
 PRIVATE_PARTS = {'outputs', 'build', '.build', '.venv', '.swiftpm', 'node_modules', '__pycache__', 'private-notes', '.env'}
 PRIVATE_DOCS = {'cloud/VERIFICATION.md', 'docs/localization-and-navigation.md', 'docs/scrolling-regression.md'}
 RULES = {
@@ -29,6 +29,9 @@ RULES = {
     'API credential': re.compile(rb'(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|AKIA[A-Z0-9]{16}|AIza[0-9A-Za-z_-]{30,})'),
 }
 EMAIL = re.compile(rb'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b')
+# The developer explicitly publishes this app support contact. Keep the exception
+# scoped to its UI source and the assembled executable, not arbitrary documents.
+PUBLIC_SUPPORT_EMAIL = 'yar.thedeveloper' + '@' + 'proton.me'
 
 
 def git(*args: str) -> bytes:
@@ -87,6 +90,8 @@ def inspect(files, bundle: bool = False) -> list[str]:
         for match in EMAIL.finditer(data):
             address = match.group().decode().lower()
             if re.fullmatch(r'icon_[0-9]+x[0-9]+@2x\.png', address):
+                continue
+            if address == PUBLIC_SUPPORT_EMAIL and name == ('Contents/MacOS/Mora' if bundle else 'Sources/Mora/Support.swift'):
                 continue
             if not address.endswith(('@example.test', '@example.com', '@example-project.supabase.co', '@users.noreply.github.com', '@noreply.github.com')) and address != 'git@github.com':
                 issues.append(f'{name}: non-example email address')
