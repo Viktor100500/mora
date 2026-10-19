@@ -12,6 +12,8 @@ Enable the local guards after cloning: `git config core.hooksPath .githooks`.
 
 ## Before a commit
 
+When changing app behavior, update `CFBundleShortVersionString` and increment `CFBundleVersion` in `Resources/Info.plist`, record the changes in `CHANGELOG.md`, and rebuild the app so its version matches the source.
+
 ```sh
 git add <specific-public-files>
 python3 scripts/check-publication.py
