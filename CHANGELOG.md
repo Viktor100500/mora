@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Build future public releases for Apple Silicon only, using local pre-release tests instead of rerunning tests in the release workflow.
+
 ## 1.5.1 — 2026-10-18
 
 - Copy the support email address with a confirmation when clicked; keep the feedback button opening the email app.

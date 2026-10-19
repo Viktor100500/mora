@@ -8,10 +8,7 @@ Native macOS personal finance app. Local storage by default, Russian and English
 
 ## Установка
 
-Нужна **macOS 14 или новее**. В [Releases](https://github.com/Viktor100500/mora/releases) выберите архив своей архитектуры:
-
-- `arm64` — Mac с Apple Silicon: M1, M2 и более новые.
-- `x86_64` — Mac с процессором Intel, если такая сборка приложена к релизу.
+Нужна **macOS 14 или новее** и Mac с **Apple Silicon: M1, M2 и более новые**. В [Releases](https://github.com/Viktor100500/mora/releases) скачайте архив `arm64`. Следующие релизы выпускаются только для Apple Silicon; Intel-версии больше не поддерживаются.
 
 Распакуйте ZIP, перенесите `Mora.app` в **Программы** и откройте. Python, регистрация и собственный сервер для обычного учета не нужны.
 

@@ -8,6 +8,8 @@ Use macOS 14+ and Swift 6. Run `swift test`, then `zsh scripts/build-app.sh`. MC
 
 Keep tests offline, temporary and synthetic. Never point tests at a real ledger or cloud project. The optional PostgreSQL integration test is described in [cloud/README.md](cloud/README.md).
 
+Public releases target Apple Silicon only. Run tests locally before publishing; the release workflow builds and packages the app without rerunning tests.
+
 Enable the local guards after cloning: `git config core.hooksPath .githooks`.
 
 ## Before a commit
