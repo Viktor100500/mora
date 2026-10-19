@@ -142,7 +142,101 @@ try {
     const r=await Promise.all([rpc(owner,'mora_save_household',[h,latest.version,raw]),rpc(member,'mora_save_household',[h,latest.version,raw])]);
     assert.equal(r.filter(Boolean).length,1);
   });
+  // Keep the four-transaction Swift compatibility fixture stable as checks grow.
   const saved=(await admin.query('select snapshot::text as value from public.mora_households where id=$1',[h])).rows[0].value;
+  const legacy = await capture(anon,phone2.token,uuid(),'$31.54','');
+  const beforeMigration = (await rpc(owner,'mora_get_household',[h])).snapshot.transactions.length;
+  const migrations = (await fs.readdir(path.join(here,'../supabase/migrations'))).filter(name => name.endsWith('.sql')).sort();
+  for (const migration of migrations.filter(name => name !== '202610120001_mora_cloud.sql')) {
+    await admin.query(await fs.readFile(path.join(here,'../supabase/migrations',migration),'utf8'));
+  }
+  await check('formatted amount migration repairs old reasons without posting expenses',async()=>{
+    const pending=(await rpc(owner,'mora_list_pending',[h])).find(c => c.id === legacy.id);
+    assert.equal(pending.amount,'$31.54');
+    assert.equal(pending.currency,'');
+    assert.equal(pending.reason,'Не получена валюта покупки');
+    assert.equal((await rpc(owner,'mora_get_household',[h])).snapshot.transactions.length,beforeMigration);
+    await rpc(owner,'mora_resolve_capture',[h,legacy.id,accountID,'','',true]);
+  });
+  await check('Wallet currency symbols and valid grouping preserve exact numeric amounts',async()=>{
+    for (const [input,expected] of [['$31.54','31.54'],['31,54 €','31.54'],['USD 31.54','31.54'],
+      ['$1,234.56','1234.56'],['1.234,56 €','1234.56'],['1\u202f234,56 ₽','1234.56'],['123456789012.123456','123456789012.123456']]) {
+      const result=await capture(anon,phone2.token,uuid(),input,'USD');
+      assert.equal(result.state,'recorded',input);
+      const stored=(await admin.query("select t->>'amount' amount from public.mora_households h,jsonb_array_elements(h.snapshot->'transactions') t where h.id=$1 and t->>'externalID'=$2",[h,'wallet:'+result.id])).rows[0].amount;
+      assert.equal(stored,'-'+expected,input);
+    }
+  });
+  await check('a formatted amount never supplies an unknown currency or converts a foreign one',async()=>{
+    for (const [currency,reason] of [['','Не получена валюта покупки'],['EUR','Валюта покупки отличается от валюты счета']]) {
+      const result=await capture(anon,phone2.token,uuid(),'$31.54',currency);
+      assert.equal(result.state,'pending'); assert.equal(result.reason,reason);
+      await rpc(owner,'mora_resolve_capture',[h,result.id,accountID,'','',true]);
+    }
+  });
+  await check('malformed, nonpositive, excessive and duplicate-symbol amounts stay pending',async()=>{
+    const before=(await rpc(owner,'mora_get_household',[h])).snapshot.transactions.length;
+    for (const input of ['', '$0.00', '-31.54', '$31.54 USD', '$31.54junk', '31$54', '12,34.56', '1000000000000', '0.0000001']) {
+      const result=await capture(anon,phone2.token,uuid(),input,'USD');
+      assert.equal(result.state,'pending',input);
+      assert.equal(result.reason,'Не получена положительная сумма',input);
+      await rpc(owner,'mora_resolve_capture',[h,result.id,accountID,'','',true]);
+    }
+    assert.equal((await rpc(owner,'mora_get_household',[h])).snapshot.transactions.length,before);
+  });
+  await check('the parser stays private and capture RPC remains available to phone tokens',async()=>{
+    await denied(()=>rpc(anon,'mora_parse_payment_amount',['$31.54']));
+    await denied(()=>rpc(owner,'mora_parse_payment_amount',['$31.54']));
+    await denied(()=>capture(anon,'0'.repeat(64),uuid(),'$31.54'));
+  });
+  const eurAccount=uuid().toUpperCase();
+  const accountJSON={id:eurAccount,name:'EUR review account',currency:'EUR',kind:'checking',openingBalance:0,color:'green',archived:false,conversionFeePercent:0.23};
+  const latestForReview=await rpc(owner,'mora_get_household',[h]);
+  const withAccount=(await admin.query("select jsonb_set(snapshot,'{accounts}',(snapshot->'accounts') || $2::jsonb)::text value from public.mora_households where id=$1",[h,JSON.stringify([accountJSON])])).rows[0].value;
+  assert.equal(await rpc(owner,'mora_save_household',[h,latestForReview.version,withAccount]),true);
+  const reviewedCapture=await capture(anon,phone2.token,uuid(),'$31.54','');
+  const reviewedTransaction={id:uuid(),date:'2026-10-16T20:19:00Z',merchant:'Cafe · Apple Wallet · Test phone · 20:19',amount:-28.45,
+    accountID:eurAccount,kind:'expense',categoryID,note:'Edited review note',tags:['Apple Wallet','reviewed'],externalID:'must-be-replaced',
+    conversion:{originalAmount:-31.54,originalCurrency:'USD',accountCurrency:'EUR',rate:0.9,date:'2026-10-16T00:00:00Z',provider:'Visa',bankFeePercent:0.23}};
+  await check('review saves currency conversion and every edited transaction field atomically',async()=>{
+    const result=await rpc(member,'mora_review_capture',[h,reviewedCapture.id,reviewedTransaction]);
+    const tx=result.snapshot.transactions.find(t=>t.externalID==='wallet:'+reviewedCapture.id);
+    assert.deepEqual(tx,{...reviewedTransaction,id:reviewedCapture.id.toUpperCase(),externalID:'wallet:'+reviewedCapture.id});
+    assert.equal((await rpc(owner,'mora_list_pending',[h])).some(c=>c.id===reviewedCapture.id),false);
+    const state=(await admin.query('select state,transaction_id from public.mora_captures where id=$1',[reviewedCapture.id])).rows[0];
+    assert.equal(state.state,'recorded'); assert.equal(state.transaction_id,reviewedCapture.id);
+  });
+  await check('a retry preserves the first review and never duplicates or overwrites it',async()=>{
+    const before=await rpc(owner,'mora_get_household',[h]);
+    const retry=await rpc(owner,'mora_review_capture',[h,reviewedCapture.id,{...reviewedTransaction,merchant:'Retry must not overwrite'}]);
+    assert.equal(retry.version,before.version);
+    assert.deepEqual(retry.snapshot,before.snapshot);
+  });
+  await check('review rejects non-members, phone tokens, invalid accounts and inconsistent conversions',async()=>{
+    const pending=await capture(anon,phone2.token,uuid(),'$31.54','');
+    await denied(()=>rpc(outsider,'mora_review_capture',[h,pending.id,reviewedTransaction]));
+    await denied(()=>rpc(anon,'mora_review_capture',[h,pending.id,reviewedTransaction]));
+    const before=await rpc(owner,'mora_get_household',[h]);
+    for(const invalid of [{...reviewedTransaction,accountID:uuid()},{...reviewedTransaction,amount:0},
+      {...reviewedTransaction,conversion:{...reviewedTransaction.conversion,rate:1}},
+      {...reviewedTransaction,importBatchID:uuid()}]) {
+      await assert.rejects(()=>rpc(owner,'mora_review_capture',[h,pending.id,invalid]));
+    }
+    assert.equal((await rpc(owner,'mora_get_household',[h])).version,before.version);
+    assert.equal((await rpc(owner,'mora_list_pending',[h])).some(c=>c.id===pending.id),true);
+    await rpc(owner,'mora_resolve_capture',[h,pending.id,accountID,'','',true]);
+    await assert.rejects(()=>rpc(owner,'mora_review_capture',[h,pending.id,reviewedTransaction]));
+  });
+  await check('two reviewers produce one transaction and full-form transfers also work',async()=>{
+    const pending=await capture(anon,phone2.token,uuid(),'','');
+    const transfer={id:uuid(),date,merchant:'Wallet transfer review',amount:-10,accountID,kind:'transfer',
+      note:'Transfer from full form',tags:['Apple Wallet'],destinationAccountID:eurAccount,destinationAmount:9};
+    const before=await rpc(owner,'mora_get_household',[h]);
+    const results=await Promise.all([rpc(owner,'mora_review_capture',[h,pending.id,transfer]),rpc(member,'mora_review_capture',[h,pending.id,transfer])]);
+    assert(results.every(r=>r.version===before.version+1));
+    assert.equal(results[0].snapshot.transactions.filter(t=>t.externalID==='wallet:'+pending.id).length,1);
+    assert.equal(results[0].snapshot.transactions.find(t=>t.externalID==='wallet:'+pending.id).destinationAmount,9);
+  });
   assert(saved.includes('-123456789012.123456'));
   await fs.mkdir(path.join(here,'fixtures'),{recursive:true});
   await fs.writeFile(path.join(here,'fixtures/backend-ledger.json'),saved+'\n');

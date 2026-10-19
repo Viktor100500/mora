@@ -54,15 +54,15 @@ public struct CloudEnvelope: Codable {
     public var version: Int64
     public var snapshot: Ledger
 }
-public struct CloudHousehold: Codable, Identifiable { public let id: UUID; public let name: String }
-public struct CloudPhoneToken: Codable, Identifiable {
+public struct CloudHousehold: Codable, Identifiable, Equatable { public let id: UUID; public let name: String }
+public struct CloudPhoneToken: Codable, Identifiable, Equatable {
     public let id: UUID
     public let label: String
     public let account_id: UUID
     public let revoked: Bool
 }
 public struct CloudIssuedToken: Codable { public let id: UUID; public let token: String }
-public struct CloudCapture: Codable, Identifiable {
+public struct CloudCapture: Codable, Identifiable, Equatable {
     public let id: UUID
     public let merchant: String
     public let amount: String
