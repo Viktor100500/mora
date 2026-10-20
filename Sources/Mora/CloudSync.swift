@@ -25,6 +25,7 @@ final class CloudSync: ObservableObject {
     @Published var invitation: String?
     @Published var issuedToken: String?
     private weak var store: FinanceStore?
+    private let walletRate: (Decimal, String, String, Date) async throws -> CardConversion
     private let transport: URLSession
     private let sessionWriter: (Data, String) throws -> Void
     private var operationInProgress = false
@@ -34,9 +35,13 @@ final class CloudSync: ObservableObject {
     private var failureCount = 0
     private var nextAttempt = Date.distantPast
     init(store: FinanceStore? = nil, transport: URLSession = .shared,
+         walletRate: @escaping (Decimal, String, String, Date) async throws -> CardConversion = {
+             try await VisaRateClient.shared.conversion(amount: $0, from: $1, to: $2, date: $3)
+         },
          sessionWriter: @escaping (Data, String) throws -> Void = { try CloudKeychain.write($0, account: $1) }) {
         self.store = store
         self.transport = transport
+        self.walletRate = walletRate
         self.sessionWriter = sessionWriter
     }
     private struct Settings: Codable {
@@ -53,6 +58,7 @@ final class CloudSync: ObservableObject {
         let envelope: CloudEnvelope
     }
     private struct HouseholdBody: Encodable { let p_household_id: UUID }
+    private struct WalletImportResult: Decodable { let envelope: CloudEnvelope; let batch_id: UUID? }
     private struct Status: Decodable { let version: Int64; let pending_count: Int }
     private struct CreateBody: Encodable { let p_name: String; let p_snapshot: Ledger }
     private struct SaveBody: Encodable { let p_household_id: UUID; let p_version: Int64; let p_snapshot: Ledger }
@@ -261,6 +267,7 @@ final class CloudSync: ObservableObject {
         await operation(inBackground: inBackground) {
             do {
                 try await self.syncNow()
+                try await self.bookWalletPurchases()
                 self.failureCount = 0; self.nextAttempt = Date().addingTimeInterval(8)
             } catch {
                 self.failureCount += 1
@@ -269,6 +276,57 @@ final class CloudSync: ObservableObject {
             }
         }
     }
+    private func bookWalletPurchases() async throws {
+        guard let id = householdID, let store else { return }
+        var firstError: Error?
+        for capture in pending.sorted(by: { $0.date < $1.date }) {
+            try Task.checkCancellation()
+            do {
+                let local = try diskLedger()
+                guard let transaction = try await WalletReviewDraft.automaticTransaction(for: capture, in: local,
+                    fetch: walletRate) else { continue }
+                // The editor may have changed local data while the quote was loading.
+                let current = try diskLedger()
+                let value = try WalletReviewDraft.transaction(transaction, for: capture, in: current)
+                let envelope: CloudEnvelope = try await rpc("mora_review_capture",
+                    ReviewBody(p_household_id: id, p_capture_id: capture.id, p_transaction: value))
+                guard envelope.household_id == id else { throw CloudAPIError.invalidResponse }
+                try envelope.snapshot.validate()
+                _ = try LedgerFile.applyCloud(envelope.snapshot, at: store.fileURL, mergeAgainst: current)
+                try saveCheckpoint(envelope)
+                store.reloadFromDisk()
+                _ = try await loadPending(id)
+                lastSync = Date()
+            } catch is CancellationError { throw CancellationError() }
+            catch { if firstError == nil { firstError = error } }
+        }
+        // Keep failed captures in the server inbox and use the normal sync backoff.
+        // Other valid purchases in the batch are still allowed to finish.
+        // Also recovers purchases committed before a lost response or an older Mora version.
+        try await collectWalletImport()
+        if let firstError { throw firstError }
+    }
+
+    private func collectWalletImport() async throws {
+        guard let id = householdID, let store else { return }
+        let local = try diskLedger()
+        let previouslyBatched = Set(local.importHistory.flatMap { $0.transactions.map(\.id) })
+        guard local.transactions.contains(where: { transaction in
+            transaction.importBatchID == nil && !previouslyBatched.contains(transaction.id) &&
+                transaction.externalID == "wallet:" + transaction.id.uuidString.lowercased()
+        }) else { return }
+        let result: WalletImportResult = try await rpc("mora_collect_wallet_import", HouseholdBody(p_household_id: id))
+        guard result.envelope.household_id == id else { throw CloudAPIError.invalidResponse }
+        _ = try LedgerFile.applyCloud(result.envelope.snapshot, at: store.fileURL, mergeAgainst: local, recordWalletImport: result.batch_id)
+        try saveCheckpoint(result.envelope)
+        store.reloadFromDisk()
+        if let batchID = result.batch_id, let batch = store.ledger.importHistory.first(where: { $0.id == batchID }) {
+            store.showNotice(L("Загружено из Apple Shortcuts: \(batch.transactions.count)"),
+                             detail: batch.transactions.prefix(3).map(\.merchant).joined(separator: " · "),
+                             actions: [.rollbackImport(batchID), .imports])
+        }
+    }
+
     private func syncNow() async throws {
         guard let id = householdID, let store else { return }
         let saved = try checkpoint().envelope
@@ -367,8 +425,9 @@ final class CloudSync: ObservableObject {
             store.reloadFromDisk()
             _ = try await self.loadPending(id)
             self.lastSync = Date()
-            store.showNotice(L("Покупка из Wallet добавлена в операции"))
+            // The purchase is already committed; collecting history can safely retry later.
             saved = true
+            try await self.collectWalletImport()
         }
         if !saved, let error { store?.error = error }
         return saved

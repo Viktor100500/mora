@@ -3,18 +3,22 @@ import Foundation
 extension Ledger {
     /// Explicit rules win, then the user's own merchant history, then a small
     /// offline vocabulary. An unknown merchant stays uncategorized.
-    public func suggestedCategory(merchant: String, kind: TransactionKind) -> UUID? {
+    public func historicalCategory(merchant: String, kind: TransactionKind) -> UUID? {
         guard kind != .transfer else { return nil }
         if let rule = matchingCategory(merchant: merchant, kind: kind) { return rule }
-        func normalized(_ text: String) -> String {
-            text.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
-                .split(whereSeparator: { !$0.isLetter && !$0.isNumber }).joined(separator: " ")
-        }
+        let normalized = MerchantName.normalized
         let name = normalized(merchant)
         guard !name.isEmpty else { return nil }
         if let previous = transactions.filter({
             $0.kind == kind && normalized($0.merchant) == name && category($0.categoryID)?.kind == kind
         }).max(by: { $0.date < $1.date }) { return previous.categoryID }
+        return nil
+    }
+
+    public func suggestedCategory(merchant: String, kind: TransactionKind) -> UUID? {
+        if let known = historicalCategory(merchant: merchant, kind: kind) { return known }
+        let normalized = MerchantName.normalized
+        let name = normalized(merchant)
         guard kind == .expense else { return nil }
         let vocabulary: [(merchants: [String], categories: [String])] = [
             (["raising canes", "raising cane s", "starbucks", "mcdonalds", "mcdonald s", "kfc", "burger king", "restaurant", "cafe", "coffee", "pizza", "ресторан", "кафе", "кофе"],

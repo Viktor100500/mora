@@ -31,6 +31,20 @@ final class FinanceStore: ObservableObject {
     let notifications: AppNotifications
     var undoCount: Int { ledger.undoCount }
     var redoCount: Int { ledger.redoCount }
+    var undoDescription: ChangeDescription? { ledger.changeHistory?.undo.last.map { ChangeDescriptions.between($0, ledger) } }
+    var redoDescription: ChangeDescription? { ledger.changeHistory?.redo.last.map { ChangeDescriptions.between(ledger, $0) } }
+    var undoDescriptions: [ChangeDescription] {
+        let snapshots = ledger.changeHistory?.undo ?? []
+        return snapshots.indices.reversed().map { index in
+            ChangeDescriptions.between(snapshots[index], index + 1 < snapshots.count ? snapshots[index + 1] : ledger)
+        }
+    }
+    var redoDescriptions: [ChangeDescription] {
+        let snapshots = ledger.changeHistory?.redo ?? []
+        return snapshots.indices.reversed().map { index in
+            ChangeDescriptions.between(index + 1 < snapshots.count ? snapshots[index + 1] : ledger, snapshots[index])
+        }
+    }
     @Published private(set) var updatingRates = false
     @Published private(set) var rateUpdateError: String? {
         didSet {
@@ -77,8 +91,8 @@ final class FinanceStore: ObservableObject {
             }
         } else { ledger = .demo(); isDemo = true }
     }
-    func showNotice(_ message: String, actions: [AppNotificationAction] = []) {
-        activeNotice = notifications.record(message, actions: actions)
+    func showNotice(_ message: String, detail: String? = nil, actions: [AppNotificationAction] = []) {
+        activeNotice = notifications.record(message, detail: detail, actions: actions)
     }
     var notificationStateToken: String {
         if let notificationTokenCache { return notificationTokenCache }
@@ -178,20 +192,20 @@ final class FinanceStore: ObservableObject {
     }
     func undo() {
         reloadFromDisk()
-        guard undoCount > 0 else { return }
+        guard let description = undoDescription else { return }
         do {
             if isDemo { try ledger.undoLastChange() }
             else { ledger = try LedgerFile.undo(at: fileURL, expected: ledger) }
-            showNotice(L("Изменение отменено"), actions: [.redo(notificationStateToken)])
+            showNotice(L("Отменено: \(description.title)"), detail: description.detail, actions: [.redo(notificationStateToken)])
         } catch { self.error = error.localizedDescription }
     }
     func redo() {
         reloadFromDisk()
-        guard redoCount > 0 else { return }
+        guard let description = redoDescription else { return }
         do {
             if isDemo { try ledger.redoLastChange() }
             else { ledger = try LedgerFile.redo(at: fileURL, expected: ledger) }
-            showNotice(L("Изменение возвращено"), actions: undoNotificationActions)
+            showNotice(L("Возвращено: \(description.title)"), detail: description.detail, actions: undoNotificationActions)
         } catch { self.error = error.localizedDescription }
     }
     @discardableResult func startClean(baseCurrency: String = "RUB") -> Bool {
@@ -212,6 +226,20 @@ final class FinanceStore: ObservableObject {
             lastRateAttempt = nil; Task { await refreshExchangeRates() }
             return true
         } catch { self.error = error.localizedDescription; return false }
+    }
+    @discardableResult
+    func saveTransaction(_ value: Transaction, replacing originalID: UUID? = nil) -> Bool {
+        update { ledger in
+            let existing = originalID.flatMap { id in ledger.transactions.first { $0.id == id } }
+            guard originalID == nil || existing != nil else { throw LedgerError.invalid(L("Операция уже удалена.")) }
+            guard originalID == nil || originalID == value.id else { throw LedgerError.invalid(L("Идентификатор операции изменился.")) }
+            guard originalID != nil || !ledger.transactions.contains(where: { $0.id == value.id }) else { throw LedgerError.invalid(L("Такая операция уже существует.")) }
+            guard ledger.account(value.accountID)?.archived == false || existing?.accountID == value.accountID else { throw LedgerError.invalid(L("Верните счет из архива перед добавлением операций.")) }
+            if let destination = value.destinationAccountID {
+                guard ledger.account(destination)?.archived == false || existing?.destinationAccountID == destination else { throw LedgerError.invalid(L("Верните счет из архива перед добавлением операций.")) }
+            }
+            replaceOrAppend(value, in: &ledger.transactions)
+        }
     }
     func deleteTransaction(_ id: UUID) { update { $0.transactions.removeAll { $0.id == id } } }
     func setAccountArchived(_ id: UUID, archived: Bool) {
@@ -263,8 +291,9 @@ final class FinanceStore: ObservableObject {
     }
     func rollbackImport(_ id: UUID, allowModified: Bool = false) {
         var removed = 0
+        let filename = ledger.importHistory.first { $0.id == id }?.filename ?? L("Импорт")
         if update({ removed = try $0.rollbackImport(id, allowModified: allowModified) }) {
-            showNotice(L("Импорт отменен. Удалено операций: \(removed)."), actions: updatedUndoActions + [.imports])
+            showNotice(L("Импорт отменен: \(filename)"), detail: L("Удалено операций: \(removed)"), actions: updatedUndoActions + [.imports])
         }
     }
     func deleteCategory(_ id: UUID) {
@@ -329,7 +358,7 @@ enum Page: String, CaseIterable, Identifiable {
     case overview, transactions, accounts, analytics, categories, imports, budgets, goals, recurring, settings
     var id: String { rawValue }
     var title: String { switch self { case .overview: L("Обзор"); case .transactions: L("Операции"); case .accounts: L("Счета"); case .budgets: L("Бюджеты"); case .goals: L("Цели"); case .recurring: L("Регулярные платежи"); case .analytics: L("Аналитика"); case .categories: L("Категории и правила"); case .imports: L("История импортов"); case .settings: L("Настройки") } }
-    var subtitle: String { switch self { case .overview: L("Балансы счетов и итоги выбранного месяца."); case .transactions: L("Поиск, добавление и редактирование операций."); case .accounts: L("Остатки, валюты и настройки счетов."); case .budgets: L("Месячные лимиты расходов по категориям."); case .goals: L("Суммы, сроки и прогресс накоплений."); case .recurring: L("Расписание платежей и добавление их в учет."); case .analytics: L("Доходы и расходы по месяцам, категориям и дням."); case .categories: L("Категории операций и правила их назначения."); case .imports: L("Операции из CSV и AI-агента. Просмотр и отмена импортов."); case .settings: L("Валюты, разделы приложения, импорт и резервные копии.") } }
+    var subtitle: String { switch self { case .overview: L("Балансы счетов и итоги выбранного месяца."); case .transactions: L("Поиск, добавление и редактирование операций."); case .accounts: L("Остатки, валюты и настройки счетов."); case .budgets: L("Месячные лимиты расходов по категориям."); case .goals: L("Суммы, сроки и прогресс накоплений."); case .recurring: L("Расписание платежей и добавление их в учет."); case .analytics: L("Доходы и расходы по месяцам, категориям и дням."); case .categories: L("Категории операций и правила их назначения."); case .imports: L("Загрузки из CSV, Apple Shortcuts и AI-агента. Просмотр и отмена импортов."); case .settings: L("Валюты, разделы приложения, импорт и резервные копии.") } }
     func isVisible(in preferences: Preferences) -> Bool {
         switch self {
         case .budgets: preferences.showBudgets
@@ -342,8 +371,8 @@ enum Page: String, CaseIterable, Identifiable {
 }
 
 enum EditorSheet: Identifiable {
-    case welcome, transaction(Transaction?), split(Transaction), account(Account?), budget(Budget?), goal(Goal?), recurring(RecurringPayment?), category(Category?), rule(CategoryRule?), csv(CSVTable, String), aiImport
-    var id: String { switch self { case .welcome: "welcome"; case .transaction(let t): "transaction-\(t?.id.uuidString ?? "new")"; case .split(let t): "split-\(t.id)"; case .account(let t): "account-\(t?.id.uuidString ?? "new")"; case .budget(let t): "budget-\(t?.id.uuidString ?? "new")"; case .goal(let t): "goal-\(t?.id.uuidString ?? "new")"; case .recurring(let t): "recurring-\(t?.id.uuidString ?? "new")"; case .category(let t): "category-\(t?.id.uuidString ?? "new")"; case .rule(let t): "rule-\(t?.id.uuidString ?? "new")"; case .csv: "csv"; case .aiImport: "ai-import" } }
+    case welcome, transaction(Transaction?), similar(Transaction), split(Transaction), account(Account?), budget(Budget?), goal(Goal?), recurring(RecurringPayment?), category(Category?), rule(CategoryRule?), csv(CSVTable, String), aiImport
+    var id: String { switch self { case .welcome: "welcome"; case .transaction(let t): "transaction-\(t?.id.uuidString ?? "new")"; case .similar(let t): "similar-\(t.id)"; case .split(let t): "split-\(t.id)"; case .account(let t): "account-\(t?.id.uuidString ?? "new")"; case .budget(let t): "budget-\(t?.id.uuidString ?? "new")"; case .goal(let t): "goal-\(t?.id.uuidString ?? "new")"; case .recurring(let t): "recurring-\(t?.id.uuidString ?? "new")"; case .category(let t): "category-\(t?.id.uuidString ?? "new")"; case .rule(let t): "rule-\(t?.id.uuidString ?? "new")"; case .csv: "csv"; case .aiImport: "ai-import" } }
 }
 
 extension Color {

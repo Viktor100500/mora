@@ -224,14 +224,14 @@ struct SettingsView: View {
                     SectionHeading(title: L("Данные и резервные копии"), subtitle: cloud.householdID == nil ? L("Счета и операции хранятся на вашем Mac") : L("На Mac хранится копия общей облачной базы"))
                     HStack { Label(L("Экспорт всех операций в CSV"), systemImage: "tablecells"); Spacer(); Button(L("Экспортировать")) { store.exportCSV() } }
                     HStack { Label(L("Полная резервная копия"), systemImage: "externaldrive"); Spacer(); Button(L("Сохранить JSON")) { store.backup() }; Button(L("Восстановить…")) { restoreLedger = store.readBackup() } }
-                    HStack { Label(L("Отменить последнее изменение"), systemImage: "arrow.uturn.backward"); Spacer(); Button(L("Отменить · \(store.undoCount)")) { store.undo() }.disabled(store.undoCount == 0) }
-                    HStack { Label(L("Вернуть отмененное изменение"), systemImage: "arrow.uturn.forward"); Spacer(); Button(L("Вернуть · \(store.redoCount)")) { store.redo() }.disabled(store.redoCount == 0) }
                     HStack { Label(L("Образец CSV"), systemImage: "doc.text"); Spacer(); Button(L("Сохранить образец")) { saveTemplate() } }
                     Divider()
-                    Text(L("Последние 20 изменений сохраняются на Mac. Отмена и возврат доступны после перезапуска, без интернета. Новое изменение после отмены сбрасывает возврат. Резервная копия JSON включает данные, настройки и историю изменений.")).font(.caption).foregroundStyle(.secondary)
+                    Text(L("Резервная копия JSON включает данные, настройки и историю изменений.")).font(.caption).foregroundStyle(.secondary)
                     if !store.isDemo { HStack { Text(store.fileURL.path).font(.system(size: 10)).foregroundStyle(.tertiary).textSelection(.enabled); Spacer(); Button(L("Показать в Finder")) { NSWorkspace.shared.activateFileViewerSelecting([store.fileURL]) } } }
                 }
             }
+            ChangeHistoryCard()
+            MerchantSettingsCard()
             CloudSettingsCard()
             SupportSettingsCard()
             Card {

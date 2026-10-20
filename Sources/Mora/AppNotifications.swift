@@ -24,7 +24,7 @@ enum AppNotificationAction: Codable, Equatable, Identifiable {
         case .rollbackImport: return L("Отменить импорт")
         case .imports: return L("История импортов")
         case .settings: return L("Настройки")
-        case .inbox: return L("Открыть входящие")
+        case .inbox: return L("Кликните для проверки")
         case .review: return L("Проверить…")
         }
     }

@@ -4,6 +4,34 @@
 
 - Build future public releases for Apple Silicon only, using local pre-release tests instead of rerunning tests in the release workflow.
 
+## 1.5.10 — 2026-10-20
+
+- Preview the exact next Undo/Redo step and show the saved change history, including older snapshots; describe affected purchases, categories, accounts and settings in notifications.
+- Collect available Apple Shortcuts purchases as shared import batches across dates and phones, with details and batch rollback. Make collection idempotent across concurrent Macs and preserve independent edits during Undo.
+- Open “Create similar” as a new purchase instead of editing a nonexistent record; retain the deleted-record and archived-account guards for real edits.
+
+## 1.5.9 — 2026-10-19
+
+- Make the entire Wallet review notification banner open purchases awaiting review.
+- Replace the inbox wording with explicit purchase review labels in Russian and English.
+
+## 1.5.8 — 2026-10-19
+
+- Categorize new merchants from public Merchant Studio and OpenStreetMap NSI catalogs without API keys or sending transactions to a provider.
+- Reuse explicit rules and merchant history first, leave conflicting/unknown results uncategorized, and preserve manual changes and Undo during background categorization.
+- Add settings, source attribution and a verified public descriptor alias for SIREN47906 (MCC 5814).
+
+## 1.5.7 — 2026-10-19
+
+- Interpret a bare dollar symbol in Wallet amounts as USD while preserving explicitly supplied currency codes.
+- Automatically book complete Wallet purchases during sync, using the regular Visa conversion, account fee and rounding rules. Existing pending purchases are included; failed conversions retry without creating partial transactions or duplicates.
+
+## 1.5.6 — 2026-10-19
+
+- Separate the Wallet purchase amount and currency from the phone/card label in the inbox; explicitly show when purchase currency is missing.
+- Replace the Shortcuts modal result with a notification and add an optional startup diagnostic notification before reading Wallet fields.
+- Document separate diagnosis for a missing Wallet trigger, a local Shortcuts failure and a delivered purchase awaiting currency review.
+
 ## 1.5.5 — 2026-10-19
 
 - Use matching Liquid Glass materials and heights for Import, New transaction and Notifications; increase the toolbar's trailing inset.

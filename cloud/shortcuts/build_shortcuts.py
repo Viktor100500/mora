@@ -36,7 +36,7 @@ def dictionary(fields):
     ]}, "WFSerializationType": "WFDictionaryFieldValue"}
 
 
-def workflow(config, preview=False, wallet=False):
+def workflow(config, preview=False, wallet=False, diagnostics=False):
     actions = []
     def action(identifier, output_name, **parameters):
         identifier_uuid = str(uuid.uuid4()).upper()
@@ -45,11 +45,15 @@ def workflow(config, preview=False, wallet=False):
         return {"Type": "ActionOutput", "OutputUUID": identifier_uuid, "OutputName": output_name}
 
     action('comment', '', WFCommentActionText=(
-        ('Mora · Apple Pay\nПринимает транзакцию Wallet. Валюта пока требует проверки в Mora. ' if wallet else 'Mora · Apple Pay\nПринимает словарь amount, merchant, currency. ')
-        + 'Неизвестную валюту оставляйте пустой: покупка сохранится во входящих. '
+        ('Mora · Apple Pay\nПринимает транзакцию Wallet. Mora считает $ валютой USD и автоматически пересчитывает покупку в валюту счета. ' if wallet else 'Mora · Apple Pay\nПринимает словарь amount, merchant, currency. ')
+        + 'Неизвестную валюту оставляйте пустой: Mora попробует определить ее из суммы. '
         'Ключ только записывает в выбранный счёт. '
         'Для первой версии требуется интернет; очередь повторной отправки не включена.'))
     phone = action('gettext', 'Ключ телефона', WFTextActionText='0' * 64)
+    if diagnostics and not preview:
+        action('notification', '', WFNotificationActionTitle='Mora · запуск',
+               WFNotificationActionBody='Автоматизация запущена. Доставка покупки пока не подтверждена.',
+               WFNotificationActionSound=False)
     values = {}
     if wallet:
         # Wallet supplies a native Transaction content item. Use its properties,
@@ -87,10 +91,12 @@ def workflow(config, preview=False, wallet=False):
                WFHTTPHeaders=dictionary({'apikey': config['publicKey'],
                                          'Content-Type': 'application/json'}),
                WFJSONValues=dictionary(fields))
-        action('showresult', '', Text=text(
-            'Mora · результат отправки\n', response,
-            '\n\nrecorded — расход записан. pending — покупка во входящих Mora и требует проверки. '
-            'Invalid phone token — проверьте ключ в первом действии «Текст»: там не должны оставаться нули.'))
+        # A modal result requires interaction and is unsuitable for locked-screen automation.
+        # This reports the server response, not merely that the HTTP action ran.
+        action('notification', '', WFNotificationActionTitle='Mora · ответ сервера',
+               WFNotificationActionBody=text(response,
+                   '\nrecorded — расход записан; pending — доставлено, ожидает обработки в Mora.'),
+               WFNotificationActionSound=False)
     return {'WFWorkflowClientVersion': '4711', 'WFWorkflowMinimumClientVersion': 900,
             'WFWorkflowMinimumClientVersionString': '900',
             'WFWorkflowActions': actions, 'WFWorkflowTypes': ['WFWorkflowTypeShowInSearch'],
@@ -108,6 +114,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=Path, required=True)
     parser.add_argument('--output-dir', type=Path, required=True)
+    parser.add_argument('--diagnostics', action='store_true',
+                        help='Notify before reading Wallet fields to distinguish trigger and delivery failures')
     args = parser.parse_args()
     config = json.loads(args.config.read_text())
     # Never accept privileged keys for a shareable artifact.
@@ -115,6 +123,8 @@ if __name__ == '__main__':
     assert config['publicKey'].startswith('sb_publishable_')
     args.output_dir.mkdir(parents=True, exist_ok=True)
     for preview, wallet, name in [(False, True, 'Mora-ApplePay'), (False, False, 'Mora-ApplePay-Dictionary'), (True, False, 'Mora-Payload-Check')]:
+        if args.diagnostics and not preview:
+            name += '-Diagnostic'
         target = args.output_dir / (name + '.unsigned.shortcut')
-        target.write_bytes(plistlib.dumps(workflow(config, preview, wallet), fmt=plistlib.FMT_BINARY))
+        target.write_bytes(plistlib.dumps(workflow(config, preview, wallet, args.diagnostics), fmt=plistlib.FMT_BINARY))
         print(target)

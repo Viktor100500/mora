@@ -1,6 +1,6 @@
 import XCTest
 import Combine
-import FinanceCore
+@testable import FinanceCore
 @testable import Mora
 
 private final class SyncStubProtocol: URLProtocol {
@@ -31,6 +31,16 @@ private final class SyncStubProtocol: URLProtocol {
     override func stopLoading() {}
 }
 
+private func walletImportResponse(_ remote: inout Ledger, version: inout Int, householdID: UUID) throws -> Data {
+    let ids = Set(remote.transactions.filter { $0.importBatchID == nil }.map(\.id))
+    let batch = try remote.recordImport(addedIDs: ids, filename: "Покупки из Apple Shortcuts", source: "Apple Shortcuts", totalRows: ids.count)
+    if batch != nil { version += 1 }
+    let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+    let snapshot = String(decoding: try encoder.encode(remote), as: UTF8.self)
+    let batchJSON = batch.map { "\"\($0.id)\"" } ?? "null"
+    return Data("{\"batch_id\":\(batchJSON),\"envelope\":{\"household_id\":\"\(householdID)\",\"name\":\"Test\",\"version\":\(version),\"snapshot\":\(snapshot)}}".utf8)
+}
+
 @MainActor
 final class CloudSyncTests: XCTestCase {
     private var directory: URL!
@@ -38,14 +48,17 @@ final class CloudSyncTests: XCTestCase {
     private var cloud: CloudSync!
     private let householdID = UUID()
 
-    private func prepare(ledger: Ledger = .empty) async throws {
+    private func prepare(ledger: Ledger = .empty,
+        walletRate: @escaping (Decimal, String, String, Date) async throws -> CardConversion = {
+            _, _, _, _ in throw LedgerError.invalid("Test rate unavailable")
+        }) async throws {
         directory = FileManager.default.temporaryDirectory.appendingPathComponent("MoraSyncTests-\(UUID())")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try LedgerFile.encode(ledger).write(to: directory.appendingPathComponent("ledger.json"))
         store = FinanceStore(directory: directory)
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [SyncStubProtocol.self]
-        cloud = CloudSync(store: store, transport: URLSession(configuration: config), sessionWriter: { _, _ in })
+        cloud = CloudSync(store: store, transport: URLSession(configuration: config), walletRate: walletRate, sessionWriter: { _, _ in })
         let snapshot = String(decoding: try LedgerFile.encode(CloudMerge.shared(store.ledger)), as: UTF8.self)
         let envelope = "{\"household_id\":\"\(householdID)\",\"name\":\"Test\",\"version\":1,\"snapshot\":\(snapshot)}"
         SyncStubProtocol.handler = { request in
@@ -67,6 +80,52 @@ final class CloudSyncTests: XCTestCase {
         cloud = nil
         store = nil
         if let directory { try FileManager.default.removeItem(at: directory) }
+    }
+
+    func testAutomaticForeignWalletBookingRetriesWithoutPartialWritesOrDuplicates() async throws {
+        defer { try? cleanup() }
+        var ledger = Ledger.empty
+        ledger.accounts = [Account(name: "EUR test", currency: "EUR", conversionFeePercent: Decimal(string: "0.23"))]
+        var quoteCalls = 0
+        try await prepare(ledger: ledger, walletRate: { amount, from, to, date in
+            quoteCalls += 1
+            return CardConversion(originalAmount: amount, originalCurrency: from, accountCurrency: to, rate: Decimal(string: "0.9")!, date: date)
+        })
+        let id = UUID(), account = ledger.accounts[0].id
+        let captures = "[{\"id\":\"\(id)\",\"merchant\":\"Test store\",\"amount\":\"$14.70\",\"currency\":\"\",\"account_id\":\"\(account)\",\"date\":\"2026-10-19T20:00:00Z\",\"label\":\"Test phone\"}]"
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+        struct Request: Decodable { let p_capture_id: UUID; let p_transaction: FinanceCore.Transaction }
+        var remote = CloudMerge.shared(store.ledger), attempts = 0, recorded = false, version = 1
+        SyncStubProtocol.handler = { request in
+            switch request.url!.lastPathComponent {
+            case "mora_get_status":
+                return (200, Data("{\"version\":\(version),\"pending_count\":\(recorded ? 0 : 1)}".utf8))
+            case "mora_collect_wallet_import":
+                return (200, try walletImportResponse(&remote, version: &version, householdID: self.householdID))
+            case "mora_review_capture":
+                attempts += 1
+                let body = try decoder.decode(Request.self, from: SyncStubProtocol.requestBody(request))
+                XCTAssertEqual(body.p_capture_id, id); XCTAssertEqual(body.p_transaction.id, id)
+                XCTAssertEqual(body.p_transaction.amount, Decimal(string: "-13.26"))
+                XCTAssertEqual(body.p_transaction.conversion?.feePercent, Decimal(string: "0.23"))
+                if attempts == 1 { return (503, Data("{\"message\":\"Test unavailable\"}".utf8)) }
+                recorded = true; version = 2; remote.transactions = [body.p_transaction]
+                let snapshot = String(decoding: try encoder.encode(remote), as: UTF8.self)
+                return (200, Data("{\"household_id\":\"\(self.householdID)\",\"name\":\"Test\",\"version\":2,\"snapshot\":\(snapshot)}".utf8))
+            default: return (200, Data((recorded ? "[]" : captures).utf8))
+            }
+        }
+        await cloud.synchronize(inBackground: true)
+        XCTAssertTrue(store.ledger.transactions.isEmpty)
+        XCTAssertEqual(cloud.pending.count, 1); XCTAssertNotNil(cloud.error)
+        await cloud.synchronize(inBackground: true)
+        XCTAssertEqual(store.ledger.transactions.count, 1); XCTAssertTrue(cloud.pending.isEmpty)
+        XCTAssertEqual(store.ledger.transactions.first?.externalID, "wallet:" + id.uuidString.lowercased())
+        XCTAssertNil(cloud.error)
+        await cloud.synchronize(inBackground: true)
+        XCTAssertEqual(attempts, 2); XCTAssertEqual(quoteCalls, 2)
+        XCTAssertEqual(store.ledger.transactions.count, 1)
     }
 
     func testUnchangedBackgroundPollsPublishNothing() async throws {
@@ -219,26 +278,32 @@ final class CloudSyncTests: XCTestCase {
         transaction.conversion=try decoder.decode(CardConversion.self, from: Data("{\"originalAmount\":-31.54,\"originalCurrency\":\"USD\",\"accountCurrency\":\"EUR\",\"rate\":0.9,\"date\":\"2026-10-16T20:19:00Z\",\"provider\":\"Visa\"}".utf8))
         let prepared=try WalletReviewDraft.transaction(transaction, for:capture, in:store.ledger)
         var remote=CloudMerge.shared(store.ledger); remote.transactions=[prepared]
-        let snapshot=String(decoding:try LedgerFile.encode(remote),as:UTF8.self)
-        let envelope="{\"household_id\":\"\(householdID)\",\"name\":\"Test\",\"version\":2,\"snapshot\":\(snapshot)}"
+        var version = 1
+        func envelope() throws -> Data {
+            let snapshot = String(decoding: try LedgerFile.encode(remote), as: UTF8.self)
+            return Data("{\"household_id\":\"\(householdID)\",\"name\":\"Test\",\"version\":\(version),\"snapshot\":\(snapshot)}".utf8)
+        }
         struct Request: Decodable { let p_capture_id:UUID; let p_transaction:FinanceCore.Transaction }
         var reviewed=false, saves=0
         SyncStubProtocol.handler = { request in
             switch request.url!.lastPathComponent {
-            case "mora_get_status": return (200,Data("{\"version\":\(reviewed ? 2 : 1),\"pending_count\":\(reviewed ? 0 : 1)}".utf8))
+            case "mora_get_status": return (200,Data("{\"version\":\(version),\"pending_count\":\(reviewed ? 0 : 1)}".utf8))
             case "mora_review_capture":
                 let body=try decoder.decode(Request.self,from:SyncStubProtocol.requestBody(request))
                 XCTAssertEqual(body.p_capture_id,id); XCTAssertEqual(body.p_transaction,prepared)
+                if !reviewed { version = 2 }
                 reviewed=true; saves += 1
-                return (200,Data(envelope.utf8))
+                return (200, try envelope())
+            case "mora_collect_wallet_import":
+                return (200, try walletImportResponse(&remote, version: &version, householdID: self.householdID))
             default: return (200,Data((reviewed ? "[]" : captureJSON).utf8))
             }
         }
         await cloud.synchronize(inBackground:true)
         let first=await cloud.review(capture,transaction:transaction)
-        XCTAssertTrue(first); XCTAssertEqual(store.ledger.transactions,[prepared]); XCTAssertTrue(cloud.pending.isEmpty)
+        XCTAssertTrue(first); XCTAssertEqual(store.ledger.transactions.map { value in var original = value; original.importBatchID = nil; return original },[prepared]); XCTAssertTrue(cloud.pending.isEmpty)
         let retry=await cloud.review(capture,transaction:transaction)
-        XCTAssertTrue(retry); XCTAssertEqual(saves,2); XCTAssertEqual(store.ledger.transactions,[prepared])
+        XCTAssertTrue(retry); XCTAssertEqual(saves,2); XCTAssertEqual(store.ledger.transactions.map { value in var original = value; original.importBatchID = nil; return original },[prepared])
         XCTAssertNil(cloud.error)
     }
 

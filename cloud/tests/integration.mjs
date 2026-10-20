@@ -237,6 +237,46 @@ try {
     assert.equal(results[0].snapshot.transactions.filter(t=>t.externalID==='wallet:'+pending.id).length,1);
     assert.equal(results[0].snapshot.transactions.find(t=>t.externalID==='wallet:'+pending.id).destinationAmount,9);
   });
+  await check('Wallet import collection is member-only, groups all phones and dates, and serializes concurrent Macs',async()=>{
+    await denied(()=>rpc(outsider,'mora_collect_wallet_import',[h]));
+    await denied(()=>rpc(anon,'mora_collect_wallet_import',[h]));
+    const before=await rpc(owner,'mora_get_household',[h]);
+    const expected=before.snapshot.transactions.filter(t=>t.externalID?.startsWith('wallet:'));
+    assert(expected.length>2);
+    const results=await Promise.all([rpc(owner,'mora_collect_wallet_import',[h]),rpc(member,'mora_collect_wallet_import',[h])]);
+    assert.equal(results.filter(r=>r.batch_id).length,1);
+    const after=await rpc(owner,'mora_get_household',[h]);
+    assert.equal(after.version,before.version+1);
+    assert.equal(after.snapshot.imports.length,1);
+    const batch=after.snapshot.imports[0];
+    assert.equal(batch.source,'Apple Shortcuts');
+    assert.equal(batch.totalRows,expected.length);
+    assert.equal(batch.transactions.length,expected.length);
+    assert.equal(new Set(batch.transactions.map(t=>t.id)).size,expected.length);
+    assert(after.snapshot.transactions.every(t=>t.importBatchID===batch.id));
+    assert.equal(batch.accountNames[accountID],'Shared test account');
+    const retry=await rpc(owner,'mora_collect_wallet_import',[h]);
+    assert.equal(retry.batch_id,null);
+    assert.deepEqual(retry.envelope,after);
+  });
+  await check('later Wallet arrivals form a new import and cannot reattach an already recorded purchase',async()=>{
+    const before=await rpc(owner,'mora_get_household',[h]);
+    const payment=await capture(anon,phone2.token,uuid(),'2','USD','New sync purchase');
+    assert.equal(payment.state,'recorded');
+    const result=await rpc(owner,'mora_collect_wallet_import',[h]);
+    assert(result.batch_id);
+    assert.equal(result.envelope.snapshot.imports.length,before.snapshot.imports.length+1);
+    const batch=result.envelope.snapshot.imports.at(-1);
+    assert.equal(batch.transactions.length,1);
+    assert.equal(batch.transactions[0].externalID,'wallet:'+payment.id);
+    // Legacy writers may omit the provenance field: the saved batch still prevents duplicates.
+    const snapshot=result.envelope.snapshot;
+    delete snapshot.transactions[0].importBatchID;
+    assert.equal(await rpc(owner,'mora_save_household',[h,result.envelope.version,snapshot]),true);
+    const retry=await rpc(owner,'mora_collect_wallet_import',[h]);
+    assert.equal(retry.batch_id,null);
+    assert.equal(retry.envelope.snapshot.imports.length,2);
+  });
   assert(saved.includes('-123456789012.123456'));
   await fs.mkdir(path.join(here,'fixtures'),{recursive:true});
   await fs.writeFile(path.join(here,'fixtures/backend-ledger.json'),saved+'\n');

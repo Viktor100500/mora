@@ -57,6 +57,8 @@ struct ToolbarGlassStyle<S: InsettableShape>: ViewModifier {
 private struct NotificationsPanel: View {
     @ObservedObject var notifications: AppNotifications
     @EnvironmentObject private var cloud: CloudSync
+    @EnvironmentObject private var store: FinanceStore
+    @Environment(\.openWindow) private var openWindow
     var close: () -> Void
 
     var body: some View {
@@ -72,16 +74,23 @@ private struct NotificationsPanel: View {
             }.padding(18)
             Divider()
             if !cloud.pending.isEmpty {
-                HStack(spacing: 12) {
-                    Image(systemName: "exclamationmark.circle.fill").font(.title2)
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(L("Покупок на проверке: \(cloud.pending.count)")).font(.callout.weight(.semibold))
-                        NotificationActionButton(action: .inbox, onNavigate: close)
-                    }
-                    Spacer()
-                }.foregroundStyle(NotificationStyle.attention).padding(16)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(NotificationStyle.attention.opacity(0.08))
+                Button {
+                    close()
+                    store.notifications.request(.inbox)
+                    openWindow(id: "cloud")
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "exclamationmark.circle.fill").font(.title2)
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(L("Покупок на проверке: \(cloud.pending.count)")).font(.callout.weight(.semibold))
+                            Text(AppNotificationAction.inbox.title)
+                        }
+                        Spacer()
+                    }.foregroundStyle(NotificationStyle.attention).padding(16)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(NotificationStyle.attention.opacity(0.08))
+                        .contentShape(Rectangle())
+                }.buttonStyle(.plain)
                 Divider()
             }
             if notifications.events.isEmpty {

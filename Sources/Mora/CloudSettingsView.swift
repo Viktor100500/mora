@@ -207,7 +207,7 @@ struct CloudSettingsView: View {
                     }
                 }
                 DisclosureGroup("Как настроить команду") {
-                    Text("1. В «Быстрых командах» создайте автоматизацию Wallet / «Транзакция» для выбранной карты и включите немедленный запуск.\n2. Получите сумму, валюту и продавца из входной транзакции. Не вводите фиксированную валюту для покупок в разных валютах.\n3. Создайте UUID события и текущую дату в ISO 8601.\n4. Добавьте «Получить содержимое URL»: POST, заголовок apikey и JSON с полями ниже.\n5. Проверьте ответ: recorded — расход записан; pending — данные сохранены во входящих для проверки.")
+                    Text("1. В «Быстрых командах» создайте автоматизацию Wallet / «Транзакция» для выбранной карты и включите немедленный запуск.\n2. Получите сумму, валюту и продавца из входной транзакции. Не вводите фиксированную валюту для покупок в разных валютах.\n3. Создайте UUID события и текущую дату в ISO 8601.\n4. Добавьте «Получить содержимое URL»: POST, заголовок apikey и JSON с полями ниже.\n5. Проверьте ответ: recorded — расход записан; pending — покупка ожидает проверки.")
                         .font(.callout).textSelection(.enabled).padding(.top, 8)
                     Text("p_token · p_event_id · p_amount · p_currency · p_merchant · p_occurred_at")
                         .font(.system(.caption, design: .monospaced)).textSelection(.enabled).padding(.top, 8)
@@ -228,14 +228,21 @@ struct CloudSettingsView: View {
     private var inboxCard: some View {
         Card {
             VStack(alignment: .leading, spacing: 14) {
-                SectionHeading(title: "Входящие из Wallet", subtitle: "Покупки с неполными данными или другой валютой требуют проверки")
+                SectionHeading(title: "Покупки из Wallet на проверке", subtitle: "Полные покупки добавляются автоматически. Неполные данные можно исправить здесь.")
                 if cloud.pending.isEmpty { Text("Нет покупок для проверки").foregroundStyle(.secondary) }
                 ForEach(cloud.pending) { capture in
+                    let currency = WalletReviewDraft(capture: capture, ledger: store.ledger).currency
+                    let knownCurrency = currency != WalletReviewDraft.unknownCurrency
+                    let waiting = knownCurrency && ["Не получена валюта покупки", "Валюта покупки отличается от валюты счета"].contains(capture.reason ?? "")
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(capture.merchant.isEmpty ? "Продавец не получен" : capture.merchant)
-                            FinancialText("\(capture.amount) \(capture.currency) · \(capture.label)").font(.caption).foregroundStyle(.secondary)
-                            Text(L(capture.reason ?? "Проверьте покупку")).font(.caption).foregroundStyle(.orange)
+                            FinancialText("\(capture.amount) \(knownCurrency ? currency : "")").font(.caption).foregroundStyle(.secondary)
+                            if !knownCurrency {
+                                Text("Валюта покупки не передана").font(.caption).foregroundStyle(.secondary)
+                            }
+                            Text("Источник: \(capture.label)").font(.caption).foregroundStyle(.secondary)
+                            Text(L(waiting ? "Ожидает автоматической записи" : capture.reason ?? "Проверьте покупку")).font(.caption).foregroundStyle(.orange)
                         }
                         Spacer()
                         HStack(spacing: 8) {
@@ -252,8 +259,8 @@ struct CloudSettingsView: View {
                                     .frame(width: 28, height: 28)
                                     .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
                             }.buttonStyle(.plain)
-                                .help(L("Удалить из входящих без возможности восстановления"))
-                                .accessibilityLabel(L("Удалить покупку из входящих"))
+                                .help(L("Удалить покупку без возможности восстановления"))
+                                .accessibilityLabel(L("Удалить покупку из Wallet"))
                         }.disabled(cloud.busy)
                     }
                 }

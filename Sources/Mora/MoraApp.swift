@@ -6,13 +6,14 @@ import FinanceCore
 struct MoraApp: App {
     @StateObject private var store = FinanceStore()
     @StateObject private var cloud = CloudSync()
+    @StateObject private var categorizer = MerchantCategorizer()
     @Environment(\.openWindow) private var openWindow
     @AppStorage("mora.language") private var language = "ru"
     @State private var page: Page = .overview
     @State private var sheet: EditorSheet?
     var body: some Scene {
         Window(L("Mora — личные финансы"), id: "main") {
-            ContentView(page: $page, sheet: $sheet).environmentObject(store).environmentObject(cloud)
+            ContentView(page: $page, sheet: $sheet).environmentObject(store).environmentObject(cloud).environmentObject(categorizer)
                 .tint(.moraGreen)
                 .environment(\.locale, L10n.locale)
                 .preferredColorScheme(store.ledger.preferences.appearance == "light" ? .light : store.ledger.preferences.appearance == "dark" ? .dark : nil)
@@ -24,6 +25,7 @@ struct MoraApp: App {
                     if let file = readCSV(at: url, store: store) { sheet = .csv(file.0, file.1) }
                 }
                 .task { await cloud.run(store: store) }
+                .task { await categorizer.run(store: store) }
         }
         .defaultSize(width: 1320, height: 900)
         .windowStyle(.titleBar)
@@ -41,14 +43,14 @@ struct MoraApp: App {
                 if store.ledger.preferences.showBudgets { Button(L("Создать бюджет")) { sheet = .budget(nil) } }
                 if store.ledger.preferences.showGoals { Button(L("Создать цель")) { sheet = .goal(nil) } }
                 Divider()
-                Button(L("Отменить последнее изменение")) { store.undo() }.keyboardShortcut("z", modifiers: [.command, .option]).disabled(store.undoCount == 0)
-                Button(L("Вернуть последнее изменение")) { store.redo() }.keyboardShortcut("z", modifiers: [.command, .option, .shift]).disabled(store.redoCount == 0)
+                Button(store.undoDescription.map { L("Отменить: \($0.title)") } ?? L("Отменить последнее изменение")) { store.undo() }.keyboardShortcut("z", modifiers: [.command, .option]).disabled(store.undoCount == 0)
+                Button(store.redoDescription.map { L("Вернуть: \($0.title)") } ?? L("Вернуть последнее изменение")) { store.redo() }.keyboardShortcut("z", modifiers: [.command, .option, .shift]).disabled(store.redoCount == 0)
                 Button(L("Сохранить резервную копию…")) { store.backup() }
                 Button(L("Общая база и Apple Pay…")) { openWindow(id: "cloud") }
             }
         }
         Window(L("Mora — общая база и Apple Pay"), id: "cloud") {
-            CloudSettingsView().environmentObject(store).environmentObject(cloud).tint(.moraGreen).environment(\.locale, L10n.locale).id(language)
+            CloudSettingsView().environmentObject(store).environmentObject(cloud).environmentObject(categorizer).tint(.moraGreen).environment(\.locale, L10n.locale).id(language)
         }.defaultSize(width: 760, height: 800)
     }
     private func importFile() {
@@ -75,6 +77,7 @@ func readCSV(at url: URL, store: FinanceStore) -> (CSVTable, String)? {
 }
 
 struct ContentView: View {
+    @EnvironmentObject private var categorizer: MerchantCategorizer
     @EnvironmentObject var store: FinanceStore
     @EnvironmentObject private var cloud: CloudSync
     @Environment(\.colorScheme) private var scheme
@@ -111,7 +114,12 @@ struct ContentView: View {
                 if let notice = store.notice {
                     HStack {
                         Image(systemName: "checkmark.circle").foregroundStyle(Color.moraGreen)
-                        Text(notice).font(.callout)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(notice).font(.callout)
+                            if let detail = store.activeNotice?.detail {
+                                FinancialText(detail).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                            }
+                        }
                         Spacer()
                         if let event = store.activeNotice { NotificationActions(event: event) }
                         Button { store.notice = nil } label: { Image(systemName: "xmark") }.buttonStyle(.plain).accessibilityLabel(L("Закрыть уведомление"))
@@ -206,6 +214,7 @@ struct ContentView: View {
                         }
                     }, explore: { didSeeWelcome = true; sheet = nil })
                 case .transaction(let t): TransactionEditor(transaction: t, ledger: store.ledger)
+                case .similar(let t): TransactionEditor(template: t, ledger: store.ledger)
                 case .split(let t): SplitEditor(transaction: t)
                 case .account(let a): AccountEditor(account: a)
                 case .budget(let b): BudgetEditor(budget: b)
@@ -216,7 +225,7 @@ struct ContentView: View {
                 case .csv(let table, let name): ImportView(table: table, filename: name)
                 case .aiImport: AIImportView()
                 }
-            }.modifier(FeedbackFooter()).modifier(FinanceErrorAlert()).environmentObject(store).environmentObject(cloud).environment(\.locale, L10n.locale).tint(.moraGreen)
+            }.modifier(FeedbackFooter()).modifier(FinanceErrorAlert()).environmentObject(store).environmentObject(cloud).environmentObject(categorizer).environment(\.locale, L10n.locale).tint(.moraGreen)
         }
         .modifier(FinanceErrorAlert(active: sheet == nil))
         .confirmationDialog(L("Начать свой учет?"), isPresented: $confirmStart, titleVisibility: .visible) {

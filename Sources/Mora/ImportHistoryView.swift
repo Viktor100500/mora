@@ -10,7 +10,7 @@ struct ImportHistoryView: View {
         VStack(alignment: .leading, spacing: 20) {
             if batches.isEmpty {
                 Card {
-                    EmptyState(icon: "clock.arrow.circlepath", title: L("Импортов в истории пока нет"), text: L("Импорты CSV и пакеты операций из чата появятся здесь. История сохраняется после закрытия Mora."))
+                    EmptyState(icon: "clock.arrow.circlepath", title: L("Импортов в истории пока нет"), text: L("Импорты CSV, покупки из Apple Shortcuts и пакеты операций из чата появятся здесь. История сохраняется после закрытия Mora."))
                 }
             } else {
                 Text(L("Отмена убирает только операции выбранного импорта. Другие операции, счета и категории сохраняются.")).font(.callout).foregroundStyle(.secondary)
@@ -28,9 +28,9 @@ struct ImportHistoryView: View {
         return Card {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .top, spacing: 14) {
-                    IconTile(icon: batch.rolledBackAt == nil ? "doc.text" : "arrow.uturn.backward", color: batch.rolledBackAt == nil ? "green" : "gray", size: 42)
+                    IconTile(icon: batch.rolledBackAt == nil ? (batch.source == "Apple Shortcuts" ? "iphone" : "doc.text") : "arrow.uturn.backward", color: batch.rolledBackAt == nil ? "green" : "gray", size: 42)
                     VStack(alignment: .leading, spacing: 5) {
-                        Text(batch.filename).font(.headline)
+                        Text(batch.source == "Apple Shortcuts" ? L("Покупки из Apple Shortcuts") : batch.filename).font(.headline)
                         Text(batch.createdAt.formatted(.dateTime.day().month(.abbreviated).year().hour().minute().locale(L10n.locale)) + " · " + batch.source).font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -43,7 +43,12 @@ struct ImportHistoryView: View {
                         Button(L("Отменить импорт")) { onRollback(batch.id) }
                     }
                 }
-                Text(L("Добавлено: \(batch.transactions.count) из \(batch.totalRows) · Исключено: \(batch.excluded) · Повторы: \(batch.duplicates) · Ошибки: \(batch.invalid)")).font(.caption).foregroundStyle(.secondary)
+                if batch.source == "Apple Shortcuts" {
+                    Text(L("Покупок в загрузке: \(batch.transactions.count)")).font(.caption).foregroundStyle(.secondary)
+                    Text(L("Все доступные покупки собраны при загрузке, независимо от даты и телефона. Покупки с неполными данными появятся здесь после проверки.")).font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Text(L("Добавлено: \(batch.transactions.count) из \(batch.totalRows) · Исключено: \(batch.excluded) · Повторы: \(batch.duplicates) · Ошибки: \(batch.invalid)")).font(.caption).foregroundStyle(.secondary)
+                }
                 if let preview {
                     Text(L("В учете: \(preview.remaining) · Изменено или разделено: \(preview.modified) · Удалено ранее: \(preview.missing)")).font(.caption).foregroundStyle(.secondary)
                 }

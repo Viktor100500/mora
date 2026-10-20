@@ -63,7 +63,7 @@ public enum LedgerFile {
     /// Merge cloud results with edits made on disk while the request was in flight.
     /// Rebase local history over independent remote edits; conflicting history is
     /// discarded rather than allowing undo to overwrite another person's work.
-    public static func applyCloud(_ remote: Ledger, at url: URL, mergeAgainst base: Ledger) throws -> Ledger {
+    public static func applyCloud(_ remote: Ledger, at url: URL, mergeAgainst base: Ledger, recordWalletImport batchID: UUID? = nil) throws -> Ledger {
         try withLock(at: url) {
             let current = try decode(Data(contentsOf: url))
             var next = try CloudMerge.merge(base: base, local: current, remote: remote)
@@ -81,6 +81,32 @@ public enum LedgerFile {
                 rebased.undo = rebase(history.undo)
                 rebased.redo = rebase(history.redo)
                 next.changeHistory = rebased.undo.isEmpty && rebased.redo.isEmpty ? nil : rebased
+            }
+            if let batchID, !current.importHistory.contains(where: { $0.id == batchID }),
+               let batch = next.importHistory.first(where: { $0.id == batchID && $0.source == "Apple Shortcuts" }) {
+                // Purchases were committed individually by the server. Expose their collection
+                // as one undoable import while preserving independent edits made during loading.
+                let ids = Set(batch.transactions.map(\.id))
+                var beforeImport = next
+                beforeImport.transactions.removeAll { ids.contains($0.id) }
+                beforeImport.importHistory.removeAll { $0.id == batchID }
+                // A category assignment during loading must not resurrect the imported
+                // purchase if the user undoes another step after undoing this batch.
+                if var history = beforeImport.changeHistory {
+                    func clean(_ snapshots: [Ledger]) throws -> [Ledger] {
+                        var result: [Ledger] = [], previous = beforeImport.withoutChangeHistory()
+                        for var snapshot in snapshots.reversed() {
+                            snapshot.transactions.removeAll { ids.contains($0.id) }
+                            snapshot.importHistory.removeAll { $0.id == batchID }
+                            if try !equivalent(snapshot, previous) { result.append(snapshot); previous = snapshot }
+                        }
+                        return result.reversed()
+                    }
+                    history.undo = try clean(history.undo)
+                    history.redo = try clean(history.redo)
+                    beforeImport.changeHistory = history
+                }
+                next.recordChange(from: beforeImport)
             }
             try write(next, to: url)
             return next

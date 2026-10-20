@@ -195,11 +195,11 @@
 "Ключ показан только сейчас. Скопируйте его в команду; восстановить его позднее нельзя." = "The key is shown only now. Copy it into the shortcut; it cannot be retrieved later.";
 "Скопировать параметры подключения" = "Copy connection settings";
 "Как настроить команду" = "Set up a shortcut";
-"1. В «Быстрых командах» создайте автоматизацию Wallet / «Транзакция» для выбранной карты и включите немедленный запуск.\n2. Получите сумму, валюту и продавца из входной транзакции. Не вводите фиксированную валюту для покупок в разных валютах.\n3. Создайте UUID события и текущую дату в ISO 8601.\n4. Добавьте «Получить содержимое URL»: POST, заголовок apikey и JSON с полями ниже.\n5. Проверьте ответ: recorded — расход записан; pending — данные сохранены во входящих для проверки." = "1. In Shortcuts, create a Wallet / Transaction automation for the card and enable Run Immediately.\n2. Get the amount, currency and merchant from the input transaction. Do not hard-code a currency for purchases in different currencies.\n3. Generate an event UUID and the current ISO 8601 date.\n4. Add Get Contents of URL: POST, the apikey header, and JSON with the fields below.\n5. Check the response: recorded means the expense was added; pending means it needs review in the inbox.";
+"1. В «Быстрых командах» создайте автоматизацию Wallet / «Транзакция» для выбранной карты и включите немедленный запуск.\n2. Получите сумму, валюту и продавца из входной транзакции. Не вводите фиксированную валюту для покупок в разных валютах.\n3. Создайте UUID события и текущую дату в ISO 8601.\n4. Добавьте «Получить содержимое URL»: POST, заголовок apikey и JSON с полями ниже.\n5. Проверьте ответ: recorded — расход записан; pending — покупка ожидает проверки." = "1. In Shortcuts, create a Wallet / Transaction automation for the card and enable Run Immediately.\n2. Get the amount, currency and merchant from the input transaction. Do not hard-code a currency for purchases in different currencies.\n3. Generate an event UUID and the current ISO 8601 date.\n4. Add Get Contents of URL: POST, the apikey header, and JSON with the fields below.\n5. Check the response: recorded means the expense was added; pending means the purchase needs review.";
 "Сумма передается текстом, без разделителей тысяч (например 12.50). При повторной отправке используйте прежний UUID и дату. Все данные и ответ сохраняйте до подтверждения сервера; простой HTTP-запрос не обеспечивает очередь без интернета." = "Send the amount as text without thousands separators, such as 12.50. Reuse the UUID and date when retrying. Keep all details and the response until the server confirms receipt; a simple HTTP request does not queue offline submissions.";
 "Отозвать" = "Revoke";
 "Ключ может только добавлять расходы в выбранный счет. Он не позволяет читать операции или менять другие счета. При потере телефона отзовите ключ." = "The key can only add expenses to the selected account. It cannot read transactions or change other accounts. Revoke it if the phone is lost.";
-"Входящие из Wallet" = "Wallet inbox";
+"Покупки из Wallet на проверке" = "Wallet purchases to review";
 "Покупки с неполными данными или другой валютой требуют проверки" = "Purchases with missing details or another currency need review";
 "Нет покупок для проверки" = "No purchases to review";
 "Продавец не получен" = "Merchant not provided";
@@ -622,3 +622,9 @@
 "синхронизация на паузе" = "sync paused";
 "Будет зачислено" = "Amount received";
 "Будет списано" = "Amount debited";
+
+"Валюта покупки не передана" = "Purchase currency was not provided";
+"Источник: %@" = "Source: %@";
+
+"Полные покупки добавляются автоматически. Неполные данные можно исправить здесь." = "Complete purchases are added automatically. Incomplete details can be corrected here.";
+"Ожидает автоматической записи" = "Awaiting automatic booking";

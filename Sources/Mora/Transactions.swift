@@ -91,7 +91,7 @@ struct TransactionsView: View {
                                 Button(L("Редактировать")) { sheet = .transaction(t) }
                                 Button(L("Дублировать")) { duplicateTransactions([t.id]) }
                                 if t.kind != .transfer { Button(L("Разделить по категориям")) { sheet = .split(t) } }
-                                Button(L("Создать похожую")) { var copy = t; copy.id = UUID(); copy.externalID = nil; copy.recurrenceID = nil; copy.importBatchID = nil; copy.date = Calendar.current.startOfDay(for: Date()); sheet = .transaction(copy) }
+                                Button(L("Создать похожую")) { sheet = .similar(t) }
                                 Button(L("Удалить"), role: .destructive) { store.deleteTransaction(t.id) }
                             }
                         }
@@ -173,8 +173,9 @@ struct TransactionEditor: View {
         EditorInput(merchant: merchant, amount: amount, destinationAmount: destinationAmount, note: note, tags: tags,
                     currency: currency, kind: kind, date: date, accountID: accountID, categoryID: categoryID, destinationID: destinationID)
     }
-    init(transaction: Transaction? = nil, walletCapture: CloudCapture? = nil, ledger: Ledger? = nil) {
+    init(transaction: Transaction? = nil, template: Transaction? = nil, walletCapture: CloudCapture? = nil, ledger: Ledger? = nil) {
         self.transaction = transaction
+        let transaction = transaction ?? template.map { $0.similarTransaction() }
         self.walletCapture = walletCapture
         let draft = walletCapture.map { WalletReviewDraft(capture: $0, ledger: ledger ?? .empty, locale: L10n.locale) }
         _merchant = State(initialValue: transaction?.merchant ?? draft?.merchant ?? ""); _amount = State(initialValue: transaction.map { Money.plain(abs($0.conversion?.originalAmount ?? $0.amount)) } ?? draft?.amount ?? "")
@@ -344,15 +345,7 @@ struct TransactionEditor: View {
             }
             return
         }
-        if store.update({ ledger in
-            let existing = transaction.flatMap { original in ledger.transactions.first { $0.id == original.id } }
-            guard transaction == nil || existing != nil else { throw LedgerError.invalid(L("Операция уже удалена.")) }
-            guard ledger.account(accountID)?.archived == false || existing?.accountID == accountID else { throw LedgerError.invalid(L("Верните счет из архива перед добавлением операций.")) }
-            if let destinationID = value.destinationAccountID {
-                guard ledger.account(destinationID)?.archived == false || existing?.destinationAccountID == destinationID else { throw LedgerError.invalid(L("Верните счет из архива перед добавлением операций.")) }
-            }
-            replaceOrAppend(value, in: &ledger.transactions)
-        }) { dismiss() }
+        if store.saveTransaction(value, replacing: transaction?.id) { dismiss() }
     }
 }
 

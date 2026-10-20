@@ -20,7 +20,7 @@ public enum CloudMerge {
         var merged = right
         merged.accounts = try records(base.accounts, left.accounts, right.accounts, name: "счет")
         merged.categories = try records(base.categories, left.categories, right.categories, name: "категория")
-        merged.transactions = try records(base.transactions, left.transactions, right.transactions, name: "операция")
+        merged.transactions = try records(base.transactions, left.transactions, right.transactions, name: "операция", combine: walletImportProvenance)
         merged.budgets = try records(base.budgets, left.budgets, right.budgets, name: "бюджет")
         merged.goals = try records(base.goals, left.goals, right.goals, name: "цель")
         merged.recurring = try records(base.recurring, left.recurring, right.recurring, name: "регулярный платеж")
@@ -53,7 +53,21 @@ public enum CloudMerge {
         .invalid("Конфликт синхронизации: \(name) изменен на двух компьютерах. Обе версии сохранены. Откройте общую базу в настройках облака, чтобы выбрать версию.")
     }
 
-    private static func records<T: Identifiable & Equatable>(_ base: [T], _ left: [T], _ right: [T], name: String) throws -> [T] where T.ID == UUID {
+    /// Attaching a server-confirmed Wallet batch is provenance, not a competing edit
+    /// to the purchase's category, note or amount. All other same-record conflicts remain errors.
+    private static func walletImportProvenance(_ base: Transaction, _ left: Transaction, _ right: Transaction) -> Transaction? {
+        guard base.importBatchID == nil, base.externalID == "wallet:" + base.id.uuidString.lowercased() else { return nil }
+        func attach(_ metadata: Transaction, to edited: Transaction) -> Transaction? {
+            guard metadata.importBatchID != nil, edited.importBatchID == nil else { return nil }
+            var original = metadata; original.importBatchID = nil
+            guard original == base else { return nil }
+            var result = edited; result.importBatchID = metadata.importBatchID
+            return result
+        }
+        return attach(left, to: right) ?? attach(right, to: left)
+    }
+
+    private static func records<T: Identifiable & Equatable>(_ base: [T], _ left: [T], _ right: [T], name: String, combine: ((T, T, T) -> T?)? = nil) throws -> [T] where T.ID == UUID {
         let b = Dictionary(uniqueKeysWithValues: base.map { ($0.id, $0) })
         let l = Dictionary(uniqueKeysWithValues: left.map { ($0.id, $0) })
         let r = Dictionary(uniqueKeysWithValues: right.map { ($0.id, $0) })
@@ -61,6 +75,7 @@ public enum CloudMerge {
         for id in Set(b.keys).union(l.keys).union(r.keys) {
             if l[id] == b[id] { values[id] = r[id] }
             else if r[id] == b[id] || l[id] == r[id] { values[id] = l[id] }
+            else if let original = b[id], let local = l[id], let remote = r[id], let value = combine?(original, local, remote) { values[id] = value }
             else { throw conflict("\(name) \(id.uuidString.prefix(8))") }
         }
         // Preserve intentional ordering, especially rule precedence. Independent

@@ -27,7 +27,7 @@
 
 Если сумма, продавец или валюта неизвестны, покупка попадает во входящие для проверки. Сверяйте итог с выпиской. Прошлые покупки, возвраты, платежи физической картой и работа без интернета не гарантируются. Очередь повторной отправки в команде пока не реализована.
 
-Сумма может приходить с символом валюты, например `$31.54`, или разделителями групп, например `1 234,56 €`. Код валюты передается отдельно: символ `$` не определяет валюту покупки. При пустом коде или отличии от валюты счета покупка остается во входящих. Обновление обработчика исправляет причину ошибки старых входящих, сохраняя исходную сумму и ручную проверку.
+Сумма может приходить с символом валюты, например `$31.54`, или разделителями групп, например `1 234,56 €`. Явно переданный код валюты имеет приоритет; при пустом коде символ `$` считается USD. Открытая Mora автоматически обрабатывает полные покупки, включая старые входящие: получает тот же курс Visa, что форма обычной операции, применяет комиссию счета и округление в его валюте. Ручное подтверждение не требуется. При недоступности курса покупка остается во входящих до автоматической повторной попытки. Пока Mora закрыта или синхронизация выключена, сервер сохраняет такие покупки во входящие.
 
 «Проверить» открывает ту же форму, что и новая операция: счет, сумма и название продавца предзаполняются. Источник Apple Wallet, метка телефона и время попадают в заметку. Категория предлагается по правилам, истории продавца и знакомым названиям; ее можно изменить вручную. Можно изменить валюту покупки, получить пересчет Visa, выбрать категорию, заметку и теги. Запись операции и обработка входящей покупки сохраняются в облаке вместе; повторная отправка не создает дубль. Если валюта неизвестна, выберите ее явно.
 
@@ -54,3 +54,9 @@ pnpm test
 Тесты не должны подключаться к настоящему проекту. Установка схемы и проверка SQL не гарантируют работу автоматизации Wallet на конкретном iPhone: проверьте ее отдельно небольшой реальной покупкой.
 
 Справка: [ключи Supabase](https://supabase.com/docs/guides/api/api-keys), [Wallet automation](https://support.apple.com/guide/shortcuts/apd65c67538a/ios).
+
+### Wallet import history
+
+Apply `wallet_import_batches` after the Wallet review migration. `mora_collect_wallet_import` collects all recorded, unbatched Wallet purchases currently in the household into one import, regardless of purchase date or phone. Mora calls it after loading/booking the available purchases; subsequent loads create subsequent batches. It also picks up purchases from older Mora versions. Incomplete captures stay pending until reviewed. Collection takes the existing household lock, requires membership and is idempotent across retries and concurrent Macs. It never recreates removed purchases.
+
+Batch records use the existing import-history format, with `source: Apple Shortcuts`; the existing batch preview and rollback apply. Swift histories remain computer-local.
