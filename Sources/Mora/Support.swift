@@ -27,7 +27,8 @@ struct FeedbackFooter: ViewModifier {
 }
 
 struct FeedbackContact: View {
-    @EnvironmentObject private var store: FinanceStore
+    @State private var emailCopied = false
+    @State private var copyResetTask: Task<Void, Never>?
     var compact = false
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -39,12 +40,23 @@ struct FeedbackContact: View {
         Button {
             NSPasteboard.general.clearContents()
             if NSPasteboard.general.setString(SupportContact.email, forType: .string) {
-                store.notice = L("Адрес почты скопирован")
+                copyResetTask?.cancel()
+                emailCopied = true
+                copyResetTask = Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 1_000_000_000)
+                    guard !Task.isCancelled else { return }
+                    emailCopied = false
+                    copyResetTask = nil
+                }
             }
         } label: {
-            Text(SupportContact.email)
+            Text(emailCopied ? L("Почта скопирована") : SupportContact.email)
         }
-        .font(.system(size: 10)).fixedSize().help(L("Скопировать адрес почты"))
+        .font(.system(size: 10)).fixedSize()
+        .foregroundStyle(emailCopied ? Color.moraGreen : Color.primary.opacity(0.82))
+        .animation(.easeInOut(duration: 0.15), value: emailCopied)
+        .help(L("Скопировать адрес почты"))
+        .accessibilityLabel(emailCopied ? L("Почта скопирована") : SupportContact.email)
     }
 }
 

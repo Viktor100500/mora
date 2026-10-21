@@ -88,7 +88,8 @@ private struct NotificationsPanel: View {
                         Spacer()
                     }.foregroundStyle(NotificationStyle.attention).padding(16)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(NotificationStyle.attention.opacity(0.08))
+                        .background(NotificationStyle.attention.opacity(0.15))
+                        .overlay(Rectangle().stroke(NotificationStyle.attention.opacity(0.26), lineWidth: 1))
                         .contentShape(Rectangle())
                 }.buttonStyle(.plain)
                 Divider()
@@ -140,13 +141,13 @@ private struct NotificationRow: View {
             Image(systemName: icon).foregroundStyle(color).frame(width: 20).padding(.top, 2)
             VStack(alignment: .leading, spacing: 8) {
                 Text(L(event.message)).font(.callout.weight(.medium)).fixedSize(horizontal: false, vertical: true)
-                if let detail = event.detail { FinancialText(detail).font(.caption).foregroundStyle(.secondary) }
-                if event.isResolved { Text(L("Больше не требует проверки")).font(.caption).foregroundStyle(Color.moraGreen) }
+                if let detail = event.detail { FinancialText(detail).font(.caption).foregroundStyle(.primary.opacity(0.78)) }
+                if event.isResolved { Text(L("Больше не требует проверки")).font(.caption.weight(.medium)).foregroundStyle(Color.moraGreen) }
                 Text(event.date.formatted(.dateTime.day().month(.abbreviated).hour().minute().locale(L10n.locale)))
-                    .font(.caption2).foregroundStyle(.tertiary)
+                    .font(.caption2).foregroundStyle(.secondary)
                 NotificationActions(event: event, onNavigate: onNavigate)
             }.frame(maxWidth: .infinity, alignment: .leading)
-        }.padding(16)
+        }.padding(16).background(color.opacity(0.055))
     }
 }
 

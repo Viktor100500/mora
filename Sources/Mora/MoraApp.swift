@@ -103,6 +103,14 @@ struct ContentView: View {
     @AppStorage("mora.hideAmounts") private var hideAmounts = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var currency: String { store.ledger.preferences.baseCurrency }
+    private var noticeColor: Color {
+        guard let kind = store.activeNotice?.kind else { return .moraGreen }
+        switch kind {
+        case .warning, .error: .token("red")
+        case .information: .accentColor
+        default: .moraGreen
+        }
+    }
     private let dataRefresh = Timer.publish(every: 2, on: .main, in: .default).autoconnect()
 
     @ViewBuilder private var currencyWarning: some View {
@@ -112,7 +120,9 @@ struct ContentView: View {
                 Text(store.updatingRates ? L("Загружаем курсы валют…") : L("В итогах не учтены валюты без курса: \(store.ledger.missingCurrencies.joined(separator: ", "))")).font(.callout)
                 Spacer()
                 Button(L("Курсы валют")) { page = .settings }
-            }.padding(14).background(Color.orange.opacity(0.12)).clipShape(RoundedRectangle(cornerRadius: 12))
+            }.padding(14)
+                .background(Color.orange.opacity(0.17), in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange.opacity(0.28), lineWidth: 1))
         }
     }
 
@@ -124,17 +134,24 @@ struct ContentView: View {
                 if store.isDemo { demoBanner }
                 if let notice = store.notice {
                     HStack {
-                        Image(systemName: "checkmark.circle").foregroundStyle(Color.moraGreen)
+                        Image(systemName: store.activeNotice?.kind == .error || store.activeNotice?.kind == .warning
+                              ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
+                            .foregroundStyle(noticeColor)
                         VStack(alignment: .leading, spacing: 4) {
                             Text(notice).font(.callout)
                             if let detail = store.activeNotice?.detail {
-                                FinancialText(detail).font(.caption).foregroundStyle(.secondary).lineLimit(3)
+                                FinancialText(detail).font(.caption).foregroundStyle(.primary.opacity(0.78)).lineLimit(3)
                             }
                         }
                         Spacer()
                         if let event = store.activeNotice { NotificationActions(event: event) }
-                        Button { store.notice = nil } label: { Image(systemName: "xmark") }.buttonStyle(.plain).accessibilityLabel(L("Закрыть уведомление"))
-                    }.padding(.horizontal, 30).padding(.vertical, 10).background(Color.moraGreen.opacity(0.08))
+                        Button { store.notice = nil } label: { Image(systemName: "xmark") }
+                            .buttonStyle(.plain).foregroundStyle(.primary.opacity(0.78))
+                            .accessibilityLabel(L("Закрыть уведомление"))
+                    }
+                    .padding(.horizontal, 30).padding(.vertical, 10)
+                    .background(noticeColor.opacity(0.14))
+                    .overlay(alignment: .bottom) { Rectangle().fill(noticeColor.opacity(0.3)).frame(height: 1).allowsHitTesting(false) }
                 }
                 Group {
                     if page == .transactions {
