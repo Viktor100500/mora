@@ -8,7 +8,7 @@ public struct MoraAutomation {
         FileManager.default.fileExists(atPath: fileURL.path) ? try LedgerFile.decode(Data(contentsOf: fileURL)) : .empty
     }
     public typealias ConversionFetcher = (Decimal, String, String, Date) async throws -> CardConversion
-    public func runAsync(_ command: String, arguments: [String: Any], fetch: ConversionFetcher? = nil) async throws -> sending [String: Any] {
+    public func runAsync(_ command: String, arguments: [String: Any], fetch: ConversionFetcher? = nil) async throws -> [String: Any] {
         let quote: ConversionFetcher = fetch ?? { amount, from, to, date in
             try await VisaRateClient.shared.conversion(amount: amount, from: from, to: to, date: date)
         }
@@ -58,7 +58,12 @@ public struct MoraAutomation {
         return result
     }
 
-    private func reassign(_ arguments: [String: Any], fetch: ConversionFetcher) async throws -> sending [String: Any] {
+    public func runJSONAsync(_ command: String, arguments: [String: Any]) async throws -> Data {
+        let result = try await runAsync(command, arguments: arguments)
+        return try JSONSerialization.data(withJSONObject: ["ok": true, "result": result], options: [.sortedKeys, .withoutEscapingSlashes])
+    }
+
+    private func reassign(_ arguments: [String: Any], fetch: ConversionFetcher) async throws -> [String: Any] {
         let requestID = try stableID(arguments)
         let targetName = try string(arguments, "account", max: 256)
         let expectedName = try string(arguments, "expected_account", max: 256)
@@ -115,7 +120,7 @@ public struct MoraAutomation {
         return ["saved": !dryRun, "updated": zip(values, originals).filter { $0 != $1 }.count,
                 "entries": values.map { entry($0, ledger: initial) }, "account": target.name, "currency": target.currency]
     }
-    public func run(_ command: String, arguments: [String: Any], normalizedTable: CSVTable? = nil, conversions: [Int: CardConversion] = [:]) throws -> sending [String: Any] {
+    public func run(_ command: String, arguments: [String: Any], normalizedTable: CSVTable? = nil, conversions: [Int: CardConversion] = [:]) throws -> [String: Any] {
         switch command {
         case "context":
             let ledger = try load()
@@ -348,11 +353,11 @@ public struct MoraAutomation {
         }
         return result
     }
-    private func preview(_ result: CSVImportResult, saved: Bool) -> sending [String: Any] {
+    private func preview(_ result: CSVImportResult, saved: Bool) -> [String: Any] {
         ["saved": saved, "valid": result.invalid == 0, "imported": result.imported, "duplicates": result.duplicates, "invalid": result.invalid,
          "issues": result.rows.filter { $0.error != nil }.prefix(100).map { ["row": $0.id, "error": $0.error!] as [String: Any] }]
     }
-    private func entry(_ value: Transaction, ledger: Ledger) -> sending [String: Any] {
+    private func entry(_ value: Transaction, ledger: Ledger) -> [String: Any] {
         ["id": value.id.uuidString, "date": Dates.string(value.date), "merchant": value.merchant, "amount": Money.plain(value.amount),
          "currency": ledger.account(value.accountID)?.currency ?? "", "account": ledger.account(value.accountID)?.name ?? "",
          "category": ledger.category(value.categoryID)?.name ?? "", "type": value.kind.rawValue, "note": value.note,

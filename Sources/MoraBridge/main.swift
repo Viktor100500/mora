@@ -49,8 +49,7 @@ do {
             }
         }
     }
-    let result = try await backend.runAsync(command, arguments: arguments)
-    let response = try JSONSerialization.data(withJSONObject: ["ok": true, "result": result], options: [.sortedKeys, .withoutEscapingSlashes])
+    let response = try await backend.runJSONAsync(command, arguments: arguments)
     FileHandle.standardOutput.write(response + Data("\n".utf8))
 } catch {
     let response = try! JSONSerialization.data(withJSONObject: ["ok": false, "error": error.localizedDescription], options: [.sortedKeys, .withoutEscapingSlashes])
