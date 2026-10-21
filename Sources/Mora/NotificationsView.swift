@@ -179,33 +179,33 @@ struct NotificationActionButton: View {
             .help(available ? action.title : L("Действие больше недоступно"))
             .confirmationDialog(L("Отменить импорт с измененными операциями?"), isPresented: $confirmingRollback,
                                 titleVisibility: .visible) {
-                Button(L("Отменить импорт"), role: .destructive) {
-                    if case .rollbackImport(let id) = action { store.rollbackImport(id, allowModified: true) }
-                }
+                Button(L("Отменить импорт"), role: .destructive) { Task { @MainActor in
+                    if case .rollbackImport(let id) = action { await store.rollbackImport(id, allowModified: true) }
+                 } }
                 Button(L("Сохранить операции"), role: .cancel) {}
             } message: {
-                if case .rollbackImport(let id) = action, let preview = try? store.ledger.importRollbackPreview(id) {
+                if case .rollbackImport(let id) = action, let preview = store.imports.previews[id] {
                     Text(L("Будет удалено операций: \(preview.remaining). Из них изменено или создано разделением: \(preview.modified). Остальные операции, счета и категории сохранятся. Отмену можно вернуть через меню «Финансы»."))
                 }
             }
     }
 
-    private func perform() {
+    private func perform() { Task { @MainActor in
         switch action {
-        case .undo, .redo: store.performHistoryAction(action)
+        case .undo, .redo: await store.performHistoryAction(action)
         case .rollbackImport(let id):
-            store.reloadFromDisk()
+            await store.reloadFromDisk()
             do {
-                let preview = try store.ledger.importRollbackPreview(id)
+                guard let preview = store.imports.previews[id] else { throw LedgerError.invalid(L("Этот импорт уже отменен или не найден.")) }
                 if preview.modified > 0 { confirmingRollback = true }
-                else { store.rollbackImport(id) }
+                else { await store.rollbackImport(id) }
             } catch { store.error = error.localizedDescription }
         case .imports: navigate(.page(.imports), window: "main")
         case .settings: navigate(.page(.settings), window: "main")
         case .inbox: navigate(.inbox, window: "cloud")
         case .review(let id): navigate(.capture(id), window: "cloud")
         }
-    }
+     } }
     private func navigate(_ destination: NotificationNavigation.Destination, window: String) {
         onNavigate()
         store.notifications.request(destination)

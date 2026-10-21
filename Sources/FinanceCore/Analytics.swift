@@ -1,20 +1,21 @@
 import Foundation
 
-public struct CategoryTotal: Identifiable {
+public struct CategoryTotal: Identifiable, Sendable {
     public var id: UUID?
     public var name: String
     public var color: String
     public var icon: String
     public var amount: Decimal
 }
-public struct MonthTotal: Identifiable {
+public struct MonthTotal: Identifiable, Sendable {
     public var id: Date { date }
     public var date: Date
     public var income: Decimal
     public var expense: Decimal
 }
 
-public struct Summary {
+public struct Summary: Sendable {
+    public init() {}
     public var income: Decimal = 0
     public var expense: Decimal = 0
     public var count: Int = 0

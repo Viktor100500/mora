@@ -1,6 +1,6 @@
 import Foundation
 
-public struct ExchangeRateSnapshot: Codable, Equatable {
+public struct ExchangeRateSnapshot: Codable, Equatable, Sendable {
     public let ratesPerUSD: [String: Decimal]
     public let quotedAt: Date
     public let fetchedAt: Date
@@ -66,7 +66,7 @@ public struct ExchangeRateSnapshot: Codable, Equatable {
     }
 }
 
-public enum ExchangeRateRefreshPolicy {
+public enum ExchangeRateRefreshPolicy: Sendable {
     public static func shouldRefresh(snapshot: ExchangeRateSnapshot?, lastAttempt: Date?, now: Date = Date(), force: Bool = false) -> Bool {
         if force { return true }
         // Retry unavailable networks at most once an hour; successful downloads live for 24 hours.
@@ -76,7 +76,7 @@ public enum ExchangeRateRefreshPolicy {
     }
 }
 
-public struct ExchangeRateClient {
+public struct ExchangeRateClient: Sendable {
     public static let endpoint = URL(string: "https://open.er-api.com/v6/latest/USD")!
     private let session: URLSession
 

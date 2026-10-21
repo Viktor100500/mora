@@ -2,7 +2,7 @@ import Foundation
 import Combine
 import FinanceCore
 
-enum AppNotificationAction: Codable, Equatable, Identifiable {
+enum AppNotificationAction: Codable, Equatable, Identifiable, Sendable {
     case undo(String), redo(String), rollbackImport(UUID)
     case imports, settings, inbox, review(UUID)
 
@@ -30,8 +30,8 @@ enum AppNotificationAction: Codable, Equatable, Identifiable {
     }
 }
 
-struct AppNotification: Codable, Equatable, Identifiable {
-    enum Kind: String, Codable { case success, information, warning, error, review }
+struct AppNotification: Codable, Equatable, Identifiable, Sendable {
+    enum Kind: String, Codable, Sendable { case success, information, warning, error, review }
     var id = UUID()
     var date = Date()
     var message: String
@@ -59,18 +59,32 @@ final class AppNotifications: ObservableObject {
     private let fileURL: URL?
     private var canPersist = true
 
+    private let storage: NotificationStorage
+    private var loaded = false
+    private var loading: Task<Void, Never>?
+    private var pendingSave: Task<Void, Never>?
+    private var revision: UInt64 = 0
     init(fileURL: URL? = nil) {
-        self.fileURL = fileURL
-        guard let fileURL, FileManager.default.fileExists(atPath: fileURL.path) else { return }
-        do {
-            let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
-            events = try decoder.decode([AppNotification].self, from: Data(contentsOf: fileURL))
-        } catch {
-            // Preserve a damaged file rather than replacing its history on the next event.
-            storageError = L("Не удалось прочитать историю уведомлений.")
-            canPersist = false
-        }
+        self.fileURL = fileURL; storage = NotificationStorage(fileURL: fileURL)
     }
+    func load() async {
+        if let loading { await loading.value; return }
+        guard !loaded else { return }
+        let task = Task { @MainActor in
+            do {
+                let history = try await storage.load()
+                if events.isEmpty {
+                    if !history.isEmpty { events = history }
+                } else {
+                    let localIDs = Set(events.map(\.id))
+                    let missing = history.filter { !localIDs.contains($0.id) }; if !missing.isEmpty { events += missing }
+                }
+            } catch { storageError = L("Не удалось прочитать историю уведомлений."); canPersist = false }
+            loaded = true
+        }
+        loading = task; await task.value; loading = nil
+    }
+    func flush() async { await pendingSave?.value }
 
     var unreadCount: Int { events.filter { !$0.isRead }.count }
 
@@ -122,13 +136,40 @@ final class AppNotifications: ObservableObject {
     }
 
     private func persist() {
-        guard canPersist, let fileURL else { return }
-        do {
-            let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
-            try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try encoder.encode(events).write(to: fileURL, options: .atomic)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
-            storageError = nil
-        } catch { storageError = L("Не удалось сохранить историю уведомлений.") }
+        revision &+= 1
+        let version = revision
+        pendingSave?.cancel()
+        pendingSave = Task { @MainActor in
+            guard !Task.isCancelled else { return }
+            await load()
+            guard !Task.isCancelled else { return }
+            guard canPersist else { return }
+            let snapshot = events
+            do {
+                try await storage.save(snapshot, revision: version)
+                if revision == version { storageError = nil }
+            } catch {
+                if revision == version { storageError = L("Не удалось сохранить историю уведомлений.") }
+            }
+        }
+    }
+}
+
+private actor NotificationStorage {
+    private let fileURL: URL?
+    private var revision: UInt64 = 0
+    init(fileURL: URL?) { self.fileURL = fileURL }
+    func load() throws -> [AppNotification] {
+        guard let fileURL, FileManager.default.fileExists(atPath: fileURL.path) else { return [] }
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        return try decoder.decode([AppNotification].self, from: Data(contentsOf: fileURL))
+    }
+    func save(_ events: [AppNotification], revision next: UInt64) throws {
+        guard next > revision, let fileURL else { return }
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+        try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try encoder.encode(events).write(to: fileURL, options: .atomic)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
+        revision = next
     }
 }

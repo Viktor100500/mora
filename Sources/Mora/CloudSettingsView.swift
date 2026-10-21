@@ -154,7 +154,7 @@ struct CloudSettingsView: View {
         Card {
             VStack(alignment: .leading, spacing: 14) {
                 SectionHeading(title: cloud.householdName, subtitle: "Изменения проверяются каждые 8 секунд, пока Mora открыта и Mac не спит")
-                Toggle("Синхронизация включена", isOn: Binding(get: { cloud.enabled }, set: { cloud.pause(!$0) })).disabled(cloud.busy)
+                Toggle("Синхронизация включена", isOn: Binding(get: { cloud.enabled }, set: { value in Task { await cloud.pause(!value) } })).disabled(cloud.busy)
                 HStack {
                     if let last = cloud.lastSync { Text("Последняя синхронизация: \(last.formatted(date: .abbreviated, time: .standard))").font(.caption).foregroundStyle(.secondary) }
                     Spacer()
@@ -167,7 +167,7 @@ struct CloudSettingsView: View {
                     HStack {
                         Button("Использовать облачную версию…") { adoptID = cloud.householdID }
                         Button("Использовать версию этого Mac…") { confirmLocal = true }
-                        Button("Сохранить JSON…") { store.backup() }
+                        Button("Сохранить JSON…") { Task { @MainActor in  await store.backup()  } }
                     }.disabled(cloud.busy)
                 }
             }

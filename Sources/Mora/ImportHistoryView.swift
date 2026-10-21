@@ -4,7 +4,7 @@ import FinanceCore
 struct ImportHistoryView: View {
     @EnvironmentObject var store: FinanceStore
     var onRollback: (UUID) -> Void
-    private var batches: [ImportBatch] { store.ledger.importHistory.sorted { $0.createdAt > $1.createdAt } }
+    private var batches: [ImportBatch] { store.imports.batches }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -22,9 +22,8 @@ struct ImportHistoryView: View {
     }
 
     private func batchCard(_ batch: ImportBatch) -> some View {
-        let current = store.ledger.transactions(from: batch)
-        let currentByID = Dictionary(uniqueKeysWithValues: current.map { ($0.id, $0) })
-        let preview = try? store.ledger.importRollbackPreview(batch.id)
+        let currentByID = store.imports.transactions
+        let preview = store.imports.previews[batch.id]
         return Card {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .top, spacing: 14) {

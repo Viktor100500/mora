@@ -46,7 +46,7 @@ private struct EuropeanDateField: NSViewRepresentable {
         picker.isEnabled = context.environment.isEnabled
         picker.setAccessibilityLabel(title)
     }
-    final class Coordinator: NSObject {
+    @MainActor final class Coordinator: NSObject {
         var parent: EuropeanDateField
         init(_ parent: EuropeanDateField) { self.parent = parent }
         @objc func changed(_ picker: NSDatePicker) { parent.selection = picker.dateValue }

@@ -17,7 +17,7 @@ final class ChangeDescriptionTests: XCTestCase {
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }
-    func testCategoryChangeNamesPurchaseAndBothCategories() {
+    func testCategoryChangeNamesPurchaseAndBothCategories() async {
         let before = fixture(); var after = before
         after.transactions[0].categoryID = after.categories[1].id
         let result = ChangeDescriptions.between(before, after)
@@ -26,7 +26,7 @@ final class ChangeDescriptionTests: XCTestCase {
         XCTAssertTrue(result.detail.contains("Продукты → Кафе и рестораны"))
         XCTAssertTrue(result.detail.contains("€"))
     }
-    func testDeletionAndMultipleAdditionsHaveAccurateCountsAndBoundedExamples() {
+    func testDeletionAndMultipleAdditionsHaveAccurateCountsAndBoundedExamples() async {
         let before = fixture(); var removed = before
         removed.transactions = []
         XCTAssertEqual(ChangeDescriptions.between(before, removed).title, L("Удаление операции"))
@@ -39,7 +39,7 @@ final class ChangeDescriptionTests: XCTestCase {
         XCTAssertFalse(result.detail.contains("Synthetic 4"))
         XCTAssertTrue(result.detail.contains("3"))
     }
-    func testAccountAndPreferenceChangesAreDescribedInsteadOfPretendingTheyArePurchases() {
+    func testAccountAndPreferenceChangesAreDescribedInsteadOfPretendingTheyArePurchases() async {
         let before = fixture(); var after = before
         after.accounts[0].archived = true
         let account = ChangeDescriptions.between(before, after)
@@ -51,46 +51,49 @@ final class ChangeDescriptionTests: XCTestCase {
         after.accounts[0].name = "Renamed"
         XCTAssertEqual(ChangeDescriptions.between(before, after).title, L("Несколько изменений"))
     }
-    func testPersistedLegacySnapshotsDescribeUndoAndRedoAndConcreteNotices() throws {
+    func testPersistedLegacySnapshotsDescribeUndoAndRedoAndConcreteNotices() async throws {
         let directory = try directory(); defer { try? FileManager.default.removeItem(at: directory) }
         let file = directory.appendingPathComponent("ledger.json")
         let before = fixture(); try LedgerFile.save(before, to: file)
         var after = before; after.transactions[0].amount = -20
         try LedgerFile.save(after, to: file, expected: before)
         let store = FinanceStore(directory: directory)
+        await store.load()
         let summary = try XCTUnwrap(store.undoDescription)
         XCTAssertTrue(summary.detail.contains("Synthetic cafe"))
         XCTAssertTrue(summary.detail.contains("→"))
-        store.undo()
+        await store.undo()
         XCTAssertEqual(store.ledger.transactions[0].amount, -14.70)
         XCTAssertEqual(store.redoDescription, summary)
         XCTAssertEqual(store.activeNotice?.message, L("Отменено: \(summary.title)"))
         XCTAssertEqual(store.activeNotice?.detail, summary.detail)
         let restarted = FinanceStore(directory: directory)
+        await restarted.load()
         XCTAssertEqual(restarted.redoDescription, summary)
-        restarted.redo()
+        await restarted.redo()
         XCTAssertEqual(restarted.ledger.transactions[0].amount, -20)
         XCTAssertEqual(restarted.activeNotice?.message, L("Возвращено: \(summary.title)"))
         XCTAssertEqual(restarted.activeNotice?.detail, summary.detail)
         XCTAssertEqual(restarted.notifications.events.first?.detail, summary.detail)
     }
-    func testHistoryListsStepsInOrderAndNewBranchClearsRedo() throws {
+    func testHistoryListsStepsInOrderAndNewBranchClearsRedo() async throws {
         let directory = try directory(); defer { try? FileManager.default.removeItem(at: directory) }
         let file = directory.appendingPathComponent("ledger.json")
         try LedgerFile.save(fixture(), to: file)
         let store = FinanceStore(directory: directory)
-        XCTAssertTrue(store.update { $0.transactions[0].note = "Changed" })
+        await store.load()
+        expectTrue(await store.update { $0.transactions[0].note = "Changed" })
         let first = try XCTUnwrap(store.undoDescription)
-        XCTAssertTrue(store.update { $0.accounts[0].name = "Renamed" })
+        expectTrue(await store.update { $0.accounts[0].name = "Renamed" })
         let second = try XCTUnwrap(store.undoDescription)
         XCTAssertEqual(store.undoDescriptions, [second, first])
-        store.undo(); store.undo()
+        await store.undo(); await store.undo()
         XCTAssertEqual(store.redoDescriptions, [first, second])
-        XCTAssertTrue(store.update { $0.transactions[0].merchant = "New branch" })
+        expectTrue(await store.update { $0.transactions[0].merchant = "New branch" })
         XCTAssertNil(store.redoDescription)
         XCTAssertTrue(store.redoDescriptions.isEmpty)
     }
-    func testSimilarPurchaseIsNewAndOriginalMayBeDeletedWithoutBlockingSave() throws {
+    func testSimilarPurchaseIsNewAndOriginalMayBeDeletedWithoutBlockingSave() async throws {
         let directory = try directory(); defer { try? FileManager.default.removeItem(at: directory) }
         let file = directory.appendingPathComponent("ledger.json")
         var ledger = fixture()
@@ -104,25 +107,27 @@ final class ChangeDescriptionTests: XCTestCase {
         XCTAssertNil(copy.externalID); XCTAssertNil(copy.recurrenceID); XCTAssertNil(copy.importBatchID)
         XCTAssertEqual(copy.amount, original.amount); XCTAssertEqual(copy.merchant, original.merchant)
         let store = FinanceStore(directory: directory)
-        store.deleteTransaction(original.id)
-        XCTAssertTrue(store.saveTransaction(copy))
+        await store.deleteTransaction(original.id)
+        expectTrue(await store.saveTransaction(copy))
         XCTAssertEqual(store.ledger.transactions.map(\.id), [copy.id])
         XCTAssertEqual(store.undoDescription?.title, L("Добавление операции"))
-        store.undo()
+        await store.undo()
         XCTAssertTrue(store.ledger.transactions.isEmpty)
-        store.redo()
+        await store.redo()
         XCTAssertEqual(store.ledger.transactions.map(\.id), [copy.id])
     }
-    func testEditingADeletedPurchaseStillFailsAndCreatingOnArchivedAccountIsRejected() throws {
+    func testEditingADeletedPurchaseStillFailsAndCreatingOnArchivedAccountIsRejected() async throws {
         let directory = try directory(); defer { try? FileManager.default.removeItem(at: directory) }
         let file = directory.appendingPathComponent("ledger.json")
         try LedgerFile.save(fixture(), to: file)
-        let store = FinanceStore(directory: directory), original = store.ledger.transactions[0]
-        store.deleteTransaction(original.id)
-        XCTAssertFalse(store.saveTransaction(original, replacing: original.id))
+        let store = FinanceStore(directory: directory)
+        await store.load()
+        let original = store.ledger.transactions[0]
+        await store.deleteTransaction(original.id)
+        expectFalse(await store.saveTransaction(original, replacing: original.id))
         XCTAssertTrue(store.ledger.transactions.isEmpty)
-        XCTAssertTrue(store.update { $0.accounts[0].archived = true })
-        XCTAssertFalse(store.saveTransaction(original.similarTransaction()))
+        expectTrue(await store.update { $0.accounts[0].archived = true })
+        expectFalse(await store.saveTransaction(original.similarTransaction()))
         XCTAssertTrue(store.ledger.transactions.isEmpty)
     }
 }

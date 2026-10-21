@@ -45,14 +45,14 @@ public enum LedgerFile {
             return next
         }
     }
-    public static func mutate(at url: URL, _ action: (inout Ledger) throws -> Void) throws -> Ledger {
+    public static func mutate(at url: URL, recordHistory: Bool = true, _ action: (inout Ledger) throws -> Void) throws -> Ledger {
         try withLock(at: url) {
             var ledger = FileManager.default.fileExists(atPath: url.path) ? try decode(Data(contentsOf: url)) : .empty
             let previous = ledger
             try action(&ledger)
             try ledger.validate()
             if ledger != previous || !FileManager.default.fileExists(atPath: url.path) {
-                if FileManager.default.fileExists(atPath: url.path) { ledger.recordChange(from: previous) }
+                if recordHistory && FileManager.default.fileExists(atPath: url.path) { ledger.recordChange(from: previous) }
                 try write(ledger, to: url)
             }
             return ledger

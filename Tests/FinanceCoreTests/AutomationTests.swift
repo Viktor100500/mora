@@ -1,4 +1,5 @@
 import XCTest
+import os
 @testable import FinanceCore
 
 final class AutomationTests: XCTestCase {
@@ -130,13 +131,12 @@ final class AutomationTests: XCTestCase {
     }
     func testConcurrentWritersDoNotLoseAccounts() throws {
         let target = file
-        let errors = NSLock()
-        var failures = 0
+        let failures = OSAllocatedUnfairLock(initialState: 0)
         DispatchQueue.concurrentPerform(iterations: 24) { index in
             do { _ = try LedgerFile.mutate(at: target) { $0.accounts.append(Account(name: "Account \(index)")) } }
-            catch { errors.lock(); failures += 1; errors.unlock() }
+            catch { failures.withLock { $0 += 1 } }
         }
-        XCTAssertEqual(failures, 0)
+        XCTAssertEqual(failures.withLock { $0 }, 0)
         XCTAssertEqual(try read().accounts.count, 24)
     }
     func testOwnDateEncodingDoesNotLookLikeAnExternalConflict() throws {

@@ -1,6 +1,6 @@
 import Foundation
 
-public struct CSVTable {
+public struct CSVTable: Sendable {
     public var headers: [String]
     public var rows: [[String]]
     public var delimiter: Character
@@ -64,7 +64,7 @@ public struct CSVTable {
     }
 }
 
-public enum CSVField: String, CaseIterable, Identifiable, Codable {
+public enum CSVField: String, CaseIterable, Identifiable, Codable, Sendable {
     case date, merchant, amount, debit, credit, currency, account, category, kind, note, tags, externalID, destination, destinationAmount
     public var id: String { rawValue }
     public var title: String {
@@ -92,7 +92,7 @@ public enum CSVField: String, CaseIterable, Identifiable, Codable {
     }
 }
 
-public struct CSVMapping: Equatable {
+public struct CSVMapping: Equatable, Sendable {
     public var columns: [CSVField: Int] = [:]
     public var defaultAccountID: UUID?
     public var defaultCurrency: String = "RUB"
@@ -109,7 +109,7 @@ public struct CSVMapping: Equatable {
     }
 }
 
-public struct CSVPreviewRow: Identifiable {
+public struct CSVPreviewRow: Identifiable, Sendable {
     public var id: Int
     public var date: Date?
     public var merchant: String
@@ -123,7 +123,7 @@ public struct CSVPreviewRow: Identifiable {
     public var conversion: CardConversion?
 }
 
-public struct CSVImportResult {
+public struct CSVImportResult: Sendable {
     public var ledger: Ledger
     public var rows: [CSVPreviewRow]
     public var imported: Int
@@ -132,7 +132,7 @@ public struct CSVImportResult {
     public var excluded: Int
 }
 
-public enum CSVImporter {
+public enum CSVImporter: Sendable {
     public static func prepareAsync(_ table: CSVTable, mapping: CSVMapping, ledger: Ledger, fetch: MoraAutomation.ConversionFetcher? = nil) async throws -> CSVImportResult {
         let columns = Array(mapping.columns.values)
         guard Set(columns).count == columns.count, mapping.columns[.date] != nil, mapping.columns[.merchant] != nil,

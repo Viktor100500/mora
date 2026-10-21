@@ -2,7 +2,7 @@ import Foundation
 import WebKit
 import AppKit
 
-public struct CardConversion: Codable, Equatable {
+public struct CardConversion: Codable, Equatable, Sendable {
     public var originalAmount: Decimal
     public var originalCurrency: String
     public var accountCurrency: String
@@ -70,7 +70,8 @@ private final class VisaCalculator: NSObject, WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { navigationError = error }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { navigationError = error }
 
-    private func evaluate(_ script: String) async throws -> Any? {
+    private enum ScriptValue: Sendable, Equatable { case text(String), flag(Bool) }
+    private func evaluate(_ script: String) async throws -> ScriptValue? {
         let wrapped = """
         (() => { const roots=[]; function scan(root) { roots.push(root); for(const el of root.querySelectorAll('*')) { if(el.shadowRoot) scan(el.shadowRoot); } } scan(document);
         const get=id=>roots.map(root=>root.querySelector('[id="'+id+'"]')).find(Boolean);
@@ -80,15 +81,17 @@ private final class VisaCalculator: NSObject, WKNavigationDelegate {
         return try await withCheckedThrowingContinuation { continuation in
             webView.evaluateJavaScript(wrapped) { value, error in
                 if let error { continuation.resume(throwing: error) }
-                else { continuation.resume(returning: value) }
+                else if let text = value as? String { continuation.resume(returning: .text(text)) }
+                else if let flag = value as? Bool { continuation.resume(returning: .flag(flag)) }
+                else { continuation.resume(returning: nil) }
             }
         }
     }
-    private func waitFor(_ script: String) async throws -> Any {
+    private func waitFor(_ script: String) async throws -> ScriptValue {
         for _ in 0..<80 {
             try Task.checkCancellation()
             if let navigationError { throw navigationError }
-            if let result = try? await evaluate(script), !(result is NSNull), (result as? Bool) != false { return result }
+            if let result = try? await evaluate(script), result != .flag(false) { return result }
             try await Task.sleep(nanoseconds: 250_000_000)
         }
         throw LedgerError.invalid("Visa не вернула курс. Проверьте интернет-соединение и повторите получение курса. Операция не сохранена.")
@@ -137,7 +140,7 @@ private final class VisaCalculator: NSObject, WKNavigationDelegate {
         if(!h) return false; const text=h.textContent.trim();
         const match=text.match(/^1 \(from)\\s*=\\s*([0-9.,]+)\\s*\(to)$/); return match ? match[1] : false; })()
         """)
-        guard let text = result as? String, let rate = Decimal(string: text.replacingOccurrences(of: ",", with: ""), locale: Locale(identifier: "en_US_POSIX")), rate > 0, !rate.isNaN else {
+        guard case .text(let text) = result, let rate = Decimal(string: text.replacingOccurrences(of: ",", with: ""), locale: Locale(identifier: "en_US_POSIX")), rate > 0, !rate.isNaN else {
             throw LedgerError.invalid("Visa вернула некорректный курс. Операция не сохранена.")
         }
         return rate

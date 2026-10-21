@@ -3,14 +3,27 @@ import FinanceCore
 
 /// Derive descriptions from the snapshots themselves, including history written by older apps or MCP.
 /// Descriptions are presentation only: undo/redo still use the coordinated ledger operations.
-struct ChangeDescription: Equatable {
+struct ChangeDescription: Equatable, Sendable {
     let title: String
     let detail: String
 }
 
-@MainActor
 enum ChangeDescriptions {
-    static func between(_ before: Ledger, _ after: Ledger) -> ChangeDescription {
+    static func between(_ before: Ledger, _ after: Ledger, language: AppLanguage = L10n.language) -> ChangeDescription {
+        HistoryFormatter(language: language).between(before, after)
+    }
+}
+
+private struct HistoryFormatter {
+    let language: AppLanguage
+    private func L(_ text: String) -> String { UILocalization.shared.text(text, language: language) }
+    private func formattedMoney(_ amount: Decimal, currency: String) -> String {
+        let formatter = NumberFormatter(); formatter.locale = language.locale
+        formatter.numberStyle = .currency; formatter.currencyCode = currency
+        formatter.maximumFractionDigits = 2; formatter.minimumFractionDigits = amount == amount.rounded ? 0 : 2
+        return formatter.string(from: amount as NSDecimalNumber) ?? "\(amount) \(currency)"
+    }
+    func between(_ before: Ledger, _ after: Ledger) -> ChangeDescription {
         var groups: [ChangeDescription] = []
         func records<T: Identifiable & Equatable>(_ old: [T], _ new: [T],
                                                  added: (String, String), removed: (String, String), edited: (String, String),
@@ -68,7 +81,7 @@ enum ChangeDescriptions {
             if old.name != new.name { fields.append("\(clean(old.name)) → \(clean(new.name))") }
             if old.archived != new.archived { fields.append(new.archived ? L("Перемещен в архив") : L("Возвращен из архива")) }
             if old.openingBalance != new.openingBalance || old.currency != new.currency {
-                fields.append(L("Начальный остаток: \(DisplayMoney.string(old.openingBalance, currency: old.currency)) → \(DisplayMoney.string(new.openingBalance, currency: new.currency))"))
+                fields.append(L("Начальный остаток: \(formattedMoney(old.openingBalance, currency: old.currency)) → \(formattedMoney(new.openingBalance, currency: new.currency))"))
             }
             if old.bankFeePercent != new.bankFeePercent { fields.append(L("Комиссия: \(Money.plain(old.bankFeePercent))% → \(Money.plain(new.bankFeePercent))%")) }
             if old.kind != new.kind { fields.append(L("Тип счета: \(L(old.kind.title)) → \(L(new.kind.title))")) }
@@ -87,7 +100,7 @@ enum ChangeDescriptions {
         })
         records(before.budgets, after.budgets,
                 added: ("Добавление бюджета", "Добавление бюджетов"), removed: ("Удаление бюджета", "Удаление бюджетов"),
-                edited: ("Изменение бюджета", "Изменение бюджетов"), name: { "\(category($0.categoryID, in: after)) · \(DisplayMoney.string($0.limit, currency: after.preferences.baseCurrency))" })
+                edited: ("Изменение бюджета", "Изменение бюджетов"), name: { "\(category($0.categoryID, in: after)) · \(formattedMoney($0.limit, currency: after.preferences.baseCurrency))" })
         records(before.goals, after.goals,
                 added: ("Добавление цели", "Добавление целей"), removed: ("Удаление цели", "Удаление целей"),
                 edited: ("Изменение цели", "Изменение целей"), name: { clean($0.name) })
@@ -129,15 +142,15 @@ enum ChangeDescriptions {
         return ChangeDescription(title: L("Несколько изменений"), detail: groups.map { "\($0.title): \($0.detail)" }.joined(separator: "\n"))
     }
 
-    private static func clean(_ text: String) -> String {
+    private func clean(_ text: String) -> String {
         String(text.split(whereSeparator: { $0.isNewline }).joined(separator: " ").prefix(120))
     }
-    private static func category(_ id: UUID?, in ledger: Ledger) -> String { ledger.category(id).map { clean($0.name) } ?? L("Без категории") }
-    private static func date(_ value: Date) -> String { value.formatted(.dateTime.day().month(.abbreviated).year().locale(L10n.locale)) }
-    private static func money(_ amount: Decimal, account: UUID, in ledger: Ledger) -> String {
-        DisplayMoney.string(amount, currency: ledger.account(account)?.currency ?? ledger.preferences.baseCurrency)
+    private func category(_ id: UUID?, in ledger: Ledger) -> String { ledger.category(id).map { clean($0.name) } ?? L("Без категории") }
+    private func date(_ value: Date) -> String { value.formatted(.dateTime.day().month(.abbreviated).year().locale(language.locale)) }
+    private func money(_ amount: Decimal, account: UUID, in ledger: Ledger) -> String {
+        formattedMoney(amount, currency: ledger.account(account)?.currency ?? ledger.preferences.baseCurrency)
     }
-    private static func transaction(_ value: Transaction, in ledger: Ledger) -> String {
+    private func transaction(_ value: Transaction, in ledger: Ledger) -> String {
         let name = value.merchant.isEmpty ? L("Без описания") : clean(value.merchant)
         return "\(name) · \(money(value.amount, account: value.accountID, in: ledger)) · \(date(value.date))"
     }

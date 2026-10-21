@@ -1,13 +1,20 @@
 import XCTest
+import os
 @testable import FinanceCore
 
 private final class CloudStubProtocol: URLProtocol {
-    static var handler: ((URLRequest) throws -> (Int, Data))?
+    // Test callbacks are installed before requests and executed under this lock.
+    private static let handlers = OSAllocatedUnfairLock<((URLRequest) throws -> (Int, Data))?>(uncheckedState: nil)
+    static var handler: ((URLRequest) throws -> (Int, Data))? {
+        get { handlers.withLockUnchecked { $0 } }
+        set { handlers.withLockUnchecked { $0 = newValue } }
+    }
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
+        let request = request
         do {
-            let (status, data) = try Self.handler!(request)
+            let (status, data) = try Self.handlers.withLockUnchecked { try $0!(request) }
             let response = HTTPURLResponse(url: request.url!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: data); client?.urlProtocolDidFinishLoading(self)

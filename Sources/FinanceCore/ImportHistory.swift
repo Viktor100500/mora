@@ -1,6 +1,6 @@
 import Foundation
 
-public struct ImportBatch: Identifiable, Codable, Equatable {
+public struct ImportBatch: Identifiable, Codable, Equatable, Sendable {
     public var id: UUID
     public var filename: String
     public var source: String
@@ -16,7 +16,7 @@ public struct ImportBatch: Identifiable, Codable, Equatable {
     public var rolledBackAt: Date?
 }
 
-public struct ImportRollbackPreview {
+public struct ImportRollbackPreview: Sendable {
     public var remaining: Int
     public var modified: Int
     public var missing: Int

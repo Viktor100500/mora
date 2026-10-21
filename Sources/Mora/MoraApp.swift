@@ -4,6 +4,7 @@ import FinanceCore
 
 @main
 struct MoraApp: App {
+    @NSApplicationDelegateAdaptor(MoraApplicationDelegate.self) private var appDelegate
     @StateObject private var store = FinanceStore()
     @StateObject private var cloud = CloudSync()
     @StateObject private var categorizer = MerchantCategorizer()
@@ -17,13 +18,21 @@ struct MoraApp: App {
                 .tint(.moraGreen)
                 .environment(\.locale, L10n.locale)
                 .preferredColorScheme(store.ledger.preferences.appearance == "light" ? .light : store.ledger.preferences.appearance == "dark" ? .dark : nil)
-                .onAppear { NSApplication.shared.setActivationPolicy(.regular); NSApplication.shared.activate(ignoringOtherApps: true) }
-                .onOpenURL { url in
+                .onAppear {
+                    NSApplication.shared.setActivationPolicy(.regular); NSApplication.shared.activate(ignoringOtherApps: true)
+                    appDelegate.finishPendingWrites = {
+                        store.beginTermination()
+                        await cloud.finishPendingWrites()
+                        await categorizer.finishPendingWrites()
+                        await store.finishPendingWrites()
+                    }
+                }
+                .onOpenURL { url in Task { @MainActor in
                     guard url.isFileURL, url.pathExtension.lowercased() == "csv" else { return }
                     openWindow(id: "main")
                     NSApplication.shared.activate(ignoringOtherApps: true)
-                    if let file = readCSV(at: url, store: store) { sheet = .csv(file.0, file.1) }
-                }
+                    if let file = await readCSV(at: url, store: store) { sheet = .csv(file.0, file.1) }
+                } }
                 .task { await cloud.run(store: store) }
                 .task { await categorizer.run(store: store) }
         }
@@ -36,16 +45,16 @@ struct MoraApp: App {
             CommandGroup(replacing: .newItem) {
                 Button(L("Новая операция")) { sheet = .transaction(nil) }.keyboardShortcut("n")
                 Button(L("Импортировать CSV…")) { importFile() }.keyboardShortcut("i")
-                Button(L("Экспортировать операции…")) { store.exportCSV() }.keyboardShortcut("e", modifiers: [.command, .shift])
+                Button(L("Экспортировать операции…")) { Task { @MainActor in  await store.exportCSV()  } }.keyboardShortcut("e", modifiers: [.command, .shift])
             }
             CommandMenu(L("Финансы")) {
                 Button(L("Добавить счет")) { sheet = .account(nil) }
                 if store.ledger.preferences.showBudgets { Button(L("Создать бюджет")) { sheet = .budget(nil) } }
                 if store.ledger.preferences.showGoals { Button(L("Создать цель")) { sheet = .goal(nil) } }
                 Divider()
-                Button(store.undoDescription.map { L("Отменить: \($0.title)") } ?? L("Отменить последнее изменение")) { store.undo() }.keyboardShortcut("z", modifiers: [.command, .option]).disabled(store.undoCount == 0)
-                Button(store.redoDescription.map { L("Вернуть: \($0.title)") } ?? L("Вернуть последнее изменение")) { store.redo() }.keyboardShortcut("z", modifiers: [.command, .option, .shift]).disabled(store.redoCount == 0)
-                Button(L("Сохранить резервную копию…")) { store.backup() }
+                Button(store.undoDescription.map { L("Отменить: \($0.title)") } ?? L("Отменить последнее изменение")) { Task { @MainActor in  await store.undo()  } }.keyboardShortcut("z", modifiers: [.command, .option]).disabled(store.undoCount == 0)
+                Button(store.redoDescription.map { L("Вернуть: \($0.title)") } ?? L("Вернуть последнее изменение")) { Task { @MainActor in  await store.redo()  } }.keyboardShortcut("z", modifiers: [.command, .option, .shift]).disabled(store.redoCount == 0)
+                Button(L("Сохранить резервную копию…")) { Task { @MainActor in  await store.backup()  } }
                 Button(L("Общая база и Apple Pay…")) { openWindow(id: "cloud") }
             }
         }
@@ -53,26 +62,28 @@ struct MoraApp: App {
             CloudSettingsView().environmentObject(store).environmentObject(cloud).environmentObject(categorizer).tint(.moraGreen).environment(\.locale, L10n.locale).id(language)
         }.defaultSize(width: 760, height: 800)
     }
-    private func importFile() {
-        if let file = openCSV(store: store) { sheet = .csv(file.0, file.1) }
-    }
+    private func importFile() { Task { @MainActor in
+        if let file = await openCSV(store: store) { sheet = .csv(file.0, file.1) }
+    } }
 }
 
 @MainActor
-func openCSV(store: FinanceStore) -> (CSVTable, String)? {
+func openCSV(store: FinanceStore) async -> (CSVTable, String)? {
     let panel = NSOpenPanel(); panel.allowedContentTypes = [.commaSeparatedText, .plainText]; panel.allowsMultipleSelection = false; panel.canChooseDirectories = false
     guard panel.runModal() == .OK, let url = panel.url else { return nil }
-    return readCSV(at: url, store: store)
+    return await readCSV(at: url, store: store)
 }
 
 @MainActor
-func readCSV(at url: URL, store: FinanceStore) -> (CSVTable, String)? {
+func readCSV(at url: URL, store: FinanceStore) async -> (CSVTable, String)? {
     let scoped = url.startAccessingSecurityScopedResource()
     defer { if scoped { url.stopAccessingSecurityScopedResource() } }
     do {
-        let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-        guard size <= 20_000_000 else { throw LedgerError.invalid(L("Файл больше 20 МБ. Разделите его на части.")) }
-        return (try CSVTable.read(Data(contentsOf: url)), url.lastPathComponent)
+        return try await BackgroundWork.shared.perform {
+            let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+            guard size <= 20_000_000 else { throw LedgerError.invalid(L("Файл больше 20 МБ. Разделите его на части.")) }
+            return (try CSVTable.read(Data(contentsOf: url)), url.lastPathComponent)
+        }
     } catch { store.error = error.localizedDescription; return nil }
 }
 
@@ -162,12 +173,15 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 1040, minHeight: 700)
-        .onAppear {
+        .disabled(store.isLoading || store.isTerminating)
+        .overlay { if store.isLoading { ProgressView().controlSize(.large) } }
+        .task {
+            await store.load()
             if store.isDemo && !didSeeWelcome && !CommandLine.arguments.contains("--demo") && sheet == nil {
                 sheet = .welcome
             }
         }
-        .onReceive(dataRefresh) { _ in store.reloadFromDisk() }
+        .onReceive(dataRefresh) { _ in Task { @MainActor in  await store.reloadFromDisk()  } }
         .onReceive(store.notifications.$navigation) { request in
             if case .page(let destination) = request?.destination { page = destination }
         }
@@ -178,6 +192,7 @@ struct ContentView: View {
                 do { try await Task.sleep(for: .seconds(900)) } catch { return }
             }
         }
+        .onChange(of: language) { _, _ in Task { await store.reloadFromDisk() } }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await store.refreshExchangeRates() } }
         }
@@ -203,8 +218,8 @@ struct ContentView: View {
             Group {
                 switch value {
                 case .welcome:
-                    WelcomeView(start: { currency in
-                        if store.startClean(baseCurrency: currency) {
+                    WelcomeView(start: { currency in Task { @MainActor in
+                        if await store.startClean(baseCurrency: currency) {
                             didSeeWelcome = true; page = .accounts
                             sheet = nil
                             Task { @MainActor in
@@ -212,7 +227,7 @@ struct ContentView: View {
                                 sheet = .account(nil)
                             }
                         }
-                    }, explore: { didSeeWelcome = true; sheet = nil })
+                     } }, explore: { didSeeWelcome = true; sheet = nil })
                 case .transaction(let t): TransactionEditor(transaction: t, ledger: store.ledger)
                 case .similar(let t): TransactionEditor(template: t, ledger: store.ledger)
                 case .split(let t): SplitEditor(transaction: t)
@@ -229,28 +244,28 @@ struct ContentView: View {
         }
         .modifier(FinanceErrorAlert(active: sheet == nil))
         .confirmationDialog(L("Начать свой учет?"), isPresented: $confirmStart, titleVisibility: .visible) {
-            Button(L("Начать с чистого листа")) { store.startClean(); page = .accounts; sheet = .account(nil) }
+            Button(L("Начать с чистого листа")) { Task { @MainActor in  await store.startClean(); page = .accounts; sheet = .account(nil)  } }
         } message: { Text(L("Демонстрационные данные будут убраны. Затем можно добавить счета и импортировать свои операции.")) }
         .confirmationDialog(L("Отменить импорт с измененными операциями?"), isPresented: Binding(get: { rollbackRequest != nil }, set: { if !$0 { rollbackRequest = nil } }), titleVisibility: .visible) {
             if let id = rollbackRequest {
-                Button(L("Отменить импорт"), role: .destructive) { store.rollbackImport(id, allowModified: true); rollbackRequest = nil }
+                Button(L("Отменить импорт"), role: .destructive) { Task { @MainActor in  await store.rollbackImport(id, allowModified: true); rollbackRequest = nil  } }
             }
             Button(L("Сохранить операции"), role: .cancel) { rollbackRequest = nil }
         } message: {
-            if let id = rollbackRequest, let preview = try? store.ledger.importRollbackPreview(id) {
+            if let id = rollbackRequest, let preview = store.imports.previews[id] {
                 Text(L("Будет удалено операций: \(preview.remaining). Из них изменено или создано разделением: \(preview.modified). Остальные операции, счета и категории сохранятся. Отмену можно вернуть через меню «Финансы»."))
             }
         }
     }
 
-    private func requestRollback(_ id: UUID) {
-        store.reloadFromDisk()
+    private func requestRollback(_ id: UUID) { Task { @MainActor in
+        await store.reloadFromDisk()
         do {
-            let preview = try store.ledger.importRollbackPreview(id)
+            guard let preview = store.imports.previews[id] else { throw LedgerError.invalid(L("Этот импорт уже отменен или не найден.")) }
             if preview.modified > 0 { rollbackRequest = id }
-            else { store.rollbackImport(id) }
+            else { await store.rollbackImport(id) }
         } catch { store.error = error.localizedDescription }
-    }
+     } }
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -286,7 +301,7 @@ struct ContentView: View {
     }
     private var importControl: some View {
         Menu {
-            Button(L("Из CSV-файла…"), systemImage: "tablecells") { if let file = openCSV(store: store) { sheet = .csv(file.0, file.1) } }
+            Button(L("Из CSV-файла…"), systemImage: "tablecells") { Task { if let file = await openCSV(store: store) { sheet = .csv(file.0, file.1) } } }
             Button(L("Через AI-агента…"), systemImage: "text.bubble") { sheet = .aiImport }
         } label: {
             HStack(spacing: 8) { Image(systemName: "square.and.arrow.down"); Text(L("Импорт")) }

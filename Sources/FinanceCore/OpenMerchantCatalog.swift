@@ -147,7 +147,7 @@ public actor OpenMerchantCatalogClient {
         if let loading { return try await loading.value.group(for: merchant) }
         let session = self.session
         let job = Task.detached(priority: .utility) { () throws -> MerchantCatalog in
-            func download(_ url: URL) async throws -> Data {
+            @Sendable func download(_ url: URL) async throws -> Data {
                 var request = URLRequest(url: url, timeoutInterval: 8)
                 request.setValue("Mora/1.5.8 (merchant catalog)", forHTTPHeaderField: "User-Agent")
                 let (data, response) = try await session.data(for: request)

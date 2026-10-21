@@ -2,7 +2,7 @@ import Foundation
 
 /// Shared Wallet currency detection, automatic booking and review prefill.
 /// A bare dollar symbol is USD; foreign purchases use the regular card conversion.
-public struct WalletReviewDraft {
+public struct WalletReviewDraft: Sendable {
     public static let unknownCurrency = "wallet-unknown-currency"
     public let merchant: String
     public let note: String
@@ -54,7 +54,7 @@ public struct WalletReviewDraft {
     }
 
     public static func automaticTransaction(for capture: CloudCapture, in ledger: Ledger,
-        fetch: (Decimal, String, String, Date) async throws -> CardConversion) async throws -> Transaction? {
+        fetch: @Sendable (Decimal, String, String, Date) async throws -> CardConversion) async throws -> Transaction? {
         let externalID = "wallet:" + capture.id.uuidString.lowercased()
         // A lost booking response must preserve its original quote and fee.
         if let existing = ledger.transactions.first(where: { $0.id == capture.id && $0.externalID == externalID }) {

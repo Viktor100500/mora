@@ -1,10 +1,16 @@
 import XCTest
+import os
 import Combine
 @testable import FinanceCore
 @testable import Mora
 
 private final class SyncStubProtocol: URLProtocol {
-    static var handler: ((URLRequest) throws -> (Int, Data))?
+    // Test callbacks are installed before requests and executed under this lock.
+    private static let handlers = OSAllocatedUnfairLock<((URLRequest) throws -> (Int, Data))?>(uncheckedState: nil)
+    static var handler: ((URLRequest) throws -> (Int, Data))? {
+        get { handlers.withLockUnchecked { $0 } }
+        set { handlers.withLockUnchecked { $0 = newValue } }
+    }
     static func requestBody(_ request: URLRequest) throws -> Data {
         if let data = request.httpBody { return data }
         let stream = try XCTUnwrap(request.httpBodyStream)
@@ -20,8 +26,9 @@ private final class SyncStubProtocol: URLProtocol {
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
+        let request = request
         do {
-            let (status, data) = try Self.handler!(request)
+            let (status, data) = try Self.handlers.withLockUnchecked { try $0!(request) }
             client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: status,
                 httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: data)
@@ -49,13 +56,14 @@ final class CloudSyncTests: XCTestCase {
     private let householdID = UUID()
 
     private func prepare(ledger: Ledger = .empty,
-        walletRate: @escaping (Decimal, String, String, Date) async throws -> CardConversion = {
+        walletRate: @escaping @MainActor @Sendable (Decimal, String, String, Date) async throws -> CardConversion = {
             _, _, _, _ in throw LedgerError.invalid("Test rate unavailable")
         }) async throws {
         directory = FileManager.default.temporaryDirectory.appendingPathComponent("MoraSyncTests-\(UUID())")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try LedgerFile.encode(ledger).write(to: directory.appendingPathComponent("ledger.json"))
         store = FinanceStore(directory: directory)
+        await store.load()
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [SyncStubProtocol.self]
         cloud = CloudSync(store: store, transport: URLSession(configuration: config), walletRate: walletRate, sessionWriter: { _, _ in })

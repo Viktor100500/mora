@@ -11,7 +11,7 @@ typealias Category = FinanceCore.Category
 final class FinanceStore: ObservableObject {
     @Published private(set) var ledger: Ledger {
         didSet {
-            reports = ReportCache(); notificationTokenCache = nil
+            reports = ReportCache()
             let missing = ledger.missingCurrencies
             if !missing.isEmpty, missing != oldValue.missingCurrencies {
                 notifications.record(L("В итогах не учтены валюты без курса: \(missing.joined(separator: ", "))"),
@@ -31,20 +31,16 @@ final class FinanceStore: ObservableObject {
     let notifications: AppNotifications
     var undoCount: Int { ledger.undoCount }
     var redoCount: Int { ledger.redoCount }
-    var undoDescription: ChangeDescription? { ledger.changeHistory?.undo.last.map { ChangeDescriptions.between($0, ledger) } }
-    var redoDescription: ChangeDescription? { ledger.changeHistory?.redo.last.map { ChangeDescriptions.between(ledger, $0) } }
-    var undoDescriptions: [ChangeDescription] {
-        let snapshots = ledger.changeHistory?.undo ?? []
-        return snapshots.indices.reversed().map { index in
-            ChangeDescriptions.between(snapshots[index], index + 1 < snapshots.count ? snapshots[index + 1] : ledger)
-        }
-    }
-    var redoDescriptions: [ChangeDescription] {
-        let snapshots = ledger.changeHistory?.redo ?? []
-        return snapshots.indices.reversed().map { index in
-            ChangeDescriptions.between(index + 1 < snapshots.count ? snapshots[index + 1] : ledger, snapshots[index])
-        }
-    }
+    var undoDescription: ChangeDescription? { undoDescriptions.first }
+    var redoDescription: ChangeDescription? { redoDescriptions.first }
+    @Published private(set) var undoDescriptions: [ChangeDescription] = []
+    @Published private(set) var redoDescriptions: [ChangeDescription] = []
+    @Published private(set) var imports = ImportPresentation()
+    @Published private(set) var revision: UInt64 = 0
+    @Published private(set) var isLoading = true
+    @Published private(set) var isTerminating = false
+    private var pendingWrites = 0
+    private var writeWaiters: [CheckedContinuation<Void, Never>] = []
     @Published private(set) var updatingRates = false
     @Published private(set) var rateUpdateError: String? {
         didSet {
@@ -54,13 +50,13 @@ final class FinanceStore: ObservableObject {
         }
     }
     private var lastRateAttempt: Date?
-    private var lastDiskVersion: DiskVersion?
-    private struct DiskVersion: Equatable { let modified: Date; let size: UInt64; let inode: UInt64 }
     private var writeBlocked = false
-    private var notificationTokenCache: String?
+    private var notificationTokenCache = ""
     private var lastUpdateChanged = false
+    private var loadingTask: Task<Void, Never>?
     var reports = ReportCache()
     let fileURL: URL
+    private let repository: LedgerRepository
 
     init(directory customDirectory: URL? = nil) {
         let args = CommandLine.arguments
@@ -69,38 +65,45 @@ final class FinanceStore: ObservableObject {
         else if let i = args.firstIndex(of: "--data-dir"), args.indices.contains(i + 1) { directory = URL(fileURLWithPath: args[i + 1]) }
         else { directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Mora", isDirectory: true) }
         fileURL = directory.appendingPathComponent("ledger.json")
+        repository = LedgerRepository(fileURL: fileURL, forcedDemo: args.contains("--demo"))
         notifications = AppNotifications(fileURL: args.contains("--demo") ? nil : directory.appendingPathComponent("notification-history.json"))
-        defer { if let error { notifications.record(error, kind: .error) } }
-        // Let MCP reject writes while an older GUI without coordinated saves is open.
-        do {
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            let marker = directory.appendingPathComponent("mcp-app-\(ProcessInfo.processInfo.processIdentifier).json")
-            let data = try JSONSerialization.data(withJSONObject: ["protocol": 4, "launch_time": NSRunningApplication.current.launchDate?.timeIntervalSince1970 ?? Date().timeIntervalSince1970])
-            try data.write(to: marker, options: .atomic)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: marker.path)
-        } catch { /* A missing marker makes MCP request a restart rather than risk overwriting data. */ }
-        if args.contains("--demo") { ledger = .demo(); isDemo = true; return }
-        if FileManager.default.fileExists(atPath: fileURL.path) {
-            do { ledger = try LedgerFile.decode(Data(contentsOf: fileURL)); isDemo = false }
-            catch {
-                if let backup = try? LedgerFile.decode(Data(contentsOf: fileURL.appendingPathExtension("backup"))) {
-                    ledger = backup; isDemo = false
-                    self.error = L("Основной файл не удалось прочитать. Открыта последняя исправная резервная копия. Исходный файл сохранен.")
-                    if let corrupt = try? Data(contentsOf: fileURL) { try? corrupt.write(to: directory.appendingPathComponent("ledger-unreadable-\(Int(Date().timeIntervalSince1970)).json"), options: .atomic) }
-                } else { ledger = .empty; isDemo = false; writeBlocked = true; self.error = L("Не удалось открыть данные: \(error.localizedDescription). Исходный файл сохранен; восстановите резервную копию в настройках.") }
-            }
-        } else { ledger = .demo(); isDemo = true }
+        ledger = .empty; isDemo = false
+    }
+    func load() async {
+        if let loadingTask { await loadingTask.value; return }
+        guard isLoading else { return }
+        let directory = fileURL.deletingLastPathComponent(), launchTime = NSRunningApplication.current.launchDate?.timeIntervalSince1970 ?? Date().timeIntervalSince1970
+        let task = Task { @MainActor in
+            await notifications.load()
+            do {
+                try await BackgroundWork.shared.perform {
+                    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                    let marker = directory.appendingPathComponent("mcp-app-\(ProcessInfo.processInfo.processIdentifier).json")
+                    try JSONSerialization.data(withJSONObject: ["protocol": 4, "launch_time": launchTime]).write(to: marker, options: .atomic)
+                    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: marker.path)
+                }
+                publish(try await repository.load())
+            } catch { self.error = error.localizedDescription; writeBlocked = true }
+            isLoading = false
+        }
+        loadingTask = task
+        await task.value
+        loadingTask = nil
+    }
+    private func publish(_ snapshot: LedgerSnapshot) {
+        guard snapshot.revision > revision else { return }
+        notificationTokenCache = snapshot.token
+        undoDescriptions = snapshot.undoDescriptions; redoDescriptions = snapshot.redoDescriptions
+        imports = snapshot.imports
+        isDemo = snapshot.isDemo; writeBlocked = snapshot.writeBlocked
+        revision = snapshot.revision
+        ledger = snapshot.ledger
+        if let warning = snapshot.warning { error = L(warning) }
     }
     func showNotice(_ message: String, detail: String? = nil, actions: [AppNotificationAction] = []) {
         activeNotice = notifications.record(message, detail: detail, actions: actions)
     }
-    var notificationStateToken: String {
-        if let notificationTokenCache { return notificationTokenCache }
-        guard let data = try? LedgerFile.encode(ledger) else { return "" }
-        let token = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
-        notificationTokenCache = token
-        return token
-    }
+    var notificationStateToken: String { notificationTokenCache }
     var undoNotificationActions: [AppNotificationAction] {
         undoCount > 0 && !notificationStateToken.isEmpty ? [.undo(notificationStateToken)] : []
     }
@@ -109,53 +112,44 @@ final class FinanceStore: ObservableObject {
         switch action {
         case .undo(let token): return undoCount > 0 && !token.isEmpty && token == notificationStateToken
         case .redo(let token): return redoCount > 0 && !token.isEmpty && token == notificationStateToken
-        case .rollbackImport(let id): return (try? ledger.importRollbackPreview(id)) != nil
+        case .rollbackImport(let id): return imports.previews[id] != nil
         default: return true
         }
     }
-    func performHistoryAction(_ action: AppNotificationAction) {
-        reloadFromDisk()
+    func performHistoryAction(_ action: AppNotificationAction) async {
+        await reloadFromDisk()
         guard canPerformNotificationAction(action) else {
             error = L("Это действие больше недоступно: данные уже изменились.")
             return
         }
         switch action {
-        case .undo: undo()
-        case .redo: redo()
+        case .undo(let token): await undo(expectedToken: token)
+        case .redo(let token): await redo(expectedToken: token)
         default: break
         }
     }
-    func reloadFromDisk() {
-        guard !writeBlocked, !(isDemo && CommandLine.arguments.contains("--demo")), FileManager.default.fileExists(atPath: fileURL.path) else { return }
-        do {
-            let attributes = try FileManager.default.attributesOfItem(atPath: fileURL.path)
-            let version = DiskVersion(modified: attributes[.modificationDate] as? Date ?? .distantPast,
-                                      size: (attributes[.size] as? NSNumber)?.uint64Value ?? 0,
-                                      inode: (attributes[.systemFileNumber] as? NSNumber)?.uint64Value ?? 0)
-            guard version != lastDiskVersion else { return }
-            lastDiskVersion = version
-            let latest = try LedgerFile.decode(Data(contentsOf: fileURL))
-            if !isDemo, try LedgerFile.encode(latest) == LedgerFile.encode(ledger) { return }
-            ledger = latest; isDemo = false
-            notice = L("Данные обновлены из MCP или другого окна")
-        } catch { self.error = error.localizedDescription }
+    func reloadFromDisk() async {
+        await load()
+        guard !writeBlocked else { return }
+        do { publish(try await repository.load()) }
+        catch { self.error = error.localizedDescription }
     }
     func refreshExchangeRates(force: Bool = false) async {
-        guard !isDemo, !writeBlocked, ledger.preferences.automaticRates, !updatingRates else { return }
+        guard !isDemo, !writeBlocked, !isTerminating, ledger.preferences.automaticRates, !updatingRates else { return }
         let now = Date()
         guard ExchangeRateRefreshPolicy.shouldRefresh(snapshot: ledger.preferences.exchangeRateSnapshot, lastAttempt: lastRateAttempt, now: now, force: force) else { return }
         lastRateAttempt = now; updatingRates = true; rateUpdateError = nil
-        defer { updatingRates = false }
+        pendingWrites += 1; defer { finishedWrite(); updatingRates = false }
         do {
             let snapshot = try await ExchangeRateClient().fetch(now: now)
             try Task.checkCancellation()
             guard !isDemo, !writeBlocked, ledger.preferences.automaticRates else { return }
-            // Merge into the latest ledger so edits made while downloading remain intact.
-            reloadFromDisk()
-            guard ledger.preferences.automaticRates else { return }
-            var next = ledger
-            try next.applyExchangeRates(snapshot)
-            ledger = try LedgerFile.save(next, to: fileURL, expected: ledger, recordHistory: false)
+            // Apply to the latest locked snapshot; edits made during the request win.
+            let result = try await repository.mutate(recordHistory: false) { ledger in
+                guard ledger.preferences.automaticRates else { return }
+                try ledger.applyExchangeRates(snapshot)
+            }
+            publish(result.snapshot)
         } catch is CancellationError {
             lastRateAttempt = nil
         } catch {
@@ -164,8 +158,8 @@ final class FinanceStore: ObservableObject {
         }
     }
 
-    func setAutomaticRates(_ enabled: Bool) {
-        let success = update { next in
+    func setAutomaticRates(_ enabled: Bool) async {
+        let success = await update { next in
             next.preferences.automaticRates = enabled
             if enabled, let snapshot = next.preferences.exchangeRateSnapshot {
                 next.preferences.rates = try snapshot.rates(in: next.preferences.baseCurrency)
@@ -174,62 +168,69 @@ final class FinanceStore: ObservableObject {
         if success { rateUpdateError = nil; lastRateAttempt = nil }
     }
 
-    @discardableResult
-    func update(_ action: (inout Ledger) throws -> Void) -> Bool {
-        lastUpdateChanged = false
-        do {
-            guard !writeBlocked else { throw LedgerError.invalid(L("Исходный файл не удалось прочитать. Сначала восстановите исправную резервную копию в настройках; текущий файл не будет перезаписан.")) }
-            reloadFromDisk()
-            var next = ledger
-            try action(&next); try next.validate()
-            let changed = next != ledger
-            if !isDemo { next = try LedgerFile.save(next, to: fileURL, expected: ledger) }
-            else if next != ledger { next.recordChange(from: ledger) }
-            ledger = next
-            lastUpdateChanged = changed
-            return true
-        } catch { self.error = error.localizedDescription; return false }
+    func beginTermination() { isTerminating = true }
+    func finishPendingWrites() async {
+        while pendingWrites > 0 { await withCheckedContinuation { writeWaiters.append($0) } }
+        await notifications.flush()
     }
-    func undo() {
-        reloadFromDisk()
-        guard let description = undoDescription else { return }
+    private func finishedWrite() {
+        pendingWrites -= 1
+        if pendingWrites == 0 {
+            let waiters = writeWaiters; writeWaiters.removeAll()
+            for waiter in waiters { waiter.resume() }
+        }
+    }
+    func change<Value: Sendable>(_ action: @escaping @Sendable (inout Ledger) throws -> Value) async -> Value? {
+        guard !isTerminating else { return nil }
+        pendingWrites += 1; defer { finishedWrite() }
+        await load()
         do {
-            if isDemo { try ledger.undoLastChange() }
-            else { ledger = try LedgerFile.undo(at: fileURL, expected: ledger) }
+            let result = try await repository.mutate(action)
+            publish(result.snapshot); lastUpdateChanged = result.changed
+            return result.value
+        } catch { self.error = error.localizedDescription; lastUpdateChanged = false; return nil }
+    }
+    @discardableResult
+    func update(_ action: @escaping @Sendable (inout Ledger) throws -> Void) async -> Bool {
+        await change { ledger in try action(&ledger); return true } ?? false
+    }
+    func undo(expectedToken: String? = nil) async {
+        guard !isTerminating else { return }
+        pendingWrites += 1; defer { finishedWrite() }
+        await reloadFromDisk()
+        guard let description = undoDescription else { return }
+        let token = expectedToken ?? notificationStateToken
+        do {
+            publish(try await repository.moveHistory(undo: true, expectedToken: token))
             showNotice(L("Отменено: \(description.title)"), detail: description.detail, actions: [.redo(notificationStateToken)])
         } catch { self.error = error.localizedDescription }
     }
-    func redo() {
-        reloadFromDisk()
+    func redo(expectedToken: String? = nil) async {
+        guard !isTerminating else { return }
+        pendingWrites += 1; defer { finishedWrite() }
+        await reloadFromDisk()
         guard let description = redoDescription else { return }
+        let token = expectedToken ?? notificationStateToken
         do {
-            if isDemo { try ledger.redoLastChange() }
-            else { ledger = try LedgerFile.redo(at: fileURL, expected: ledger) }
+            publish(try await repository.moveHistory(undo: false, expectedToken: token))
             showNotice(L("Возвращено: \(description.title)"), detail: description.detail, actions: undoNotificationActions)
         } catch { self.error = error.localizedDescription }
     }
-    @discardableResult func startClean(baseCurrency: String = "RUB") -> Bool {
+    @discardableResult func startClean(baseCurrency: String = "RUB") async -> Bool {
+        guard !isTerminating else { return false }
+        pendingWrites += 1; defer { finishedWrite() }
+        await load()
         do {
-            var empty = try Ledger.personal(baseCurrency: baseCurrency)
-            if let snapshot = ledger.preferences.exchangeRateSnapshot {
-                empty.preferences.exchangeRateSnapshot = snapshot
-                empty.preferences.rates = try snapshot.rates(in: empty.preferences.baseCurrency)
-            }
-            var existingData = false
-            let initialized = try LedgerFile.mutate(at: fileURL) { current in
-                // MCP may initialize the real database while the onboarding dialog is open.
-                if FileManager.default.fileExists(atPath: fileURL.path) { existingData = true }
-                else { current = empty }
-            }
-            ledger = initialized; isDemo = false
-            notice = existingData ? L("Открыта ваша существующая база вместо демо") : L("Добавьте счет для учета операций.")
+            let (snapshot, existing) = try await repository.initialize(baseCurrency: baseCurrency)
+            publish(snapshot)
+            notice = existing ? L("Открыта ваша существующая база вместо демо") : L("Добавьте счет для учета операций.")
             lastRateAttempt = nil; Task { await refreshExchangeRates() }
             return true
         } catch { self.error = error.localizedDescription; return false }
     }
     @discardableResult
-    func saveTransaction(_ value: Transaction, replacing originalID: UUID? = nil) -> Bool {
-        update { ledger in
+    func saveTransaction(_ value: Transaction, replacing originalID: UUID? = nil, original: Transaction? = nil) async -> Bool {
+        await update { ledger in
             let existing = originalID.flatMap { id in ledger.transactions.first { $0.id == id } }
             guard originalID == nil || existing != nil else { throw LedgerError.invalid(L("Операция уже удалена.")) }
             guard originalID == nil || originalID == value.id else { throw LedgerError.invalid(L("Идентификатор операции изменился.")) }
@@ -238,73 +239,61 @@ final class FinanceStore: ObservableObject {
             if let destination = value.destinationAccountID {
                 guard ledger.account(destination)?.archived == false || existing?.destinationAccountID == destination else { throw LedgerError.invalid(L("Верните счет из архива перед добавлением операций.")) }
             }
-            replaceOrAppend(value, in: &ledger.transactions)
+            var saved = value
+            if let original, let existing { saved = try value.mergingEditorChanges(from: original, into: existing) }
+            if saved.categoryID == nil && saved.kind != .transfer {
+                saved.categoryID = ledger.suggestedCategory(merchant: saved.merchant, kind: saved.kind)
+            }
+            replaceOrAppend(saved, in: &ledger.transactions)
         }
     }
-    func deleteTransaction(_ id: UUID) { update { $0.transactions.removeAll { $0.id == id } } }
-    func setAccountArchived(_ id: UUID, archived: Bool) {
-        if update({ try $0.setAccountArchived(id, archived: archived) }) {
+    func deleteTransaction(_ id: UUID) async { await update { $0.transactions.removeAll { $0.id == id } } }
+    func setAccountArchived(_ id: UUID, archived: Bool) async {
+        if await update({ try $0.setAccountArchived(id, archived: archived) }) {
             showNotice(archived ? L("Счет архивирован и исключен из расчетов") : L("Счет возвращен из архива"),
                        actions: updatedUndoActions + [.settings])
         }
     }
-    func deleteArchivedAccount(_ id: UUID) {
-        if update({ try $0.deleteArchivedAccount(id) }) {
+    func deleteArchivedAccount(_ id: UUID) async {
+        if await update({ try $0.deleteArchivedAccount(id) }) {
             showNotice(L("Счет удален. Удаление можно отменить в настройках."), actions: updatedUndoActions + [.settings])
         }
     }
     @discardableResult
-    func importPreparedCSV(_ prepared: CSVImportResult, filename: String, expected: Ledger) -> Bool {
-        var batch: ImportBatch?
-        let success = update { current in
+    func importPreparedCSV(_ prepared: CSVImportResult, filename: String, expected: Ledger) async -> Bool {
+        let batch: ImportBatch? = await change { current in
             guard try LedgerFile.equivalent(current, expected), prepared.imported > 0 else { throw LedgerError.invalid(L("Данные изменились после предпросмотра. Проверьте обновленный список и повторите импорт.")) }
             let existing = Set(current.transactions.map(\.id))
             current = prepared.ledger
-            batch = try current.recordImport(addedIDs: Set(current.transactions.map(\.id)).subtracting(existing), filename: filename,
-                                              totalRows: prepared.rows.count, excluded: prepared.excluded, duplicates: prepared.duplicates, invalid: prepared.invalid)
+            guard let batch = try current.recordImport(addedIDs: Set(current.transactions.map(\.id)).subtracting(existing), filename: filename,
+                totalRows: prepared.rows.count, excluded: prepared.excluded, duplicates: prepared.duplicates, invalid: prepared.invalid) else { throw LedgerError.invalid("Нет операций для импорта.") }; return batch
         }
-        if success, let batch {
-            showNotice(L("Добавлено: \(prepared.imported). Исключено: \(prepared.excluded). Повторы: \(prepared.duplicates). Ошибки: \(prepared.invalid)."),
-                       actions: [.rollbackImport(batch.id), .imports])
-        }
-        return success
+        guard let batch else { return false }
+        showNotice(L("Добавлено: \(prepared.imported). Исключено: \(prepared.excluded). Повторы: \(prepared.duplicates). Ошибки: \(prepared.invalid)."), actions: [.rollbackImport(batch.id), .imports])
+        return true
     }
     @discardableResult
-    func importCSV(_ table: CSVTable, mapping: CSVMapping, filename: String, expected: Ledger) -> Bool {
-        var prepared: CSVImportResult?
-        var batch: ImportBatch?
-        let success = update { current in
-            guard try LedgerFile.equivalent(current, expected) else { throw LedgerError.invalid(L("Данные изменились после предпросмотра. Проверьте обновленный список и повторите импорт.")) }
-            let result = try CSVImporter.prepare(table, mapping: mapping, ledger: current)
-            guard result.imported > 0, result.invalid == 0 || mapping.skipInvalid else { throw LedgerError.invalid(L("Выберите операции и исправьте ошибки перед импортом.")) }
-            let existing = Set(current.transactions.map(\.id))
-            current = result.ledger
-            batch = try current.recordImport(addedIDs: Set(current.transactions.map(\.id)).subtracting(existing), filename: filename,
-                                              totalRows: table.rows.count, excluded: result.excluded, duplicates: result.duplicates, invalid: result.invalid)
-            prepared = result
-        }
-        if success, let result = prepared, let batch {
-            showNotice(L("Добавлено: \(result.imported). Исключено: \(result.excluded). Повторы: \(result.duplicates). Ошибки: \(result.invalid)."),
-                       actions: [.rollbackImport(batch.id), .imports])
-        }
-        return success
+    func importCSV(_ table: CSVTable, mapping: CSVMapping, filename: String, expected: Ledger) async -> Bool {
+        do {
+            let prepared = try await BackgroundWork.shared.perform { try CSVImporter.prepare(table, mapping: mapping, ledger: expected) }
+            guard prepared.imported > 0, prepared.invalid == 0 || mapping.skipInvalid else { throw LedgerError.invalid(L("Выберите операции и исправьте ошибки перед импортом.")) }
+            return await importPreparedCSV(prepared, filename: filename, expected: expected)
+        } catch { self.error = error.localizedDescription; return false }
     }
-    func rollbackImport(_ id: UUID, allowModified: Bool = false) {
-        var removed = 0
+    func rollbackImport(_ id: UUID, allowModified: Bool = false) async {
         let filename = ledger.importHistory.first { $0.id == id }?.filename ?? L("Импорт")
-        if update({ removed = try $0.rollbackImport(id, allowModified: allowModified) }) {
-            showNotice(L("Импорт отменен: \(filename)"), detail: L("Удалено операций: \(removed)"), actions: updatedUndoActions + [.imports])
-        }
+        let removed: Int? = await change { try $0.rollbackImport(id, allowModified: allowModified) }
+        if let removed { showNotice(L("Импорт отменен: \(filename)"), detail: L("Удалено операций: \(removed)"), actions: updatedUndoActions + [.imports]) }
     }
-    func deleteCategory(_ id: UUID) {
-        update { ledger in
+    func deleteCategory(_ id: UUID) async {
+        await update { ledger in
             for i in ledger.transactions.indices where ledger.transactions[i].categoryID == id { ledger.transactions[i].categoryID = nil }
             for i in ledger.recurring.indices where ledger.recurring[i].categoryID == id { ledger.recurring[i].categoryID = nil }
             ledger.budgets.removeAll { $0.categoryID == id }; ledger.rules.removeAll { $0.categoryID == id }; ledger.categories.removeAll { $0.id == id }
         }
     }
-    func pay(_ payment: RecurringPayment) {
-        let success = update { ledger in
+    func pay(_ payment: RecurringPayment) async {
+        let success = await update { ledger in
             guard let index = ledger.recurring.firstIndex(where: { $0.id == payment.id }) else { return }
             guard ledger.account(payment.accountID)?.archived == false else { throw LedgerError.invalid(L("Верните счет из архива перед учетом платежа.")) }
             let id = "recurring:\(payment.id):\(Dates.string(payment.nextDate))"
@@ -314,44 +303,51 @@ final class FinanceStore: ObservableObject {
         }
         if success { showNotice(L("Платеж добавлен в операции"), actions: updatedUndoActions) }
     }
-    func applyRules() {
-        var count = 0
-        let success = update { ledger in
+    func applyRules() async {
+        let count: Int? = await change { ledger in
+            var count = 0
             for i in ledger.transactions.indices where ledger.transactions[i].categoryID == nil && ledger.transactions[i].kind != .transfer {
                 if let id = ledger.matchingCategory(merchant: ledger.transactions[i].merchant, kind: ledger.transactions[i].kind) { ledger.transactions[i].categoryID = id; count += 1 }
             }
+            return count
         }
-        if success { showNotice(L("Категоризировано операций: \(count)"), actions: updatedUndoActions) }
+        if let count { showNotice(L("Категоризировано операций: \(count)"), actions: updatedUndoActions) }
     }
-    func exportCSV(_ transactions: [Transaction]? = nil) {
+    func exportCSV(_ transactions: [Transaction]? = nil) async {
+        guard !isTerminating else { return }
+        pendingWrites += 1; defer { finishedWrite() }
         let panel = NSSavePanel(); panel.allowedContentTypes = [.commaSeparatedText]; panel.nameFieldStringValue = "Mora-\(Dates.string(Date())).csv"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do { try CSVImporter.export(ledger, transactions: transactions).write(to: url, atomically: true, encoding: .utf8); notice = L("CSV сохранен") }
+        let snapshot = ledger
+        do { try await BackgroundWork.shared.perform { try CSVImporter.export(snapshot, transactions: transactions).write(to: url, atomically: true, encoding: .utf8) }; notice = L("CSV сохранен") }
         catch { self.error = error.localizedDescription }
     }
-    func backup() {
+    func backup() async {
+        guard !isTerminating else { return }
+        pendingWrites += 1; defer { finishedWrite() }
         let panel = NSSavePanel(); panel.allowedContentTypes = [.json]; panel.nameFieldStringValue = "Mora-backup-\(Dates.string(Date())).json"
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        do { try LedgerFile.encode(ledger).write(to: url, options: .atomic); notice = L("Резервная копия сохранена") }
+        let snapshot = ledger
+        do { try await BackgroundWork.shared.perform { try LedgerFile.encode(snapshot).write(to: url, options: .atomic) }; notice = L("Резервная копия сохранена") }
         catch { self.error = error.localizedDescription }
     }
-    func readBackup() -> Ledger? {
+    func readBackup() async -> Ledger? {
         let panel = NSOpenPanel(); panel.allowedContentTypes = [.json]; panel.canChooseDirectories = false; panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return nil }
-        do { return try LedgerFile.decode(Data(contentsOf: url)) }
+        do { return try await BackgroundWork.shared.perform { try LedgerFile.decode(Data(contentsOf: url)) } }
         catch { self.error = error.localizedDescription; return nil }
     }
-    func restore(_ ledger: Ledger) {
+    func restore(_ ledger: Ledger) async {
+        guard !isTerminating else { return }
+        pendingWrites += 1; defer { finishedWrite() }
+        await load()
         do {
-            if writeBlocked, FileManager.default.fileExists(atPath: fileURL.path) {
-                let original = try Data(contentsOf: fileURL)
-                try original.write(to: fileURL.deletingLastPathComponent().appendingPathComponent("ledger-unreadable-\(Int(Date().timeIntervalSince1970)).json"), options: .atomic)
-            }
-            self.ledger = try LedgerFile.save(ledger, to: fileURL)
-            isDemo = false; writeBlocked = false; notice = L("Данные восстановлены")
+            publish(try await repository.restore(ledger))
+            notice = L("Данные восстановлены")
             lastRateAttempt = nil; rateUpdateError = nil; Task { await refreshExchangeRates() }
         } catch { self.error = error.localizedDescription }
     }
+
 }
 
 enum Page: String, CaseIterable, Identifiable {

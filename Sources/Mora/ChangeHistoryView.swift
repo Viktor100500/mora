@@ -8,10 +8,10 @@ struct ChangeHistoryCard: View {
             VStack(alignment: .leading, spacing: 18) {
                 SectionHeading(title: L("История изменений"), subtitle: L("Один клик отменяет или возвращает один шаг"))
                 historyAction(description: store.undoDescription, title: L("Будет отменено"), empty: L("Нет изменений для отмены"),
-                              button: L("Отменить"), icon: "arrow.uturn.backward", action: store.undo)
+                              button: L("Отменить"), icon: "arrow.uturn.backward", action: { Task { await store.undo() } })
                 Divider()
                 historyAction(description: store.redoDescription, title: L("Будет возвращено"), empty: L("Нет изменений для возврата"),
-                              button: L("Вернуть"), icon: "arrow.uturn.forward", action: store.redo)
+                              button: L("Вернуть"), icon: "arrow.uturn.forward", action: { Task { await store.redo() } })
                 if store.undoCount + store.redoCount > 0 {
                     DisclosureGroup(L("Показать сохранённые шаги")) {
                         ScrollView {

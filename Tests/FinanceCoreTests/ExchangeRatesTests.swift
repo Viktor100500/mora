@@ -1,4 +1,5 @@
 import XCTest
+import os
 @testable import FinanceCore
 
 final class ExchangeRatesTests: XCTestCase {
@@ -132,12 +133,18 @@ final class ExchangeRatesTests: XCTestCase {
 }
 
 private final class RateURLProtocol: URLProtocol {
-    static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))?
+    // Test callbacks are installed before requests and executed under this lock.
+    private static let handlers = OSAllocatedUnfairLock<((URLRequest) throws -> (HTTPURLResponse, Data))?>(uncheckedState: nil)
+    static var handler: ((URLRequest) throws -> (HTTPURLResponse, Data))? {
+        get { handlers.withLockUnchecked { $0 } }
+        set { handlers.withLockUnchecked { $0 = newValue } }
+    }
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
+        let request = request
         do {
-            let (response, data) = try Self.handler!(request)
+            let (response, data) = try Self.handlers.withLockUnchecked { try $0!(request) }
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: data)
             client?.urlProtocolDidFinishLoading(self)

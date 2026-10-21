@@ -56,6 +56,7 @@ struct AIImportView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var mode = "mora-csv"
     @State private var prompt = ""
+    @State private var promptWork: Task<Void, Never>?
     private var agent: AIAgent { AIAgent(rawValue: store.ledger.preferences.aiAgent) ?? .chatgpt }
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -63,7 +64,7 @@ struct AIImportView: View {
             HStack {
                 Text(L("AI-агент"))
                 Spacer()
-                Picker(L("AI-агент"), selection: Binding(get: { agent.rawValue }, set: { value in store.update { $0.preferences.aiAgent = value } })) {
+                Picker(L("AI-агент"), selection: Binding(get: { agent.rawValue }, set: { value in Task { @MainActor in  await store.update { $0.preferences.aiAgent = value }  } })) {
                     ForEach(AIAgent.allCases) { Text(L($0.title)).tag($0.rawValue) }
                 }.labelsHidden().frame(width: 180)
             }
@@ -85,10 +86,16 @@ struct AIImportView: View {
             .onChange(of: store.ledger.categories) { _, _ in rebuild() }
     }
     private func rebuild() {
-        // On first launch, provide an empty personal context instead of demo accounts.
-        let ledger = store.isDemo ? Ledger.empty : store.ledger
-        do { prompt = try AIPrompt.text(mode, ledger: ledger, includeContext: true, dataDirectory: store.fileURL.deletingLastPathComponent()) }
-        catch { prompt = ""; store.error = error.localizedDescription }
+        promptWork?.cancel()
+        let ledger = store.isDemo ? Ledger.empty : store.ledger.withoutChangeHistory()
+        let mode = mode, directory = store.fileURL.deletingLastPathComponent()
+        promptWork = Task { @MainActor in
+            do {
+                let value = try await BackgroundWork.shared.perform { try AIPrompt.text(mode, ledger: ledger, includeContext: true, dataDirectory: directory) }
+                guard !Task.isCancelled else { return }
+                prompt = value
+            } catch { if !Task.isCancelled { prompt = ""; store.error = error.localizedDescription } }
+        }
     }
     private func openAgent() {
         AIPrompt.copy(prompt)

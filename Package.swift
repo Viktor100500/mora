@@ -12,5 +12,5 @@ let package = Package(
         .testTarget(name: "FinanceCoreTests", dependencies: ["FinanceCore"]),
         .testTarget(name: "MoraTests", dependencies: ["Mora"])
     ],
-    swiftLanguageModes: [.v5]
+    swiftLanguageModes: [.v6]
 )

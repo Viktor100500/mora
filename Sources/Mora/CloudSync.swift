@@ -25,26 +25,27 @@ final class CloudSync: ObservableObject {
     @Published var invitation: String?
     @Published var issuedToken: String?
     private weak var store: FinanceStore?
-    private let walletRate: (Decimal, String, String, Date) async throws -> CardConversion
+    private let walletRate: @MainActor @Sendable (Decimal, String, String, Date) async throws -> CardConversion
     private let transport: URLSession
-    private let sessionWriter: (Data, String) throws -> Void
+    private let sessionWriter: @Sendable (Data, String) throws -> Void
     private var operationInProgress = false
+    private var stopping = false
     private var operationWaiters: [CheckedContinuation<Void, Never>] = []
     private var session: CloudSession?
     private var settings: Settings?
     private var failureCount = 0
     private var nextAttempt = Date.distantPast
     init(store: FinanceStore? = nil, transport: URLSession = .shared,
-         walletRate: @escaping (Decimal, String, String, Date) async throws -> CardConversion = {
+         walletRate: @escaping @MainActor @Sendable (Decimal, String, String, Date) async throws -> CardConversion = {
              try await VisaRateClient.shared.conversion(amount: $0, from: $1, to: $2, date: $3)
          },
-         sessionWriter: @escaping (Data, String) throws -> Void = { try CloudKeychain.write($0, account: $1) }) {
+         sessionWriter: @escaping @Sendable (Data, String) throws -> Void = { try CloudKeychain.write($0, account: $1) }) {
         self.store = store
         self.transport = transport
         self.walletRate = walletRate
         self.sessionWriter = sessionWriter
     }
-    private struct Settings: Codable {
+    private struct Settings: Codable, Sendable {
         var configuration: CloudConfiguration
         var email: String
         var userID: UUID
@@ -52,22 +53,22 @@ final class CloudSync: ObservableObject {
         var householdName: String
         var enabled: Bool
     }
-    private struct Checkpoint: Codable {
+    private struct Checkpoint: Codable, Sendable {
         let projectURL: URL
         let userID: UUID
         let envelope: CloudEnvelope
     }
-    private struct HouseholdBody: Encodable { let p_household_id: UUID }
-    private struct WalletImportResult: Decodable { let envelope: CloudEnvelope; let batch_id: UUID? }
-    private struct Status: Decodable { let version: Int64; let pending_count: Int }
-    private struct CreateBody: Encodable { let p_name: String; let p_snapshot: Ledger }
-    private struct SaveBody: Encodable { let p_household_id: UUID; let p_version: Int64; let p_snapshot: Ledger }
-    private struct TokenBody: Encodable { let p_household_id: UUID; let p_account_id: UUID; let p_label: String }
-    private struct ResolveBody: Encodable {
+    private struct HouseholdBody: Encodable, Sendable { let p_household_id: UUID }
+    private struct WalletImportResult: Decodable, Sendable { let envelope: CloudEnvelope; let batch_id: UUID? }
+    private struct Status: Decodable, Sendable { let version: Int64; let pending_count: Int }
+    private struct CreateBody: Encodable, Sendable { let p_name: String; let p_snapshot: Ledger }
+    private struct SaveBody: Encodable, Sendable { let p_household_id: UUID; let p_version: Int64; let p_snapshot: Ledger }
+    private struct TokenBody: Encodable, Sendable { let p_household_id: UUID; let p_account_id: UUID; let p_label: String }
+    private struct ResolveBody: Encodable, Sendable {
         let p_household_id: UUID; let p_capture_id: UUID; let p_account_id: UUID
         let p_amount: String; let p_merchant: String; let p_dismiss: Bool
     }
-    private struct ReviewBody: Encodable {
+    private struct ReviewBody: Encodable, Sendable {
         let p_household_id: UUID; let p_capture_id: UUID; let p_transaction: Transaction
     }
     var projectURL: String { settings?.configuration.projectURL.absoluteString ?? "" }
@@ -82,48 +83,61 @@ final class CloudSync: ObservableObject {
 
     func run(store: FinanceStore) async {
         self.store = store
-        load()
+        await store.load()
+        await load()
         while !Task.isCancelled {
             if enabled && signedIn && !store.isDemo && Date() >= nextAttempt { await synchronize(inBackground: true) }
             do { try await Task.sleep(for: .seconds(8)) } catch { return }
         }
     }
-    private func load() {
-        guard let configURL, let data = try? Data(contentsOf: configURL) else { return }
+    private func load() async {
+        guard let configURL else { return }
+        let account = keychainAccount
         do {
-            let stored = try JSONDecoder().decode(Settings.self, from: data)
-            _ = try CloudConfiguration(projectURL: stored.configuration.projectURL, publicKey: stored.configuration.publicKey)
+            let loaded: (Settings, CloudSession?)? = try await BackgroundWork.credentials.perform {
+                guard FileManager.default.fileExists(atPath: configURL.path) else { return nil }
+                let stored = try JSONDecoder().decode(Settings.self, from: Data(contentsOf: configURL))
+                _ = try CloudConfiguration(projectURL: stored.configuration.projectURL, publicKey: stored.configuration.publicKey)
+                let session = try CloudKeychain.read(account: account).map { try JSONDecoder().decode(CloudSession.self, from: $0) }
+                if let session, session.user.id != stored.userID { throw LedgerError.invalid("Облачная сессия относится к другому пользователю. Войдите повторно.") }
+                return (stored, session)
+            }
+            guard let (stored, loadedSession) = loaded else { return }
             settings = stored; configured = true; email = stored.email; householdID = stored.householdID
             householdName = stored.householdName; enabled = stored.enabled
-            if let bytes = try CloudKeychain.read(account: keychainAccount) {
-                let loaded = try JSONDecoder().decode(CloudSession.self, from: bytes)
-                guard loaded.user.id == stored.userID else { throw LedgerError.invalid("Облачная сессия относится к другому пользователю. Войдите повторно.") }
-                session = loaded; signedIn = true
-            }
+            session = loadedSession; signedIn = loadedSession != nil
         } catch { self.error = error.localizedDescription }
     }
-    private func write<T: Encodable>(_ value: T, to url: URL) throws {
-        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601; encoder.outputFormatting = [.sortedKeys]
-        try encoder.encode(value).write(to: url, options: .atomic)
-        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+    private func write<T: Encodable & Sendable>(_ value: T, to url: URL) async throws {
+        try await BackgroundWork.shared.perform {
+            let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601; encoder.outputFormatting = [.sortedKeys]
+            try encoder.encode(value).write(to: url, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+        }
     }
-    private func persistSettings() throws {
+    private func persistSettings() async throws {
         guard let settings, let configURL else { return }
-        try write(settings, to: configURL)
+        try await write(settings, to: configURL)
     }
-    private func persistSession(_ value: CloudSession) throws {
-        try sessionWriter(JSONEncoder().encode(value), keychainAccount)
+    private func persistSession(_ value: CloudSession) async throws {
+        let writer = sessionWriter, account = keychainAccount
+        try await BackgroundWork.credentials.perform { try writer(JSONEncoder().encode(value), account) }
         session = value
         if !signedIn { signedIn = true }
     }
+    func finishPendingWrites() async {
+        stopping = true
+        while operationInProgress { await withCheckedContinuation { operationWaiters.append($0) } }
+    }
     private func operation(inBackground: Bool = false, _ action: () async throws -> Void) async {
+        guard !stopping else { return }
         if inBackground && operationInProgress { return }
         // A click during a background request waits instead of being dropped.
         while operationInProgress {
             await withCheckedContinuation { operationWaiters.append($0) }
-            if Task.isCancelled { return }
+            if Task.isCancelled || stopping { return }
         }
-        guard !Task.isCancelled else { return }
+        guard !Task.isCancelled, !stopping else { return }
         operationInProgress = true
         if !inBackground { busy = true }
         defer {
@@ -142,15 +156,15 @@ final class CloudSync: ObservableObject {
             if self.error != error.localizedDescription { self.error = error.localizedDescription }
         }
     }
-    private func rpc<B: Encodable, R: Decodable>(_ function: String, _ body: B) async throws -> R {
+    private func rpc<B: Encodable & Sendable, R: Decodable & Sendable>(_ function: String, _ body: B) async throws -> R {
         guard let settings, var session else { throw CloudAPIError.unauthorized }
         let api = CloudAPI(configuration: settings.configuration, transport: transport)
         if session.expires_at < Date().timeIntervalSince1970 + 60 {
-            session = try await refreshedSession(api, token: session.refresh_token); try persistSession(session)
+            session = try await refreshedSession(api, token: session.refresh_token); try await persistSession(session)
         }
         do { return try await api.rpc(function, body, accessToken: session.access_token) }
         catch CloudAPIError.unauthorized {
-            let refreshed = try await refreshedSession(api, token: session.refresh_token); try persistSession(refreshed)
+            let refreshed = try await refreshedSession(api, token: session.refresh_token); try await persistSession(refreshed)
             return try await api.rpc(function, body, accessToken: refreshed.access_token)
         }
     }
@@ -173,13 +187,13 @@ final class CloudSync: ObservableObject {
             if self.settings?.householdID != nil && !sameIdentity {
                 throw LedgerError.invalid("Сначала отключите текущую общую базу, чтобы войти в другой проект или аккаунт.")
             }
-            try self.persistSession(value)
+            try await self.persistSession(value)
             if !sameIdentity {
                 self.settings = Settings(configuration: configuration, email: value.user.email ?? email, userID: value.user.id,
                                          householdID: nil, householdName: "", enabled: false)
             }
             self.configured = true; self.email = value.user.email ?? email
-            try self.persistSettings()
+            try await self.persistSettings()
             self.households = try await self.rpc("mora_list_households", [String: String]())
         }
     }
@@ -203,63 +217,67 @@ final class CloudSync: ObservableObject {
         pending = captures
         return true
     }
-    private func diskLedger() throws -> Ledger {
+    private func diskLedger() async throws -> Ledger {
         guard let store, !store.isDemo else { throw LedgerError.invalid("Сначала начните свой учет и создайте счет. Демо в облако не загружается.") }
-        return try LedgerFile.decode(Data(contentsOf: store.fileURL))
+        let url = store.fileURL
+        return try await BackgroundWork.shared.perform { try LedgerFile.decode(Data(contentsOf: url)) }
     }
-    private func saveCheckpoint(_ envelope: CloudEnvelope) throws {
+    private func saveCheckpoint(_ envelope: CloudEnvelope) async throws {
         guard let settings, let checkpointURL else { throw CloudAPIError.invalidResponse }
-        try write(Checkpoint(projectURL: settings.configuration.projectURL, userID: settings.userID, envelope: envelope), to: checkpointURL)
+        try await write(Checkpoint(projectURL: settings.configuration.projectURL, userID: settings.userID, envelope: envelope), to: checkpointURL)
     }
-    private func checkpoint() throws -> Checkpoint {
+    private func checkpoint() async throws -> Checkpoint {
         guard let settings, let checkpointURL else { throw CloudAPIError.invalidResponse }
-        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
-        let cp = try decoder.decode(Checkpoint.self, from: Data(contentsOf: checkpointURL))
+        let cp = try await BackgroundWork.shared.perform {
+            let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+            return try decoder.decode(Checkpoint.self, from: Data(contentsOf: checkpointURL))
+        }
         guard cp.projectURL == settings.configuration.projectURL, cp.userID == settings.userID,
               cp.envelope.household_id == householdID else {
             throw LedgerError.invalid("Снимок синхронизации не соответствует общей базе. Отключите облако и заново подключитесь к выбранной базе.")
         }
         return cp
     }
-    private func attach(_ envelope: CloudEnvelope) throws {
-        try envelope.snapshot.validate()
+    private func attach(_ envelope: CloudEnvelope) async throws {
+        try await BackgroundWork.shared.perform { try envelope.snapshot.validate() }
         // Checkpoint precedes activation: missing checkpoint never uploads local data blindly.
-        try saveCheckpoint(envelope)
+        try await saveCheckpoint(envelope)
         settings?.householdID = envelope.household_id; settings?.householdName = envelope.name; settings?.enabled = true
-        try persistSettings()
+        try await persistSettings()
         householdID = envelope.household_id; householdName = envelope.name; enabled = true
         lastSync = Date(); conflict = false; nextAttempt = .distantPast; failureCount = 0
-        store?.reloadFromDisk()
+        await store?.reloadFromDisk()
     }
     func createHousehold(name: String) async {
         await operation {
-            let initial = try self.diskLedger()
+            let initial = try await self.diskLedger()
             let envelope: CloudEnvelope = try await self.rpc("mora_create_household", CreateBody(p_name: name, p_snapshot: CloudMerge.shared(initial)))
             // Edits made while creating remain as local deltas for the next sync.
-            try self.attach(envelope)
+            try await self.attach(envelope)
             try await self.loadLists(envelope.household_id)
         }
     }
     func join(code: String) async {
         await operation {
-            _ = try self.diskLedger()
+            _ = try await self.diskLedger()
             let envelope: CloudEnvelope = try await self.rpc("mora_join_household", ["p_code": code.trimmingCharacters(in: .whitespacesAndNewlines)])
-            try self.adopt(envelope)
+            try await self.adopt(envelope)
             try await self.loadLists(envelope.household_id)
         }
     }
     func openHousehold(_ id: UUID) async {
         await operation {
-            _ = try self.diskLedger()
+            _ = try await self.diskLedger()
             let envelope: CloudEnvelope = try await self.rpc("mora_get_household", HouseholdBody(p_household_id: id))
-            try self.adopt(envelope)
+            try await self.adopt(envelope)
             try await self.loadLists(id)
         }
     }
-    private func adopt(_ envelope: CloudEnvelope) throws {
+    private func adopt(_ envelope: CloudEnvelope) async throws {
         guard let store else { return }
-        _ = try LedgerFile.adoptCloud(envelope.snapshot, at: store.fileURL)
-        try attach(envelope)
+        let url = store.fileURL
+        _ = try await BackgroundWork.shared.perform { try LedgerFile.adoptCloud(envelope.snapshot, at: url) }
+        try await attach(envelope)
     }
 
     func synchronize(inBackground: Bool = false) async {
@@ -282,19 +300,20 @@ final class CloudSync: ObservableObject {
         for capture in pending.sorted(by: { $0.date < $1.date }) {
             try Task.checkCancellation()
             do {
-                let local = try diskLedger()
+                let local = try await diskLedger()
                 guard let transaction = try await WalletReviewDraft.automaticTransaction(for: capture, in: local,
                     fetch: walletRate) else { continue }
                 // The editor may have changed local data while the quote was loading.
-                let current = try diskLedger()
-                let value = try WalletReviewDraft.transaction(transaction, for: capture, in: current)
+                let current = try await diskLedger()
+                let value = try await BackgroundWork.shared.perform { try WalletReviewDraft.transaction(transaction, for: capture, in: current) }
                 let envelope: CloudEnvelope = try await rpc("mora_review_capture",
                     ReviewBody(p_household_id: id, p_capture_id: capture.id, p_transaction: value))
                 guard envelope.household_id == id else { throw CloudAPIError.invalidResponse }
-                try envelope.snapshot.validate()
-                _ = try LedgerFile.applyCloud(envelope.snapshot, at: store.fileURL, mergeAgainst: current)
-                try saveCheckpoint(envelope)
-                store.reloadFromDisk()
+                try await BackgroundWork.shared.perform { try envelope.snapshot.validate() }
+                let url = store.fileURL
+                _ = try await BackgroundWork.shared.perform { try LedgerFile.applyCloud(envelope.snapshot, at: url, mergeAgainst: current) }
+                try await saveCheckpoint(envelope)
+                await store.reloadFromDisk()
                 _ = try await loadPending(id)
                 lastSync = Date()
             } catch is CancellationError { throw CancellationError() }
@@ -309,7 +328,7 @@ final class CloudSync: ObservableObject {
 
     private func collectWalletImport() async throws {
         guard let id = householdID, let store else { return }
-        let local = try diskLedger()
+        let local = try await diskLedger()
         let previouslyBatched = Set(local.importHistory.flatMap { $0.transactions.map(\.id) })
         guard local.transactions.contains(where: { transaction in
             transaction.importBatchID == nil && !previouslyBatched.contains(transaction.id) &&
@@ -317,9 +336,10 @@ final class CloudSync: ObservableObject {
         }) else { return }
         let result: WalletImportResult = try await rpc("mora_collect_wallet_import", HouseholdBody(p_household_id: id))
         guard result.envelope.household_id == id else { throw CloudAPIError.invalidResponse }
-        _ = try LedgerFile.applyCloud(result.envelope.snapshot, at: store.fileURL, mergeAgainst: local, recordWalletImport: result.batch_id)
-        try saveCheckpoint(result.envelope)
-        store.reloadFromDisk()
+        let url = store.fileURL
+        _ = try await BackgroundWork.shared.perform { try LedgerFile.applyCloud(result.envelope.snapshot, at: url, mergeAgainst: local, recordWalletImport: result.batch_id) }
+        try await saveCheckpoint(result.envelope)
+        await store.reloadFromDisk()
         if let batchID = result.batch_id, let batch = store.ledger.importHistory.first(where: { $0.id == batchID }) {
             store.showNotice(L("Загружено из Apple Shortcuts: \(batch.transactions.count)"),
                              detail: batch.transactions.prefix(3).map(\.merchant).joined(separator: " · "),
@@ -329,10 +349,11 @@ final class CloudSync: ObservableObject {
 
     private func syncNow() async throws {
         guard let id = householdID, let store else { return }
-        let saved = try checkpoint().envelope
+        let saved = try await checkpoint().envelope
         let base = saved.snapshot
         let status: Status = try await rpc("mora_get_status", HouseholdBody(p_household_id: id))
-        if status.version == saved.version, try CloudMerge.same(diskLedger(), base) {
+        let initial = try await diskLedger()
+        if status.version == saved.version, try await BackgroundWork.shared.perform({ try CloudMerge.same(initial, base) }) {
             // Equal counts can hide a replaced capture or a corrected reason.
             if try await loadPending(id) { lastSync = Date() }
             if conflict { conflict = false }
@@ -340,26 +361,29 @@ final class CloudSync: ObservableObject {
         }
         for _ in 0..<3 {
             try Task.checkCancellation()
-            let local = try diskLedger()
+            let local = try await diskLedger()
             var remote: CloudEnvelope = try await rpc("mora_get_household", HouseholdBody(p_household_id: id))
-            try remote.snapshot.validate()
+            let remoteSnapshot = remote.snapshot
+            try await BackgroundWork.shared.perform { try remoteSnapshot.validate() }
             let merged: Ledger
-            do { merged = try CloudMerge.merge(base: base, local: local, remote: remote.snapshot) }
+            do { merged = try await BackgroundWork.shared.perform { try CloudMerge.merge(base: base, local: local, remote: remoteSnapshot) } }
             catch {
                 if !conflict { conflict = true }
-                if let directory { try write(remote, to: directory.appendingPathComponent("cloud-conflict-remote.json")) }
+                if let directory { try await write(remote, to: directory.appendingPathComponent("cloud-conflict-remote.json")) }
                 throw error
             }
-            if try !CloudMerge.same(merged, remote.snapshot) {
+            if try await BackgroundWork.shared.perform({ try !CloudMerge.same(merged, remoteSnapshot) }) {
                 let success: Bool = try await rpc("mora_save_household", SaveBody(p_household_id: id, p_version: remote.version, p_snapshot: CloudMerge.shared(merged)))
                 if !success { continue }
                 remote.version += 1; remote.snapshot = CloudMerge.shared(merged)
             }
-            _ = try LedgerFile.applyCloud(remote.snapshot, at: store.fileURL, mergeAgainst: local)
-            try saveCheckpoint(remote)
-            store.reloadFromDisk()
+            let committedRemote = remote.snapshot, url = store.fileURL
+            _ = try await BackgroundWork.shared.perform { try LedgerFile.applyCloud(committedRemote, at: url, mergeAgainst: local) }
+            try await saveCheckpoint(remote)
+            await store.reloadFromDisk()
             let capturesChanged = try await loadPending(id)
-            if try capturesChanged || !CloudMerge.same(base, remote.snapshot) { lastSync = Date() }
+            let snapshotChanged = try await BackgroundWork.shared.perform { try !CloudMerge.same(base, committedRemote) }
+            if capturesChanged || snapshotChanged { lastSync = Date() }
             if conflict { conflict = false }
             return
         }
@@ -368,15 +392,15 @@ final class CloudSync: ObservableObject {
     func keepLocalVersion() async {
         await operation {
             guard let id = self.householdID else { return }
-            let local = try self.diskLedger()
+            let local = try await self.diskLedger()
             var remote: CloudEnvelope = try await self.rpc("mora_get_household", HouseholdBody(p_household_id: id))
             if let directory = self.directory {
-                try self.write(remote, to: directory.appendingPathComponent("before-cloud-overwrite-\(UUID().uuidString).json"))
+                try await self.write(remote, to: directory.appendingPathComponent("before-cloud-overwrite-\(UUID().uuidString).json"))
             }
             let success: Bool = try await self.rpc("mora_save_household", SaveBody(p_household_id: id, p_version: remote.version, p_snapshot: CloudMerge.shared(local)))
             guard success else { throw LedgerError.invalid("Общая база снова изменилась. Проверьте версии и повторите выбор.") }
             remote.version += 1; remote.snapshot = CloudMerge.shared(local)
-            try self.saveCheckpoint(remote); self.conflict = false; self.lastSync = Date()
+            try await self.saveCheckpoint(remote); self.conflict = false; self.lastSync = Date()
         }
     }
     func invite() async {
@@ -414,15 +438,20 @@ final class CloudSync: ObservableObject {
         await operation {
             guard let id = self.householdID, let store = self.store else { throw CloudAPIError.unauthorized }
             try await self.syncNow()
-            let local = try self.diskLedger()
-            let value = try WalletReviewDraft.transaction(transaction, for: capture, in: local)
+            let local = try await self.diskLedger()
+            let value = try await BackgroundWork.shared.perform {
+                var reviewed = transaction
+                if reviewed.categoryID == nil && reviewed.kind != .transfer { reviewed.categoryID = local.suggestedCategory(merchant: reviewed.merchant, kind: reviewed.kind) }
+                return try WalletReviewDraft.transaction(reviewed, for: capture, in: local)
+            }
             let envelope: CloudEnvelope = try await self.rpc("mora_review_capture",
                 ReviewBody(p_household_id: id, p_capture_id: capture.id, p_transaction: value))
             guard envelope.household_id == id else { throw CloudAPIError.invalidResponse }
-            try envelope.snapshot.validate()
-            _ = try LedgerFile.applyCloud(envelope.snapshot, at: store.fileURL, mergeAgainst: local)
-            try self.saveCheckpoint(envelope)
-            store.reloadFromDisk()
+            try await BackgroundWork.shared.perform { try envelope.snapshot.validate() }
+            let url = store.fileURL
+            _ = try await BackgroundWork.shared.perform { try LedgerFile.applyCloud(envelope.snapshot, at: url, mergeAgainst: local) }
+            try await self.saveCheckpoint(envelope)
+            await store.reloadFromDisk()
             _ = try await self.loadPending(id)
             self.lastSync = Date()
             // The purchase is already committed; collecting history can safely retry later.
@@ -432,15 +461,18 @@ final class CloudSync: ObservableObject {
         if !saved, let error { store?.error = error }
         return saved
     }
-    func pause(_ paused: Bool) {
-        enabled = !paused; settings?.enabled = enabled
-        do { try persistSettings() } catch { self.error = error.localizedDescription }
+    func pause(_ paused: Bool) async {
+        await operation {
+            enabled = !paused; settings?.enabled = enabled
+            try await persistSettings()
+        }
     }
     func disconnect() async {
         await operation {
-            try CloudKeychain.delete(account: keychainAccount)
+            let account = keychainAccount
+            try await BackgroundWork.credentials.perform { try CloudKeychain.delete(account: account) }
             settings?.enabled = false; settings?.householdID = nil; settings?.householdName = ""
-            try persistSettings()
+            try await persistSettings()
             session = nil; signedIn = false; enabled = false; householdID = nil; householdName = ""
             households = []; pending = []; phoneTokens = []; invitation = nil; issuedToken = nil; conflict = false; error = nil
         }

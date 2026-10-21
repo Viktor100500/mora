@@ -1,12 +1,12 @@
 import Foundation
 
-public enum TransactionKind: String, Codable, CaseIterable, Identifiable {
+public enum TransactionKind: String, Codable, CaseIterable, Identifiable, Sendable {
     case expense, income, transfer
     public var id: String { rawValue }
     public var title: String { switch self { case .expense: "Расход"; case .income: "Доход"; case .transfer: "Перевод" } }
 }
 
-public enum AccountKind: String, Codable, CaseIterable, Identifiable {
+public enum AccountKind: String, Codable, CaseIterable, Identifiable, Sendable {
     case checking, savings, cash, investment, credit
     public var id: String { rawValue }
     public var title: String {
@@ -15,7 +15,7 @@ public enum AccountKind: String, Codable, CaseIterable, Identifiable {
     public var icon: String { switch self { case .checking: "creditcard"; case .savings: "building.columns"; case .cash: "banknote"; case .investment: "chart.line.uptrend.xyaxis"; case .credit: "creditcard.trianglebadge.exclamationmark" } }
 }
 
-public struct Account: Identifiable, Codable, Equatable {
+public struct Account: Identifiable, Codable, Equatable, Sendable {
     public var id: UUID
     public var name: String
     public var currency: String
@@ -31,7 +31,7 @@ public struct Account: Identifiable, Codable, Equatable {
     }
 }
 
-public struct Category: Identifiable, Codable, Equatable {
+public struct Category: Identifiable, Codable, Equatable, Sendable {
     public var id: UUID
     public var name: String
     public var icon: String
@@ -42,7 +42,7 @@ public struct Category: Identifiable, Codable, Equatable {
     }
 }
 
-public struct Transaction: Identifiable, Codable, Equatable {
+public struct Transaction: Identifiable, Codable, Equatable, Sendable {
     public var id: UUID
     public var date: Date
     public var merchant: String
@@ -66,14 +66,14 @@ public struct Transaction: Identifiable, Codable, Equatable {
     }
 }
 
-public struct Budget: Identifiable, Codable, Equatable {
+public struct Budget: Identifiable, Codable, Equatable, Sendable {
     public var id: UUID
     public var categoryID: UUID
     public var limit: Decimal
     public init(id: UUID = UUID(), categoryID: UUID, limit: Decimal) { self.id = id; self.categoryID = categoryID; self.limit = limit }
 }
 
-public struct Goal: Identifiable, Codable, Equatable {
+public struct Goal: Identifiable, Codable, Equatable, Sendable {
     public var id: UUID
     public var name: String
     public var target: Decimal
@@ -85,14 +85,14 @@ public struct Goal: Identifiable, Codable, Equatable {
     }
 }
 
-public enum Frequency: String, Codable, CaseIterable, Identifiable {
+public enum Frequency: String, Codable, CaseIterable, Identifiable, Sendable {
     case weekly, monthly, yearly
     public var id: String { rawValue }
     public var title: String { switch self { case .weekly: "Каждую неделю"; case .monthly: "Каждый месяц"; case .yearly: "Каждый год" } }
     public var months: Decimal { switch self { case .weekly: Decimal(52) / 12; case .monthly: 1; case .yearly: Decimal(1) / 12 } }
 }
 
-public struct RecurringPayment: Identifiable, Codable, Equatable {
+public struct RecurringPayment: Identifiable, Codable, Equatable, Sendable {
     public var id: UUID
     public var name: String
     public var amount: Decimal
@@ -115,14 +115,14 @@ public struct RecurringPayment: Identifiable, Codable, Equatable {
     }
 }
 
-public struct CategoryRule: Identifiable, Codable, Equatable {
+public struct CategoryRule: Identifiable, Codable, Equatable, Sendable {
     public var id: UUID
     public var keyword: String
     public var categoryID: UUID
     public init(id: UUID = UUID(), keyword: String, categoryID: UUID) { self.id = id; self.keyword = keyword; self.categoryID = categoryID }
 }
 
-public struct Preferences: Codable, Equatable {
+public struct Preferences: Codable, Equatable, Sendable {
     public var baseCurrency: String = "RUB"
     // One unit of a currency is worth this many units of the base currency.
     public var rates: [String: Decimal] = ["RUB": 1]
@@ -151,7 +151,7 @@ public struct Preferences: Codable, Equatable {
     }
 }
 
-public struct Ledger: Codable, Equatable {
+public struct Ledger: Codable, Equatable, Sendable {
     public var schemaVersion: Int = 1
     public var accounts: [Account] = []
     public var categories: [Category] = []
@@ -283,12 +283,12 @@ public struct Ledger: Codable, Equatable {
     }
 }
 
-public enum LedgerError: LocalizedError {
+public enum LedgerError: LocalizedError, Sendable {
     case invalid(String)
     public var errorDescription: String? { switch self { case .invalid(let text): text } }
 }
 
-public enum Money {
+public enum Money: Sendable {
     public static func parse(_ input: String) -> Decimal? {
         var s = input.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "−", with: "-")
         for symbol in ["₽", "$", "€", "£", "¥", "RUB", "USD", "EUR", "GBP", "руб."] { s = s.replacingOccurrences(of: symbol, with: "", options: .caseInsensitive) }
@@ -317,11 +317,12 @@ public extension Decimal {
     var rounded: Decimal { var value = self; var result = Decimal(); NSDecimalRound(&result, &value, 0, .plain); return result }
 }
 
-public enum Dates {
+public enum Dates: Sendable {
     public static func month(_ date: Date) -> Date { Calendar.current.date(from: Calendar.current.dateComponents([.year, .month], from: date))! }
-    public static func string(_ date: Date) -> String {
-        let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = "yyyy-MM-dd"; return f.string(from: date)
-    }
+    private static let dayStyle = Date.VerbatimFormatStyle(
+        format: "\(year: .defaultDigits)-\(month: .twoDigits)-\(day: .twoDigits)",
+        locale: Locale(identifier: "en_US_POSIX"), timeZone: .autoupdatingCurrent, calendar: Calendar(identifier: .gregorian))
+    public static func string(_ date: Date) -> String { date.formatted(dayStyle) }
     public static func parse(_ string: String, format: String = "auto") -> Date? {
         let s = string.trimmingCharacters(in: .whitespacesAndNewlines)
         let formats = format == "auto" ? ["yyyy-MM-dd", "dd.MM.yyyy", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd'T'HH:mm:ss"] : [format]

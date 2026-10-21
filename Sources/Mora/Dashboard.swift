@@ -35,7 +35,7 @@ struct DashboardView: View {
             Card {
                 VStack(alignment: .leading, spacing: 18) {
                     HStack { SectionHeading(title: L("Последние операции")); Spacer(); Button(L("Все операции →")) { page = .transactions }.buttonStyle(.plain).font(.caption).foregroundStyle(Color.moraGreen) }
-                    let rows = Array(store.reportTransactions(in: month).filter(ledger.isActive).sorted { $0.date > $1.date }.prefix(5))
+                    let rows = store.reportRecentTransactions(in: month)
                     if rows.isEmpty { Text(L("В этом месяце нет операций")).foregroundStyle(.secondary).padding(.vertical, 28) }
                     ForEach(rows) { transaction in
                         TransactionRow(transaction: transaction, ledger: ledger).contentShape(Rectangle()).onTapGesture { sheet = .transaction(transaction) }
@@ -125,9 +125,9 @@ struct ChartLegend: View {
 
 struct TrendChart: View {
     var ledger: Ledger; var month: Date
-    var cachedTrend: [MonthTotal]? = nil
+    var cachedTrend: [MonthTotal]
     var body: some View {
-        let trend = cachedTrend ?? ledger.trend(ending: month)
+        let trend = cachedTrend
         let amounts = trend.flatMap { [$0.income.double, $0.expense.double] }
         Chart {
             ForEach(trend) { item in
@@ -150,12 +150,12 @@ struct TrendChart: View {
 
 struct CategoryChart: View {
     var ledger: Ledger; var month: Date
-    var cachedTotals: [CategoryTotal]? = nil
-    var cachedExpense: Decimal? = nil
+    var cachedTotals: [CategoryTotal]
+    var cachedExpense: Decimal
     var openAnalytics: (() -> Void)? = nil
     var body: some View {
-        let totals = cachedTotals ?? ledger.categoryTotals(in: month)
-        let expense = cachedExpense ?? ledger.summary(in: month).expense
+        let totals = cachedTotals
+        let expense = cachedExpense
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top) {
                 SectionHeading(title: L("Расходы по категориям"), subtitle: L("За выбранный месяц"))
@@ -210,9 +210,10 @@ struct TransactionRow: View {
 }
 
 struct BudgetMini: View {
+    @EnvironmentObject private var store: FinanceStore
     var budget: Budget; var ledger: Ledger; var month: Date
     var body: some View {
-        let spent = ledger.spent(category: budget.categoryID, in: month)
+        let spent = store.reportSpending(category: budget.categoryID, in: month)
         let c = ledger.category(budget.categoryID)
         VStack(alignment: .leading, spacing: 12) {
             HStack { IconTile(icon: c?.icon ?? "tag", color: c?.color ?? "green", size: 28); Text(c?.name ?? "").font(.system(size: 12, weight: .medium)); Spacer() }

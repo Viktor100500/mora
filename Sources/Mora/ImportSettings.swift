@@ -108,10 +108,10 @@ struct ImportView: View {
             }
         }
     }
-    private func commit() {
+    private func commit() { Task { @MainActor in
         guard let fresh = result, previewLedger == store.ledger, fresh.imported > 0 && (fresh.invalid == 0 || mapping.skipInvalid) else { rebuild(); return }
-        if let expected = previewLedger, store.importPreparedCSV(fresh, filename: filename, expected: expected) { dismiss() }
-    }
+        if let expected = previewLedger, await store.importPreparedCSV(fresh, filename: filename, expected: expected) { dismiss() }
+     } }
 }
 
 struct SettingsView: View {
@@ -140,22 +140,22 @@ struct SettingsView: View {
                             Picker(L("Базовая валюта"), selection: $selectedBase) {
                                 ForEach(Array(Set(currencyList + Array(ledger.preferences.rates.keys))).sorted(), id: \.self) { Text($0).tag($0) }
                             }.pickerStyle(.menu).labelsHidden().fixedSize()
-                            Button(L("Применить")) {
-                                if !store.update({ try $0.changeBaseCurrency(to: selectedBase) }) { selectedBase = ledger.preferences.baseCurrency }
-                            }.buttonStyle(.bordered).disabled(selectedBase == ledger.preferences.baseCurrency)
+                            Button(L("Применить")) { Task { @MainActor in
+                                if !(await store.update({ [selectedBase] in try $0.changeBaseCurrency(to: selectedBase) })) { selectedBase = ledger.preferences.baseCurrency }
+                             } }.buttonStyle(.bordered).disabled(selectedBase == ledger.preferences.baseCurrency)
                         }.controlSize(.regular).fixedSize()
                     }
                     Text(L("При смене базовой валюты лимиты бюджетов и суммы целей пересчитываются по текущему курсу.")).font(.caption).foregroundStyle(.secondary)
                     Divider()
-                    HStack { Text(L("Оформление")).font(.callout); Spacer(); Picker(L("Оформление"), selection: Binding(get: { ledger.preferences.appearance }, set: { value in store.update { $0.preferences.appearance = value } })) { Text(L("Как в системе")).tag("system"); Text(L("Светлое")).tag("light"); Text(L("Темное")).tag("dark") }.pickerStyle(.menu).labelsHidden().fixedSize() }
+                    HStack { Text(L("Оформление")).font(.callout); Spacer(); Picker(L("Оформление"), selection: Binding(get: { ledger.preferences.appearance }, set: { value in Task { @MainActor in  await store.update { $0.preferences.appearance = value }  } })) { Text(L("Как в системе")).tag("system"); Text(L("Светлое")).tag("light"); Text(L("Темное")).tag("dark") }.pickerStyle(.menu).labelsHidden().fixedSize() }
                 }
             }
             Card {
                 VStack(alignment: .leading, spacing: 18) {
                     SectionHeading(title: L("Дополнительные разделы"), subtitle: L("Включите нужные разделы. Их данные сохраняются при скрытии."))
-                    Toggle(L("Бюджеты"), isOn: Binding(get: { ledger.preferences.showBudgets }, set: { value in store.update { $0.preferences.showBudgets = value } }))
-                    Toggle(L("Цели"), isOn: Binding(get: { ledger.preferences.showGoals }, set: { value in store.update { $0.preferences.showGoals = value } }))
-                    Toggle(L("Регулярные платежи"), isOn: Binding(get: { ledger.preferences.showRecurring }, set: { value in store.update { $0.preferences.showRecurring = value } }))
+                    Toggle(L("Бюджеты"), isOn: Binding(get: { ledger.preferences.showBudgets }, set: { value in Task { @MainActor in  await store.update { $0.preferences.showBudgets = value }  } }))
+                    Toggle(L("Цели"), isOn: Binding(get: { ledger.preferences.showGoals }, set: { value in Task { @MainActor in  await store.update { $0.preferences.showGoals = value }  } }))
+                    Toggle(L("Регулярные платежи"), isOn: Binding(get: { ledger.preferences.showRecurring }, set: { value in Task { @MainActor in  await store.update { $0.preferences.showRecurring = value }  } }))
                 }.font(.callout)
             }
             Card {
@@ -169,7 +169,7 @@ struct SettingsView: View {
                         }
                     }
                     if !store.isDemo {
-                        Toggle(L("Загружать из интернета раз в день"), isOn: Binding(get: { ledger.preferences.automaticRates }, set: { store.setAutomaticRates($0) })).font(.callout)
+                        Toggle(L("Загружать из интернета раз в день"), isOn: Binding(get: { ledger.preferences.automaticRates }, set: { value in Task { @MainActor in await store.setAutomaticRates(value) } })).font(.callout)
                         if ledger.preferences.automaticRates {
                             HStack(spacing: 8) {
                                 Link(L("Курсы: ExchangeRate-API"), destination: ExchangeRateSnapshot.providerURL)
@@ -195,7 +195,7 @@ struct SettingsView: View {
                             Spacer()
                             if !ledger.preferences.automaticRates, code != ledger.preferences.baseCurrency {
                                 Button(L("Изменить")) { rateCurrency = code; rateAmount = Money.plain(ledger.preferences.rates[code] ?? 1) }
-                                Button(role: .destructive) { store.update { $0.preferences.rates.removeValue(forKey: code) } } label: { Image(systemName: "trash") }.buttonStyle(.plain)
+                                Button(role: .destructive) { Task { @MainActor in  await store.update { $0.preferences.rates.removeValue(forKey: code) }  } } label: { Image(systemName: "trash") }.buttonStyle(.plain)
                             }
                         }
                     }
@@ -213,7 +213,7 @@ struct SettingsView: View {
             Card {
                 VStack(alignment: .leading, spacing: 20) {
                     SectionHeading(title: L("AI-помощник"), subtitle: L("Импорт выписок и скриншотов без обязательной настройки MCP"))
-                    HStack { Text(L("AI-агент для импорта")); Spacer(); Picker(L("AI-агент"), selection: Binding(get: { ledger.preferences.aiAgent }, set: { value in store.update { $0.preferences.aiAgent = value } })) { ForEach(AIAgent.allCases) { Text(L($0.title)).tag($0.rawValue) } }.labelsHidden().frame(width: 180) }
+                    HStack { Text(L("AI-агент для импорта")); Spacer(); Picker(L("AI-агент"), selection: Binding(get: { ledger.preferences.aiAgent }, set: { value in Task { @MainActor in  await store.update { $0.preferences.aiAgent = value }  } })) { ForEach(AIAgent.allCases) { Text(L($0.title)).tag($0.rawValue) } }.labelsHidden().frame(width: 180) }
                     HStack { Label(L("Промпт для CSV"), systemImage: "text.bubble"); Spacer(); Button(L("Скопировать")) { copyAIPrompt("mora-csv", includeContext: true) } }
                     HStack { Label(L("Инструкция для MCP"), systemImage: "point.3.connected.trianglepath.dotted"); Spacer(); Button(L("Скопировать")) { copyAIPrompt("mora-mcp", includeContext: true) } }
                     Text(L("Агент использует доступное подключение или встроенный компонент Mora. Без доступа к Mac подготовит CSV. Промпт включает названия счетов, их валюты и категории.")).font(.caption).foregroundStyle(.secondary)
@@ -222,8 +222,8 @@ struct SettingsView: View {
             Card {
                 VStack(alignment: .leading, spacing: 20) {
                     SectionHeading(title: L("Данные и резервные копии"), subtitle: cloud.householdID == nil ? L("Счета и операции хранятся на вашем Mac") : L("На Mac хранится копия общей облачной базы"))
-                    HStack { Label(L("Экспорт всех операций в CSV"), systemImage: "tablecells"); Spacer(); Button(L("Экспортировать")) { store.exportCSV() } }
-                    HStack { Label(L("Полная резервная копия"), systemImage: "externaldrive"); Spacer(); Button(L("Сохранить JSON")) { store.backup() }; Button(L("Восстановить…")) { restoreLedger = store.readBackup() } }
+                    HStack { Label(L("Экспорт всех операций в CSV"), systemImage: "tablecells"); Spacer(); Button(L("Экспортировать")) { Task { @MainActor in  await store.exportCSV()  } } }
+                    HStack { Label(L("Полная резервная копия"), systemImage: "externaldrive"); Spacer(); Button(L("Сохранить JSON")) { Task { @MainActor in  await store.backup()  } }; Button(L("Восстановить…")) { Task { @MainActor in  restoreLedger = await store.readBackup()  } } }
                     HStack { Label(L("Образец CSV"), systemImage: "doc.text"); Spacer(); Button(L("Сохранить образец")) { saveTemplate() } }
                     Divider()
                     Text(L("Резервная копия JSON включает данные, настройки и историю изменений.")).font(.caption).foregroundStyle(.secondary)
@@ -239,7 +239,7 @@ struct SettingsView: View {
             }
         }
         .onAppear { selectedBase = ledger.preferences.baseCurrency }
-        .confirmationDialog(L("Заменить текущие данные резервной копией?"), isPresented: Binding(get: { restoreLedger != nil }, set: { if !$0 { restoreLedger = nil } }), titleVisibility: .visible) { if let backup = restoreLedger { Button(L("Восстановить \(backup.transactions.count) операций")) { store.restore(backup); selectedBase = store.ledger.preferences.baseCurrency; restoreLedger = nil } } } message: { Text(L("Копия проверена. Текущие данные будут заменены; предыдущая версия сохранится в автоматической резервной копии. При необходимости сначала экспортируйте текущую копию.")) }
+        .confirmationDialog(L("Заменить текущие данные резервной копией?"), isPresented: Binding(get: { restoreLedger != nil }, set: { if !$0 { restoreLedger = nil } }), titleVisibility: .visible) { if let backup = restoreLedger { Button(L("Восстановить \(backup.transactions.count) операций")) { Task { @MainActor in  await store.restore(backup); selectedBase = store.ledger.preferences.baseCurrency; restoreLedger = nil  } } } } message: { Text(L("Копия проверена. Текущие данные будут заменены; предыдущая версия сохранится в автоматической резервной копии. При необходимости сначала экспортируйте текущую копию.")) }
     }
     private func rateText(_ rate: Decimal) -> String {
         let formatter = NumberFormatter(); formatter.locale = L10n.locale
@@ -251,19 +251,23 @@ struct SettingsView: View {
         formatter.timeZone = TimeZone(secondsFromGMT: 0); formatter.dateFormat = "d MMMM yyyy"
         return formatter.string(from: date)
     }
-    private func saveRate() { guard let rate = Money.parse(rateAmount), rate > 0 else { return }; let code = rateCurrency.trimmingCharacters(in: .whitespaces).uppercased(); if store.update({ $0.preferences.rates[code] = rate }) { rateAmount = ""; store.notice = L("Курс \(code) обновлен") } }
-    private func copyAIPrompt(_ name: String, includeContext: Bool) {
+    private func saveRate() { Task { @MainActor in  guard let rate = Money.parse(rateAmount), rate > 0 else { return }; let code = rateCurrency.trimmingCharacters(in: .whitespaces).uppercased(); if await store.update({ $0.preferences.rates[code] = rate }) { rateAmount = ""; store.notice = L("Курс \(code) обновлен") }  } }
+    private func copyAIPrompt(_ name: String, includeContext: Bool) { Task { @MainActor in
         do {
             let context = store.isDemo ? Ledger.empty : ledger
-            let text = try AIPrompt.text(name, ledger: context, includeContext: includeContext, dataDirectory: store.fileURL.deletingLastPathComponent())
+            let directory = store.fileURL.deletingLastPathComponent()
+            let text = try await BackgroundWork.shared.perform { try AIPrompt.text(name, ledger: context, includeContext: includeContext, dataDirectory: directory) }
             AIPrompt.copy(text)
             store.notice = L("Промпт скопирован")
         } catch { store.error = error.localizedDescription }
-    }
+    } }
     private func saveTemplate() {
         let panel = NSSavePanel(); panel.allowedContentTypes = [.commaSeparatedText]; panel.nameFieldStringValue = "Mora-example.csv"
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let text = L("date,merchant,amount,currency,account,category,type,note,tags,id,to_account,to_amount\r\n\(Dates.string(Date())),Продукты,-1250.50,RUB,Основной счет,Продукты,expense,Покупки на неделю,личное,example-001,,\r\n")
-        do { try text.write(to: url, atomically: true, encoding: .utf8) } catch { store.error = error.localizedDescription }
+        Task { @MainActor in
+            do { try await BackgroundWork.shared.perform { try text.write(to: url, atomically: true, encoding: .utf8) } }
+            catch { store.error = error.localizedDescription }
+        }
     }
 }

@@ -1,6 +1,6 @@
 import Foundation
 
-public struct CloudConfiguration: Codable, Equatable {
+public struct CloudConfiguration: Codable, Equatable, Sendable {
     public var projectURL: URL
     public var publicKey: String
     public init(projectURL: URL, publicKey: String) throws {
@@ -27,8 +27,8 @@ public struct CloudConfiguration: Codable, Equatable {
     }
 }
 
-public struct CloudSession: Codable {
-    public struct User: Codable { public let id: UUID; public let email: String? }
+public struct CloudSession: Codable, Sendable {
+    public struct User: Codable, Sendable { public let id: UUID; public let email: String? }
     public let access_token: String
     public let refresh_token: String
     public let expires_at: TimeInterval
@@ -48,21 +48,21 @@ public struct CloudSession: Codable {
     }
 }
 
-public struct CloudEnvelope: Codable {
+public struct CloudEnvelope: Codable, Sendable {
     public var household_id: UUID
     public var name: String
     public var version: Int64
     public var snapshot: Ledger
 }
-public struct CloudHousehold: Codable, Identifiable, Equatable { public let id: UUID; public let name: String }
-public struct CloudPhoneToken: Codable, Identifiable, Equatable {
+public struct CloudHousehold: Codable, Identifiable, Equatable, Sendable { public let id: UUID; public let name: String }
+public struct CloudPhoneToken: Codable, Identifiable, Equatable, Sendable {
     public let id: UUID
     public let label: String
     public let account_id: UUID
     public let revoked: Bool
 }
-public struct CloudIssuedToken: Codable { public let id: UUID; public let token: String }
-public struct CloudCapture: Codable, Identifiable, Equatable {
+public struct CloudIssuedToken: Codable, Sendable { public let id: UUID; public let token: String }
+public struct CloudCapture: Codable, Identifiable, Equatable, Sendable {
     public let id: UUID
     public let merchant: String
     public let amount: String
@@ -73,7 +73,7 @@ public struct CloudCapture: Codable, Identifiable, Equatable {
     public let label: String
 }
 
-public enum CloudAPIError: LocalizedError {
+public enum CloudAPIError: LocalizedError, Sendable {
     case unauthorized, response(Int, String), invalidResponse
     public var errorDescription: String? {
         switch self {
@@ -89,7 +89,7 @@ public enum CloudAPIError: LocalizedError {
 }
 
 /// Foundation-only client: no backend secret, SDK, or external package in the app.
-public struct CloudAPI {
+public struct CloudAPI: Sendable {
     public let configuration: CloudConfiguration
     private let transport: URLSession
     public init(configuration: CloudConfiguration, transport: URLSession = .shared) {

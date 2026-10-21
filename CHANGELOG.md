@@ -4,6 +4,15 @@
 
 - Build future public releases for Apple Silicon only, using local pre-release tests instead of rerunning tests in the release workflow.
 
+## 1.5.11 — 2026-10-21
+
+- Reuse merchant history across payment prefixes and optional store descriptors, such as “Test Deli” and “Test Deli Market”, only when the matching variants agree on a category. Exact history and explicit rules retain priority.
+- Display transfer currencies as read-only suffixes inside the debit and credit amount fields instead of a separate currency row.
+- Restrict manual transaction amounts to decimal digits and either decimal separator; never interpret mixed separators as thousands grouping.
+- Move ledger loading, coordinated commits, history descriptions, cloud merges, reports, search, notification storage and import/prompt preparation off MainActor. Serialize mutations in an actor, publish revisioned snapshots, and cancel or reject stale search/suggestion results.
+- Preserve independent edits while a transaction form is open, reject conflicting field changes and stale Undo actions, and drain accepted writes before terminating the app.
+- Cache currency choices and use reusable value date format styles to reduce work during typing. Preserve immediate local text editing and resolve categories again against the committed snapshot.
+
 ## 1.5.10 — 2026-10-20
 
 - Preview the exact next Undo/Redo step and show the saved change history, including older snapshots; describe affected purchases, categories, accounts and settings in notifications.

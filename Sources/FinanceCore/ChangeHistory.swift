@@ -1,6 +1,6 @@
 import Foundation
 
-public struct LedgerChangeHistory: Codable, Equatable {
+public struct LedgerChangeHistory: Codable, Equatable, Sendable {
     public var undo: [Ledger] = []
     public var redo: [Ledger] = []
     public init() {}
