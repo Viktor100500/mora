@@ -8,7 +8,7 @@ public struct MoraAutomation {
         FileManager.default.fileExists(atPath: fileURL.path) ? try LedgerFile.decode(Data(contentsOf: fileURL)) : .empty
     }
     public typealias ConversionFetcher = (Decimal, String, String, Date) async throws -> CardConversion
-    public func runAsync(_ command: String, arguments: [String: Any], fetch: ConversionFetcher? = nil) async throws -> [String: Any] {
+    public nonisolated(nonsending) func runAsync(_ command: String, arguments: [String: Any], fetch: ConversionFetcher? = nil) async throws -> [String: Any] {
         let quote: ConversionFetcher = fetch ?? { amount, from, to, date in
             try await VisaRateClient.shared.conversion(amount: amount, from: from, to: to, date: date)
         }
@@ -58,7 +58,7 @@ public struct MoraAutomation {
         return result
     }
 
-    private func reassign(_ arguments: [String: Any], fetch: ConversionFetcher) async throws -> [String: Any] {
+    private nonisolated(nonsending) func reassign(_ arguments: [String: Any], fetch: ConversionFetcher) async throws -> [String: Any] {
         let requestID = try stableID(arguments)
         let targetName = try string(arguments, "account", max: 256)
         let expectedName = try string(arguments, "expected_account", max: 256)
