@@ -65,7 +65,7 @@ public struct WalletReviewDraft: Sendable {
               !draft.merchant.isEmpty, let amount = automaticAmount(capture.amount),
               draft.currency != unknownCurrency else { return nil }
         var value = Transaction(date: capture.date, merchant: draft.merchant, amount: -amount,
-            accountID: accountID, categoryID: ledger.historicalCategory(merchant: draft.merchant, kind: .expense),
+            accountID: accountID, categoryID: ledger.suggestedCategory(merchant: draft.merchant, kind: .expense),
             note: draft.note, tags: draft.tags)
         if draft.currency != account.currency {
             let conversion = try await fetch(-amount, draft.currency, account.currency, capture.date).applyingFee(of: account)

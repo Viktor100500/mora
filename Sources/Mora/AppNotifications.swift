@@ -118,13 +118,14 @@ final class AppNotifications: ObservableObject {
                           "\(capture.amount) \(capture.currency) · \(capture.label)",
                           L(capture.reason ?? "Проверьте покупку")].joined(separator: "\n")
             if let index = next.firstIndex(where: { $0.sourceID == capture.id && $0.householdID == householdID }) {
-                if next[index].detail != detail || next[index].isResolved {
+                if next[index].message != L("Покупка из Wallet ожидает обработки") || next[index].detail != detail || next[index].isResolved {
+                    next[index].message = L("Покупка из Wallet ожидает обработки")
                     next[index].detail = detail
                     next[index].isResolved = false
                     next[index].isRead = false
                 }
             } else {
-                let event = AppNotification(message: L("Покупка из Wallet требует проверки"), detail: detail,
+                let event = AppNotification(message: L("Покупка из Wallet ожидает обработки"), detail: detail,
                                             kind: .review, actions: [.review(capture.id)], sourceID: capture.id,
                                             householdID: householdID)
                 next.insert(event, at: 0)

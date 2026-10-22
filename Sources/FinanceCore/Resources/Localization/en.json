@@ -861,6 +861,7 @@
   "Пока нет уведомлений": "No notifications yet",
   "Здесь появятся события приложения и доступные действия.": "App events and available actions will appear here.",
   "Покупка из Wallet требует проверки": "A Wallet purchase needs review",
+  "Покупка из Wallet ожидает обработки": "A Wallet purchase is being processed",
   "Больше не требует проверки": "No longer needs review",
   "Действие больше недоступно": "This action is no longer available",
   "Это действие больше недоступно: данные уже изменились.": "This action is no longer available: the data has changed.",

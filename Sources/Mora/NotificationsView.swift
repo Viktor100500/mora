@@ -3,6 +3,7 @@ import FinanceCore
 
 private enum NotificationStyle {
     static let attention = Color(red: 0.78, green: 0.25, blue: 0.17)
+    static let review = Color(red: 0.72, green: 0.49, blue: 0.05)
 }
 
 struct AppNotificationBell: View {
@@ -15,16 +16,16 @@ struct AppNotificationBell: View {
         Button { presented.toggle() } label: {
             Image(systemName: needsReview ? "bell.fill" : "bell")
                 .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(needsReview ? NotificationStyle.attention : Color.primary)
+                .foregroundStyle(needsReview ? NotificationStyle.review : Color.primary)
                 .frame(width: 36, height: 36)
-                .background(needsReview ? NotificationStyle.attention.opacity(0.12) : .clear,
+                .background(needsReview ? NotificationStyle.review.opacity(0.12) : .clear,
                             in: Circle())
                 .contentShape(Circle())
                 .overlay(alignment: .topTrailing) {
                     if needsReview {
                         Image(systemName: "exclamationmark").font(.system(size: 8, weight: .heavy))
                             .foregroundStyle(.white).frame(width: 13, height: 13)
-                            .background(NotificationStyle.attention, in: Circle())
+                            .background(NotificationStyle.review, in: Circle())
                     } else if notifications.unreadCount > 0 {
                         Circle().fill(Color.moraGreen).frame(width: 7, height: 7).padding(2)
                     }
@@ -86,10 +87,10 @@ private struct NotificationsPanel: View {
                             Text(AppNotificationAction.inbox.title)
                         }
                         Spacer()
-                    }.foregroundStyle(NotificationStyle.attention).padding(16)
+                    }.foregroundStyle(NotificationStyle.review).padding(16)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(NotificationStyle.attention.opacity(0.15))
-                        .overlay(Rectangle().stroke(NotificationStyle.attention.opacity(0.26), lineWidth: 1))
+                        .background(NotificationStyle.review.opacity(0.15))
+                        .overlay(Rectangle().stroke(NotificationStyle.review.opacity(0.26), lineWidth: 1))
                         .contentShape(Rectangle())
                 }.buttonStyle(.plain)
                 Divider()
@@ -133,8 +134,9 @@ private struct NotificationRow: View {
         }
     }
     private var color: Color {
-        event.kind == .error || event.kind == .warning || (event.kind == .review && !event.isResolved)
-            ? NotificationStyle.attention : .moraGreen
+        if event.kind == .error { return NotificationStyle.attention }
+        if event.kind == .warning || (event.kind == .review && !event.isResolved) { return NotificationStyle.review }
+        return .moraGreen
     }
     var body: some View {
         HStack(alignment: .top, spacing: 12) {

@@ -106,12 +106,41 @@ struct ContentView: View {
     private var noticeColor: Color {
         guard let kind = store.activeNotice?.kind else { return .moraGreen }
         switch kind {
-        case .warning, .error: .token("red")
+        case .warning: Color(red: 0.72, green: 0.49, blue: 0.05)
+        case .error: .token("red")
         case .information: .accentColor
         default: .moraGreen
         }
     }
     private let dataRefresh = Timer.publish(every: 2, on: .main, in: .default).autoconnect()
+
+    @ViewBuilder private var activeNoticeBanner: some View {
+        if let notice = store.notice {
+            HStack(spacing: 12) {
+                Image(systemName: store.activeNotice?.kind == .error || store.activeNotice?.kind == .warning
+                      ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
+                    .foregroundStyle(noticeColor)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(notice).font(.callout.weight(.medium)).lineLimit(1)
+                    if let detail = store.activeNotice?.detail {
+                        FinancialText(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 8)
+                if let event = store.activeNotice { NotificationActions(event: event) }
+                Button { store.notice = nil } label: { Image(systemName: "xmark").font(.caption) }
+                    .buttonStyle(.plain).foregroundStyle(.secondary)
+                    .accessibilityLabel(L("Закрыть уведомление"))
+            }
+            .padding(.horizontal, 14).padding(.vertical, 9)
+            .frame(maxWidth: 680, alignment: .leading)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(noticeColor.opacity(0.24), lineWidth: 1))
+            .shadow(color: .black.opacity(0.08), radius: 12, y: 4)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(.horizontal, 24).padding(.vertical, 8)
+        }
+    }
 
     @ViewBuilder private var currencyWarning: some View {
         if !store.ledger.missingCurrencies.isEmpty && page != .settings {
@@ -132,27 +161,6 @@ struct ContentView: View {
         } detail: {
             VStack(spacing: 0) {
                 if store.isDemo { demoBanner }
-                if let notice = store.notice {
-                    HStack {
-                        Image(systemName: store.activeNotice?.kind == .error || store.activeNotice?.kind == .warning
-                              ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
-                            .foregroundStyle(noticeColor)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(notice).font(.callout)
-                            if let detail = store.activeNotice?.detail {
-                                FinancialText(detail).font(.caption).foregroundStyle(.primary.opacity(0.78)).lineLimit(3)
-                            }
-                        }
-                        Spacer()
-                        if let event = store.activeNotice { NotificationActions(event: event) }
-                        Button { store.notice = nil } label: { Image(systemName: "xmark") }
-                            .buttonStyle(.plain).foregroundStyle(.primary.opacity(0.78))
-                            .accessibilityLabel(L("Закрыть уведомление"))
-                    }
-                    .padding(.horizontal, 30).padding(.vertical, 10)
-                    .background(noticeColor.opacity(0.14))
-                    .overlay(alignment: .bottom) { Rectangle().fill(noticeColor.opacity(0.3)).frame(height: 1).allowsHitTesting(false) }
-                }
                 Group {
                     if page == .transactions {
                         VStack(alignment: .leading, spacing: 20) {
@@ -188,6 +196,7 @@ struct ContentView: View {
                 .id(language)
                 .background(scheme == .dark ? Color(nsColor: .windowBackgroundColor) : Color(red: 0.965, green: 0.965, blue: 0.95))
             }
+            .safeAreaInset(edge: .top, spacing: 0) { activeNoticeBanner }
         }
         .frame(minWidth: 1040, minHeight: 700)
         .disabled(store.isLoading || store.isTerminating)

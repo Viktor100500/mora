@@ -66,10 +66,10 @@ struct CloudSettingsView: View {
                 }
                 Text("Первое подключение требует бесплатного проекта Supabase и установки схемы Mora. Оплата iPhone передает доступные сведения о покупке; это не банковская выписка. Автоматизация настраивается отдельно на каждом телефоне.").font(.caption).foregroundStyle(.secondary)
                 Link("Настройка автоматизации Apple", destination: URL(string: "https://support.apple.com/en-ng/guide/shortcuts/apd65c67538a/ios")!).font(.caption)
+                FeedbackContact().font(.caption).padding(.top, 8)
             }.padding(24).frame(maxWidth: 780).frame(maxWidth: .infinity)
         }
         .frame(minWidth: 660, minHeight: 580)
-        .modifier(FeedbackFooter())
         .onAppear {
             url = cloud.projectURL
             key = cloud.publicKey
@@ -207,7 +207,7 @@ struct CloudSettingsView: View {
                     }
                 }
                 DisclosureGroup("Как настроить команду") {
-                    Text("1. В «Быстрых командах» создайте автоматизацию Wallet / «Транзакция» для выбранной карты и включите немедленный запуск.\n2. Получите сумму, валюту и продавца из входной транзакции. Не вводите фиксированную валюту для покупок в разных валютах.\n3. Создайте UUID события и текущую дату в ISO 8601.\n4. Добавьте «Получить содержимое URL»: POST, заголовок apikey и JSON с полями ниже.\n5. Проверьте ответ: recorded — расход записан; pending — покупка ожидает проверки.")
+                    Text("1. В «Быстрых командах» создайте автоматизацию Wallet / «Транзакция» для выбранной карты и включите немедленный запуск.\n2. Получите сумму, валюту и продавца из входной транзакции. Не вводите фиксированную валюту для покупок в разных валютах.\n3. Создайте UUID события и текущую дату в ISO 8601.\n4. Добавьте «Получить содержимое URL»: POST, заголовок apikey и JSON с полями ниже.\n5. Проверьте ответ: recorded — расход записан; pending — покупка доставлена и ожидает обработки Mora или ручной проверки.")
                         .font(.callout).textSelection(.enabled).padding(.top, 8)
                     Text("p_token · p_event_id · p_amount · p_currency · p_merchant · p_occurred_at")
                         .font(.system(.caption, design: .monospaced)).textSelection(.enabled).padding(.top, 8)

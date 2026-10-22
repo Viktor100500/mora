@@ -69,7 +69,7 @@ final class MerchantCategorizer: ObservableObject {
         let snapshot = store.ledger.withoutChangeHistory()
         let candidates = await BackgroundWork.shared.perform {
             snapshot.transactions.filter { $0.categoryID == nil && $0.kind != .transfer }.sorted { $0.date > $1.date }.map {
-                Candidate(transaction: $0, fingerprint: Self.signature($0), known: snapshot.historicalCategory(merchant: $0.merchant, kind: $0.kind))
+                Candidate(transaction: $0, fingerprint: Self.signature($0), known: snapshot.suggestedCategory(merchant: $0.merchant, kind: $0.kind))
             }
         }
         for candidate in candidates {
