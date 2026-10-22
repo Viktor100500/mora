@@ -46,7 +46,7 @@ def workflow(config, preview=False, wallet=False, diagnostics=False):
 
     action('comment', '', WFCommentActionText=(
         ('Mora · Apple Pay\nПринимает транзакцию Wallet. Mora считает $ валютой USD и автоматически пересчитывает покупку в валюту счета. ' if wallet else 'Mora · Apple Pay\nПринимает словарь amount, merchant, currency. ')
-        + 'Неизвестную валюту оставляйте пустой: Mora попробует определить ее из суммы. '
+        + 'Если код валюты неизвестен, оставьте поле пустым: сервер определит ее по сумме, если распознает символ или код. '
         'Ключ только записывает в выбранный счёт. '
         'Для первой версии требуется интернет; очередь повторной отправки не включена.'))
     phone = action('gettext', 'Ключ телефона', WFTextActionText='0' * 64)
@@ -63,7 +63,8 @@ def workflow(config, preview=False, wallet=False, diagnostics=False):
                 {"Type": "WFPropertyVariableAggrandizement", "PropertyName": property_name}]}
             values[key] = action('gettext', key, WFTextActionText=text(value))
         # Currency availability on the user's iPhone has not been verified.
-        # Capture safely to the inbox instead of assuming account currency.
+        # The server infers supported currencies from formatted amount text;
+        # unknown symbols remain pending instead of being guessed.
         values['currency'] = action('gettext', 'Валюта для проверки', WFTextActionText='')
     else:
         for key in ('amount', 'merchant', 'currency'):

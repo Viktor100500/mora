@@ -167,12 +167,17 @@ try {
       assert.equal(stored,'-'+expected,input);
     }
   });
-  await check('a formatted amount never supplies an unknown currency or converts a foreign one',async()=>{
-    for (const [currency,reason] of [['','Не получена валюта покупки'],['EUR','Валюта покупки отличается от валюты счета']]) {
-      const result=await capture(anon,phone2.token,uuid(),'$31.54',currency);
-      assert.equal(result.state,'pending'); assert.equal(result.reason,reason);
-      await rpc(owner,'mora_resolve_capture',[h,result.id,accountID,'','',true]);
-    }
+  await check('recognized amount currency is inferred while symbol-free amounts stay pending',async()=>{
+    const inferred=await capture(anon,phone2.token,uuid(),'$31.54','');
+    assert.equal(inferred.state,'recorded');
+    assert.equal(inferred.currency,'USD'); assert.equal(inferred.currency_inferred,true);
+    const unknown=await capture(anon,phone2.token,uuid(),'31.54','');
+    assert.equal(unknown.state,'pending'); assert.equal(unknown.reason,'Не получена валюта покупки');
+    const explicitForeign=await capture(anon,phone2.token,uuid(),'$31.54','EUR');
+    assert.equal(explicitForeign.state,'pending');
+    assert.equal(explicitForeign.reason,'Валюта покупки отличается от валюты счета');
+    await rpc(owner,'mora_resolve_capture',[h,unknown.id,accountID,'','',true]);
+    await rpc(owner,'mora_resolve_capture',[h,explicitForeign.id,accountID,'','',true]);
   });
   await check('malformed, nonpositive, excessive and duplicate-symbol amounts stay pending',async()=>{
     const before=(await rpc(owner,'mora_get_household',[h])).snapshot.transactions.length;
@@ -187,6 +192,8 @@ try {
   await check('the parser stays private and capture RPC remains available to phone tokens',async()=>{
     await denied(()=>rpc(anon,'mora_parse_payment_amount',['$31.54']));
     await denied(()=>rpc(owner,'mora_parse_payment_amount',['$31.54']));
+    await denied(()=>rpc(anon,'mora_parse_payment_currency',['$31.54']));
+    await denied(()=>rpc(owner,'mora_parse_payment_currency',['$31.54']));
     await denied(()=>capture(anon,'0'.repeat(64),uuid(),'$31.54'));
   });
   const eurAccount=uuid().toUpperCase();
@@ -194,7 +201,25 @@ try {
   const latestForReview=await rpc(owner,'mora_get_household',[h]);
   const withAccount=(await admin.query("select jsonb_set(snapshot,'{accounts}',(snapshot->'accounts') || $2::jsonb)::text value from public.mora_households where id=$1",[h,JSON.stringify([accountJSON])])).rows[0].value;
   assert.equal(await rpc(owner,'mora_save_household',[h,latestForReview.version,withAccount]),true);
-  const reviewedCapture=await capture(anon,phone2.token,uuid(),'$31.54','');
+  const eurPhone=await rpc(owner,'mora_create_phone_token',[h,eurAccount,'Wallet EUR']);
+  await check('formatted dollar amount is accepted for automatic USD to EUR conversion',async()=>{
+    const merchant='Uniqlo USA LLC UNIQLO_US-';
+    const received=await capture(anon,eurPhone.token,uuid(),'$14.90','',merchant);
+    assert.equal(received.state,'pending');
+    assert.equal(received.currency,'USD'); assert.equal(received.currency_inferred,true);
+    assert.equal(received.reason,null); assert.equal(received.next_step,'mora_conversion');
+    const pending=(await rpc(owner,'mora_list_pending',[h])).find(item=>item.id===received.id);
+    assert.equal(pending.currency,'USD');
+    assert.equal(pending.reason,'Валюта покупки отличается от валюты счета');
+    const transaction={id:uuid(),date,merchant,amount:-13.44,accountID:eurAccount,kind:'expense',categoryID,
+      note:'Apple Wallet',tags:['Apple Wallet'],conversion:{originalAmount:-14.90,originalCurrency:'USD',accountCurrency:'EUR',
+        rate:0.9,date:'2026-10-16T00:00:00Z',provider:'Visa',bankFeePercent:0.23}};
+    const booked=await rpc(member,'mora_review_capture',[h,received.id,transaction]);
+    assert(booked.snapshot.transactions.some(item=>item.id===received.id.toUpperCase() && item.externalID==='wallet:'+received.id));
+    const stored=(await admin.query('select currency,state from public.mora_captures where id=$1',[received.id])).rows[0];
+    assert.equal(stored.currency,'USD'); assert.equal(stored.state,'recorded');
+  });
+  const reviewedCapture=await capture(anon,eurPhone.token,uuid(),'$31.54','');
   const reviewedTransaction={id:uuid(),date:'2026-10-16T20:19:00Z',merchant:'Cafe · Apple Wallet · Test phone · 20:19',amount:-28.45,
     accountID:eurAccount,kind:'expense',categoryID,note:'Edited review note',tags:['Apple Wallet','reviewed'],externalID:'must-be-replaced',
     conversion:{originalAmount:-31.54,originalCurrency:'USD',accountCurrency:'EUR',rate:0.9,date:'2026-10-16T00:00:00Z',provider:'Visa',bankFeePercent:0.23}};
@@ -213,7 +238,7 @@ try {
     assert.deepEqual(retry.snapshot,before.snapshot);
   });
   await check('review rejects non-members, phone tokens, invalid accounts and inconsistent conversions',async()=>{
-    const pending=await capture(anon,phone2.token,uuid(),'$31.54','');
+    const pending=await capture(anon,eurPhone.token,uuid(),'$31.54','');
     await denied(()=>rpc(outsider,'mora_review_capture',[h,pending.id,reviewedTransaction]));
     await denied(()=>rpc(anon,'mora_review_capture',[h,pending.id,reviewedTransaction]));
     const before=await rpc(owner,'mora_get_household',[h]);
