@@ -73,11 +73,12 @@ final class AppNotifications: ObservableObject {
         let task = Task { @MainActor in
             do {
                 let history = try await storage.load()
+                let visibleHistory = history.filter { !Self.isCopyNoise($0.message) }
                 if events.isEmpty {
-                    if !history.isEmpty { events = history }
+                    if !visibleHistory.isEmpty { events = visibleHistory }
                 } else {
                     let localIDs = Set(events.map(\.id))
-                    let missing = history.filter { !localIDs.contains($0.id) }; if !missing.isEmpty { events += missing }
+                    let missing = visibleHistory.filter { !localIDs.contains($0.id) }; if !missing.isEmpty { events += missing }
                 }
             } catch { storageError = L("Не удалось прочитать историю уведомлений."); canPersist = false }
             loaded = true
@@ -95,6 +96,11 @@ final class AppNotifications: ObservableObject {
         events.insert(event, at: 0)
         persist()
         return event
+    }
+
+    private static func isCopyNoise(_ message: String) -> Bool {
+        ["Адрес почты скопирован", "Почта скопирована", "Email address copied", "Email copied",
+         "Промпт скопирован", "Prompt copied"].contains(message)
     }
 
     func markAllRead() {

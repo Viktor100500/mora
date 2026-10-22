@@ -1,5 +1,10 @@
 import Foundation
 
+public enum TrendDetail: String, CaseIterable, Identifiable, Sendable {
+    case months, weeks, days, selectedDates
+    public var id: String { rawValue }
+}
+
 public struct CategoryTotal: Identifiable, Sendable {
     public var id: UUID?
     public var name: String
@@ -23,6 +28,13 @@ public struct Summary: Sendable {
     public var savingRate: Double { income > 0 ? (net / income).double : 0 }
 }
 
+public struct AnalyticsReport: Sendable {
+    public var trend: [MonthTotal] = []
+    public var categories: [CategoryTotal] = []
+    public var summary = Summary()
+    public init() {}
+}
+
 public extension Ledger {
     func transactions(in month: Date) -> [Transaction] {
         let start = Dates.month(month)
@@ -39,18 +51,76 @@ public extension Ledger {
         return result
     }
     func categoryTotals(in month: Date) -> [CategoryTotal] {
-        let expenses = reportingTransactions(in: month).filter { $0.kind == .expense }
+        categoryTotals(for: reportingTransactions(in: month))
+    }
+
+    private func categoryTotals(for rows: [Transaction]) -> [CategoryTotal] {
+        let expenses = rows.filter { $0.kind == .expense }
         return Dictionary(grouping: expenses, by: \.categoryID).map { id, rows in
             let c = category(id)
             return CategoryTotal(id: id, name: c?.name ?? "Без категории", color: c?.color ?? "gray", icon: c?.icon ?? "questionmark", amount: rows.reduce(Decimal(0)) { $0 - (value($1) ?? 0) })
         }.filter { $0.amount > 0 }.sorted { $0.amount > $1.amount }
     }
-    func trend(ending month: Date, count: Int = 6) -> [MonthTotal] {
-        (0..<count).reversed().map { offset in
+
+    /// Every analytics visualization shares the same transaction scope.
+    func analyticsReport(ending month: Date, count: Int = 12, detail: TrendDetail = .months, selectedDays: Set<Int> = []) -> AnalyticsReport {
+        var report = AnalyticsReport()
+        report.trend = trend(ending: month, count: count, detail: detail, selectedDays: selectedDays)
+        guard let start = report.trend.first?.date else { return report }
+        let calendar = Calendar.current
+        let end = calendar.date(byAdding: .month, value: 1, to: Dates.month(month))!
+        let rows = transactions.filter {
+            $0.date >= start && $0.date < end && isActive($0) &&
+            (detail != .selectedDates || selectedDays.contains(calendar.component(.day, from: $0.date)))
+        }
+        report.categories = categoryTotals(for: rows)
+        for row in rows where row.kind != .transfer {
+            guard let amount = value(row) else { continue }
+            if row.kind == .income { report.summary.income += amount }
+            else { report.summary.expense -= amount }
+            report.summary.count += 1
+        }
+        return report
+    }
+    func trend(ending month: Date, count: Int = 6, detail: TrendDetail = .months, selectedDays: Set<Int> = []) -> [MonthTotal] {
+        if detail == .selectedDates {
+            return monthTrend(in: month, detail: .days).filter { selectedDays.contains(Calendar.current.component(.day, from: $0.date)) }
+        }
+        if detail != .months { return monthTrend(in: month, detail: detail) }
+        return (0..<count).reversed().map { offset in
             let date = Calendar.current.date(byAdding: .month, value: -offset, to: Dates.month(month))!
             let sum = summary(in: date)
             return MonthTotal(date: date, income: sum.income, expense: sum.expense)
         }
+    }
+
+    private func monthTrend(in month: Date, detail: TrendDetail) -> [MonthTotal] {
+        var calendar = Calendar.current
+        calendar.firstWeekday = 2
+        let start = Dates.month(month)
+        let end = calendar.date(byAdding: .month, value: 1, to: start)!
+        func bucket(for date: Date) -> Date {
+            detail == .weeks ? max(start, calendar.dateInterval(of: .weekOfYear, for: date)!.start) : calendar.startOfDay(for: date)
+        }
+        var totals: [Date: Summary] = [:]
+        for transaction in transactions where transaction.date >= start && transaction.date < end && isActive(transaction) && transaction.kind != .transfer {
+            guard let amount = value(transaction) else { continue }
+            let key = bucket(for: transaction.date)
+            if transaction.kind == .income { totals[key, default: Summary()].income += amount }
+            else { totals[key, default: Summary()].expense -= amount }
+        }
+        var result: [MonthTotal] = []
+        var date = start
+        while date < end {
+            let total = totals[date] ?? Summary()
+            result.append(MonthTotal(date: date, income: total.income, expense: total.expense))
+            if detail == .weeks {
+                date = calendar.dateInterval(of: .weekOfYear, for: date)!.end
+            } else {
+                date = calendar.date(byAdding: .day, value: 1, to: date)!
+            }
+        }
+        return result
     }
     func spent(category id: UUID, in month: Date) -> Decimal {
         reportingTransactions(in: month).filter { $0.kind == .expense && $0.categoryID == id }.reduce(0) { $0 - (value($1) ?? 0) }

@@ -7,6 +7,7 @@ import FinanceCore
     var summaries: [Date: Summary] = [:]
     var categories: [Date: [CategoryTotal]] = [:]
     var trends: [String: [MonthTotal]] = [:]
+    var analytics: [String: AnalyticsReport] = [:]
     var insights: [Date: [String]] = [:]
     var transactions: [Date: [Transaction]] = [:]
     var balances: [UUID: Decimal] = [:]
@@ -66,12 +67,48 @@ extension FinanceStore {
     func reportRecentTransactions(in month: Date) -> [Transaction] {
         prepareReports(in: month); return reports.recent[Dates.month(month)] ?? []
     }
-    func reportTrend(ending month: Date, count: Int = 6) -> [MonthTotal] {
-        prepareReports(in: month, count: count)
-        return reports.trends["\(Dates.month(month).timeIntervalSince1970)-\(count)"] ?? []
+    func reportTrend(ending month: Date, count: Int = 6, detail: TrendDetail = .months, selectedDays: Set<Int> = []) -> [MonthTotal] {
+        if detail == .months {
+            prepareReports(in: month, count: count)
+            return reports.trends["\(Dates.month(month).timeIntervalSince1970)-\(count)"] ?? []
+        }
+        let cache = reports, month = Dates.month(month)
+        let selectedKey = detail == .selectedDates ? selectedDays.sorted().map(String.init).joined(separator: ",") : ""
+        let key = "\(month.timeIntervalSince1970)-\(detail.rawValue)-\(selectedKey)"
+        if let trend = cache.trends[key] { return trend }
+        if cache.pending.insert(key).inserted {
+            let snapshot = ledger.withoutChangeHistory()
+            Task { @MainActor [weak self] in
+                let trend = await BackgroundWork.shared.perform { snapshot.trend(ending: month, detail: detail, selectedDays: selectedDays) }
+                guard let self, self.reports === cache, !Task.isCancelled else { return }
+                self.objectWillChange.send()
+                cache.trends[key] = trend
+                cache.pending.remove(key)
+            }
+        }
+        return []
     }
     func reportInsights(in month: Date) -> [String] {
         prepareReports(in: month); return reports.insights[Dates.month(month)] ?? []
+    }
+    func reportAnalytics(in month: Date, detail: TrendDetail, selectedDays: Set<Int>) -> AnalyticsReport {
+        let cache = reports, month = Dates.month(month)
+        let daysKey = detail == .selectedDates ? selectedDays.sorted().map(String.init).joined(separator: ",") : ""
+        let key = "analytics-\(month.timeIntervalSince1970)-\(detail.rawValue)-\(daysKey)"
+        if let report = cache.analytics[key] { return report }
+        if cache.pending.insert(key).inserted {
+            let snapshot = ledger.withoutChangeHistory()
+            Task { @MainActor [weak self] in
+                let report = await BackgroundWork.shared.perform {
+                    snapshot.analyticsReport(ending: month, detail: detail, selectedDays: selectedDays)
+                }
+                guard let self, self.reports === cache, !Task.isCancelled else { return }
+                self.objectWillChange.send()
+                cache.analytics[key] = report
+                cache.pending.remove(key)
+            }
+        }
+        return AnalyticsReport()
     }
     func reportBalance(_ account: Account) -> Decimal {
         prepareReports(in: Date()); return reports.balances[account.id] ?? account.openingBalance

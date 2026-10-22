@@ -17,7 +17,7 @@ struct AccountsView: View {
                         VStack(alignment: .leading, spacing: 22) {
                             HStack { IconTile(icon: account.kind.icon, color: account.color, size: 44); VStack(alignment: .leading, spacing: 4) { Text(account.name).font(.system(size: 16, weight: .semibold)); Text(L(account.kind.title) + (account.archived ? L(" · архив") : "")).font(.caption).foregroundStyle(.secondary) }; Spacer(); Text(account.currency).font(.caption.weight(.medium)).foregroundStyle(.secondary).padding(7).background(Color.primary.opacity(0.04)).clipShape(Capsule()) }
                             FinancialText(DisplayMoney.string(store.reportBalance(account), currency: account.currency)).font(.system(size: 30, weight: .semibold, design: .rounded))
-                            HStack { FinancialText(L("Начальный остаток: \(DisplayMoney.string(account.openingBalance, currency: account.currency))")).font(.caption).foregroundStyle(.secondary); Spacer(); Button { sheet = .account(account) } label: { Image(systemName: "pencil") }.buttonStyle(.plain).help(L("Редактировать счет")) }
+                            HStack { FinancialText(L("Начальный остаток: \(DisplayMoney.string(account.openingBalance, currency: account.currency))")).font(.caption).foregroundStyle(.secondary); Spacer(); GlassEditButton(title: "Редактировать счет") { sheet = .account(account) } }
                         }
                     }.opacity(account.archived ? 0.65 : 1)
                     .contextMenu {
@@ -282,7 +282,15 @@ struct CategoriesView: View {
                     HStack { SectionHeading(title: L("Категории"), subtitle: L("Отдельные категории для доходов и расходов")); Spacer(); Button(L("Добавить")) { sheet = .category(nil) }.buttonStyle(.borderedProminent) }
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                         ForEach(store.ledger.categories) { c in
-                            HStack(spacing: 10) { IconTile(icon: c.icon, color: c.color, size: 30); VStack(alignment: .leading, spacing: 3) { Text(c.name).font(.system(size: 12, weight: .medium)); Text(L(c.kind.title)).font(.system(size: 10)).foregroundStyle(.secondary) }; Spacer(); Button { sheet = .category(c) } label: { Image(systemName: "pencil").font(.caption) }.buttonStyle(.plain).foregroundStyle(.secondary) }.padding(12).background(Color.primary.opacity(0.025)).clipShape(RoundedRectangle(cornerRadius: 10)).contextMenu { Button(L("Редактировать")) { sheet = .category(c) }; Button(L("Удалить категорию"), role: .destructive) { deletingCategory = c } }
+                            HStack(spacing: 10) {
+                                IconTile(icon: c.icon, color: c.color, size: 30)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(c.name).font(.system(size: 12, weight: .medium)).lineLimit(2)
+                                    Text(L(c.kind.title)).font(.system(size: 10)).foregroundStyle(.secondary)
+                                }.frame(maxWidth: .infinity, alignment: .leading).frame(height: 44)
+                                GlassEditButton(title: "Редактировать категорию") { sheet = .category(c) }
+                            }.padding(12).background(Color.primary.opacity(0.025)).clipShape(RoundedRectangle(cornerRadius: 10)).help(c.name)
+                                .contextMenu { Button(L("Редактировать")) { sheet = .category(c) }; Button(L("Удалить категорию"), role: .destructive) { deletingCategory = c } }
                         }
                     }
                 }
@@ -296,7 +304,7 @@ struct CategoriesView: View {
                             Text("\(index + 1)").font(.caption).foregroundStyle(.secondary).frame(width: 24)
                             Text(L("Описание содержит")).font(.caption).foregroundStyle(.secondary); Text(rule.keyword).font(.callout.weight(.medium)); Image(systemName: "arrow.right").foregroundStyle(.secondary); Text(store.ledger.category(rule.categoryID)?.name ?? "").font(.callout)
                             Spacer(); Button { Task { @MainActor in  await store.update { $0.rules.swapAt(index, index - 1) }  } } label: { Image(systemName: "arrow.up") }.disabled(index == 0).buttonStyle(.plain).help(L("Повысить приоритет"))
-                            Button { sheet = .rule(rule) } label: { Image(systemName: "pencil") }.buttonStyle(.plain)
+                            GlassEditButton(title: "Редактировать правило") { sheet = .rule(rule) }
                             Button(role: .destructive) { Task { @MainActor in  await store.update { $0.rules.removeAll { $0.id == rule.id } }  } } label: { Image(systemName: "trash") }.buttonStyle(.plain)
                         }.padding(.vertical, 8)
                     }

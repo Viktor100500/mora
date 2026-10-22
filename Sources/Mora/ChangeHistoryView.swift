@@ -30,7 +30,7 @@ struct ChangeHistoryCard: View {
                                 }
                             }.padding(.top, 10).frame(maxWidth: .infinity, alignment: .leading)
                         }.frame(maxHeight: 280)
-                    }.font(.callout)
+                    }.font(.callout).disclosureGroupStyle(OutlinedDisclosureGroupStyle())
                 }
                 Text(L("Хранятся последние 20 шагов, в том числе после перезапуска. Один шаг может включать несколько операций — например, импорт файла. Новое изменение после отмены очищает список возврата.")).font(.caption).foregroundStyle(.secondary)
             }

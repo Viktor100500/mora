@@ -70,6 +70,7 @@ struct CloudSettingsView: View {
             }.padding(24).frame(maxWidth: 780).frame(maxWidth: .infinity)
         }
         .frame(minWidth: 660, minHeight: 580)
+        .disclosureGroupStyle(OutlinedDisclosureGroupStyle())
         .onAppear {
             url = cloud.projectURL
             key = cloud.publicKey

@@ -2,7 +2,38 @@
 
 ## Unreleased
 
+- Infer supported Wallet currencies from formatted amounts on the server when Shortcuts cannot provide a separate currency field; keep foreign-currency captures queued for Mora conversion and leave ambiguous symbols for review.
 - Build future public releases for Apple Silicon only, using local pre-release tests instead of rerunning tests in the release workflow.
+
+## 1.5.15 — 2026-10-21
+
+- Equalize the spacing between the three floating toolbar controls.
+- Clear the last selected calendar day on a repeated click and move selected-date transactions into a separate card below category spending.
+- Give analytics one shared period control for the income/expense chart, category donut and category totals, with a common date scope and background report calculation.
+- Place category hover cards beside the donut, outside every sector, and show the category icon and color.
+- Switch to Selected dates after calendar clicks and give all unselected expense days the same fill, independent of spending size.
+- Keep category tiles the same height when long names wrap in a narrow window.
+- Preserve a transaction's exact time when editing its category or other fields; changing the day retains its clock time, and new manual/similar purchases retain their creation time.
+
+## 1.5.14 — 2026-10-21
+
+- Rebuild transaction filters with aligned 40-point controls and integrated date labels; align row checkboxes with category icons, show notes as secondary truncated text and open full details from the context menu.
+- Open accounts from the sidebar net-worth card and combine sync status and the exchange-rate source into one footer line.
+- Align chart detail switches with their headings and legends with the plot; move the expense calendar above analytics charts and compare its selected days using the Selected dates mode.
+- Show five category legend entries and category, amount and share tooltips for every donut sector.
+- Remove the window title, toolbar-wide background and scroll-edge overlay; keep only the floating Import, New transaction and Notifications controls with their own Liquid Glass surfaces.
+
+## 1.5.13 — 2026-10-21
+
+- Give the dashboard cash-flow icon the same rounded background and size as the metric-card icons; use the standard body font for the All analytics and All transactions links.
+- Enlarge edit buttons in transactions, accounts, categories and categorization rules to match the 36-point circular Liquid Glass toolbar controls.
+- Make every disclosure header an outlined button that expands or collapses from its text, arrow or padding, including import transactions, saved change-history steps and cloud setup details.
+- Add Months, Weeks and Days detail switches to the overview cash-flow chart and analytics income/expense chart, with Monday-based weeks and daily totals within the selected month prepared in the background.
+- Replace the transactions month selector and All time switch with an inclusive date range; export the displayed filtered rows with one action, remove the ambiguous column header and show expandable user notes below each transaction.
+
+## 1.5.12 — 2026-10-21
+
+- Select individual expense-calendar days with Ctrl/Command-click and inclusive ranges with Shift-click; show transactions for all selected days and clear the selection when changing months.
 
 ## 1.5.11 — 2026-10-21
 

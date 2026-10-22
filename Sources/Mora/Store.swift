@@ -103,6 +103,9 @@ final class FinanceStore: ObservableObject {
     func showNotice(_ message: String, detail: String? = nil, actions: [AppNotificationAction] = []) {
         activeNotice = notifications.record(message, detail: detail, actions: actions)
     }
+    func showTransientNotice(_ message: String) {
+        activeNotice = AppNotification(message: message)
+    }
     var notificationStateToken: String { notificationTokenCache }
     var undoNotificationActions: [AppNotificationAction] {
         undoCount > 0 && !notificationStateToken.isEmpty ? [.undo(notificationStateToken)] : []
@@ -247,7 +250,17 @@ final class FinanceStore: ObservableObject {
             replaceOrAppend(saved, in: &ledger.transactions)
         }
     }
-    func deleteTransaction(_ id: UUID) async { await update { $0.transactions.removeAll { $0.id == id } } }
+    func deleteTransaction(_ id: UUID) async {
+        let result = await change { ledger -> (Bool, ChangeDescription) in
+            let before = ledger
+            ledger.transactions.removeAll { $0.id == id }
+            guard ledger.transactions.count != before.transactions.count else { return (false, ChangeDescription(title: "", detail: "")) }
+            return (true, ChangeDescriptions.between(before, ledger))
+        }
+        if let (deleted, description) = result, deleted {
+            showNotice(description.title, detail: description.detail, actions: undoNotificationActions)
+        }
+    }
     func setAccountArchived(_ id: UUID, archived: Bool) async {
         if await update({ try $0.setAccountArchived(id, archived: archived) }) {
             showNotice(archived ? L("Счет архивирован и исключен из расчетов") : L("Счет возвращен из архива"),

@@ -1,14 +1,14 @@
 import Foundation
 
 public struct TransactionSearch: Equatable, Sendable {
-    public var month: Date
-    public var allTime: Bool
+    public var startDate: Date
+    public var endDate: Date
     public var accountID: UUID?
     public var kind: String
     public var category: String
     public var text: String
-    public init(month: Date, allTime: Bool, accountID: UUID?, kind: String, category: String, text: String) {
-        self.month = month; self.allTime = allTime; self.accountID = accountID
+    public init(startDate: Date, endDate: Date, accountID: UUID?, kind: String, category: String, text: String) {
+        self.startDate = startDate; self.endDate = endDate; self.accountID = accountID
         self.kind = kind; self.category = category; self.text = text
     }
     public struct Result: Sendable {
@@ -19,11 +19,14 @@ public struct TransactionSearch: Equatable, Sendable {
     }
     public func prepare(in ledger: Ledger) throws -> Result {
         try Task.checkCancellation()
-        let start = Dates.month(month), end = Calendar.current.date(byAdding: .month, value: 1, to: start)!
+        let start = Calendar.current.startOfDay(for: startDate)
+        let lastDay = Calendar.current.startOfDay(for: endDate)
+        guard start <= lastDay else { throw LedgerError.invalid("Дата начала не может быть позже даты окончания.") }
+        let end = Calendar.current.date(byAdding: .day, value: 1, to: lastDay)!
         var rows: [Transaction] = [], income: Decimal = 0, expense: Decimal = 0
         for (index, transaction) in ledger.transactions.enumerated() {
             if index.isMultiple(of: 256) { try Task.checkCancellation() }
-            guard allTime || (transaction.date >= start && transaction.date < end),
+            guard transaction.date >= start && transaction.date < end,
                   accountID == nil || transaction.accountID == accountID || transaction.destinationAccountID == accountID,
                   kind == "all" || transaction.kind.rawValue == kind,
                   category == "all" || (category == "none" ? transaction.categoryID == nil && transaction.kind != .transfer : transaction.categoryID?.uuidString == category),

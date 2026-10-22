@@ -258,7 +258,7 @@ struct SettingsView: View {
             let directory = store.fileURL.deletingLastPathComponent()
             let text = try await BackgroundWork.shared.perform { try AIPrompt.text(name, ledger: context, includeContext: includeContext, dataDirectory: directory) }
             AIPrompt.copy(text)
-            store.notice = L("Промпт скопирован")
+            store.showTransientNotice(L("Промпт скопирован"))
         } catch { store.error = error.localizedDescription }
     } }
     private func saveTemplate() {

@@ -9,11 +9,12 @@ struct MoraApp: App {
     @StateObject private var cloud = CloudSync()
     @StateObject private var categorizer = MerchantCategorizer()
     @Environment(\.openWindow) private var openWindow
+    @FocusedValue(\.exportFilteredTransactions) private var exportFilteredTransactions
     @AppStorage("mora.language") private var language = "ru"
     @State private var page: Page = .overview
     @State private var sheet: EditorSheet?
     var body: some Scene {
-        Window(L("Mora — личные финансы"), id: "main") {
+        Window("Mora", id: "main") {
             ContentView(page: $page, sheet: $sheet).environmentObject(store).environmentObject(cloud).environmentObject(categorizer)
                 .tint(.moraGreen)
                 .environment(\.locale, L10n.locale)
@@ -37,7 +38,7 @@ struct MoraApp: App {
                 .task { await categorizer.run(store: store) }
         }
         .defaultSize(width: 1320, height: 900)
-        .windowStyle(.titleBar)
+        .windowStyle(.hiddenTitleBar)
         .commands {
             CommandGroup(replacing: .help) {
                 FeedbackButton()
@@ -45,7 +46,10 @@ struct MoraApp: App {
             CommandGroup(replacing: .newItem) {
                 Button(L("Новая операция")) { sheet = .transaction(nil) }.keyboardShortcut("n")
                 Button(L("Импортировать CSV…")) { importFile() }.keyboardShortcut("i")
-                Button(L("Экспортировать операции…")) { Task { @MainActor in  await store.exportCSV()  } }.keyboardShortcut("e", modifiers: [.command, .shift])
+                Button(L("Экспортировать операции…")) {
+                    if let exportFilteredTransactions { exportFilteredTransactions() }
+                    else { Task { @MainActor in await store.exportCSV() } }
+                }.keyboardShortcut("e", modifiers: [.command, .shift])
             }
             CommandMenu(L("Финансы")) {
                 Button(L("Добавить счет")) { sheet = .account(nil) }
@@ -104,12 +108,12 @@ struct ContentView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var currency: String { store.ledger.preferences.baseCurrency }
     private var noticeColor: Color {
-        guard let kind = store.activeNotice?.kind else { return .moraGreen }
-        switch kind {
+        guard let kind = store.activeNotice?.kind else { return Color.moraGreen }
+        return switch kind {
         case .warning: Color(red: 0.72, green: 0.49, blue: 0.05)
-        case .error: .token("red")
-        case .information: .accentColor
-        default: .moraGreen
+        case .error: Color.token("red")
+        case .information: Color.accentColor
+        default: Color.moraGreen
         }
     }
     private let dataRefresh = Timer.publish(every: 2, on: .main, in: .default).autoconnect()
@@ -158,6 +162,7 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             sidebar.navigationSplitViewColumnWidth(min: 210, ideal: 228, max: 260)
+                .toolbar(removing: .sidebarToggle)
         } detail: {
             VStack(spacing: 0) {
                 if store.isDemo { demoBanner }
@@ -166,7 +171,7 @@ struct ContentView: View {
                         VStack(alignment: .leading, spacing: 20) {
                             header
                             currencyWarning
-                            TransactionsView(month: month, sheet: $sheet)
+                            TransactionsView(sheet: $sheet)
                         }.padding(24).frame(maxWidth: 1320).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     } else {
                         ScrollView {
@@ -185,12 +190,16 @@ struct ContentView: View {
                                 case .imports: ImportHistoryView(onRollback: requestRollback)
                                 case .settings: SettingsView()
                                 }
-                        HStack(spacing: 5) { Image(systemName: "lock.shield"); Text(store.isDemo ? L("Демонстрационный режим · изменения не сохраняются") : cloud.householdID == nil ? L("Данные хранятся на вашем Mac") : L("Локальная копия общей базы · \(cloud.enabled ? L("синхронизация включена") : L("синхронизация на паузе"))")) }.font(.caption).foregroundStyle(.tertiary).frame(maxWidth: .infinity).padding(.top, 4)
-                                if !store.isDemo, store.ledger.preferences.exchangeRateSnapshot != nil {
-                                    Link(L("Курсы: ExchangeRate-API"), destination: ExchangeRateSnapshot.providerURL).font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity)
-                                }
+                                HStack(spacing: 5) {
+                                    Image(systemName: "lock.shield")
+                                    Text(store.isDemo ? L("Демонстрационный режим · изменения не сохраняются") : cloud.householdID == nil ? L("Данные хранятся на вашем Mac") : L("Локальная копия общей базы · \(cloud.enabled ? L("синхронизация включена") : L("синхронизация на паузе"))"))
+                                    if !store.isDemo, store.ledger.preferences.exchangeRateSnapshot != nil {
+                                        Text("·")
+                                        Link(L("Курсы: ExchangeRate-API"), destination: ExchangeRateSnapshot.providerURL).foregroundStyle(.tertiary)
+                                    }
+                                }.font(.caption).foregroundStyle(.tertiary).lineLimit(1).frame(maxWidth: .infinity).padding(.top, 4)
                             }.padding(24).frame(maxWidth: 1320).frame(maxWidth: .infinity)
-                        }
+                        }.modifier(ConsistentScrollEdges())
                     }
                 }
                 .id(language)
@@ -225,18 +234,18 @@ struct ContentView: View {
         .onChange(of: store.ledger.preferences) { _, preferences in
             if !page.isVisible(in: preferences) { page = .overview }
         }
-        .navigationTitle(L("Mora — личные финансы"))
+        .toolbarBackground(.hidden, for: .windowToolbar)
+        .toolbar(removing: .sidebarToggle)
         .toolbar {
             if #available(macOS 26.0, *) {
-                ToolbarItem(placement: .primaryAction) { HStack { importControl } }
-                    .sharedBackgroundVisibility(.hidden)
-                ToolbarSpacer(.fixed, placement: .primaryAction)
-                ToolbarItem(placement: .primaryAction) { transactionControls }
+                ToolbarSpacer(.flexible, placement: .primaryAction)
+                ToolbarItem(placement: .primaryAction) {
+                    HStack(spacing: 10) { importControl; transactionControls }
+                }
                     .sharedBackgroundVisibility(.hidden)
             } else {
                 ToolbarItemGroup(placement: .primaryAction) {
-                    importControl
-                    transactionControls
+                    HStack(spacing: 10) { importControl; transactionControls }
                 }
             }
         }
@@ -307,11 +316,13 @@ struct ContentView: View {
                 }.buttonStyle(.plain).padding(.horizontal, 12).padding(.vertical, 2)
             }
             Spacer(minLength: 24)
+            Button { page = .accounts } label: {
             VStack(alignment: .leading, spacing: 8) {
                 Label(L("Общий капитал"), systemImage: "chart.line.uptrend.xyaxis").font(.caption).foregroundStyle(.secondary)
                 FinancialText(DisplayMoney.string(store.reportNetWorth, currency: currency)).font(.system(size: 22, weight: .semibold, design: .rounded)).minimumScaleFactor(0.7).lineLimit(1)
                 Text(L("\(store.ledger.accounts.count) счетов · \(currency)")).font(.caption2).foregroundStyle(.secondary)
-            }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(Color.moraGreen.opacity(0.05)).clipShape(RoundedRectangle(cornerRadius: 14)).padding(16)
+            }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(Color.moraGreen.opacity(0.05)).clipShape(RoundedRectangle(cornerRadius: 14)).contentShape(RoundedRectangle(cornerRadius: 14))
+            }.buttonStyle(.plain).help(L("Открыть счета")).padding(16)
             VStack(alignment: .leading, spacing: 12) {
                 FeedbackContact(compact: true)
                 DonationButton().buttonStyle(.plain).foregroundStyle(.secondary)
@@ -358,7 +369,7 @@ struct ContentView: View {
         HStack(alignment: .center) {
             VStack(alignment: .leading, spacing: 8) { Text(L(page.title)).font(.system(size: 30, weight: .semibold, design: .rounded)); Text(page.subtitle).font(.system(size: 13)).foregroundStyle(.secondary) }
             Spacer()
-            if [.overview, .transactions, .budgets, .analytics].contains(page) {
+            if [.overview, .budgets, .analytics].contains(page) {
                 HStack(spacing: 10) {
                     Button { month = Calendar.current.date(byAdding: .month, value: -1, to: month)! } label: { Image(systemName: "chevron.left") }.buttonStyle(.plain).help(L("Предыдущий месяц"))
                     Menu {

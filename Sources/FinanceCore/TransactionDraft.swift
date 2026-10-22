@@ -1,5 +1,18 @@
 import Foundation
 
+public enum TransactionDateEditing {
+    /// A date-only editor changes the calendar day, retaining the event's clock
+    /// time. Returning the original value also preserves subsecond precision.
+    public static func changingDay(of timestamp: Date, to day: Date, calendar: Calendar = .current) -> Date {
+        guard !calendar.isDate(timestamp, inSameDayAs: day) else { return timestamp }
+        let time = calendar.dateComponents([.hour, .minute, .second], from: timestamp)
+        let fraction = timestamp.timeIntervalSince1970 - floor(timestamp.timeIntervalSince1970)
+        let result = calendar.date(bySettingHour: time.hour!, minute: time.minute!, second: time.second!, of: day,
+            matchingPolicy: .nextTimePreservingSmallerComponents, repeatedTimePolicy: .first) ?? calendar.startOfDay(for: day)
+        return result.addingTimeInterval(fraction)
+    }
+}
+
 public extension Transaction {
     /// Apply only fields changed in the editor. A simultaneous change to a
     /// different field (for example background categorization) is preserved.
@@ -26,7 +39,7 @@ public extension Transaction {
     func similarTransaction(date: Date = Date(), calendar: Calendar = .current) -> Transaction {
         var value = self
         value.id = UUID()
-        value.date = calendar.startOfDay(for: date)
+        value.date = date
         value.externalID = nil
         value.recurrenceID = nil
         value.importBatchID = nil

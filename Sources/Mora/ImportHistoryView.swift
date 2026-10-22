@@ -59,6 +59,7 @@ struct ImportHistoryView: View {
                         }
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(.top, 6)
                 }.font(.callout).frame(maxWidth: .infinity, alignment: .leading)
+                    .disclosureGroupStyle(OutlinedDisclosureGroupStyle())
             }
         }
     }

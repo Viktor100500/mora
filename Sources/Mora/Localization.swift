@@ -21,21 +21,22 @@ struct EuropeanDatePicker: View {
     }
 }
 
-private struct EuropeanDateField: NSViewRepresentable {
+struct EuropeanDateField: NSViewRepresentable {
     let title: String
     @Binding var selection: Date
+    var embedded = false
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
     func makeNSView(context: Context) -> NSDatePicker {
         let picker = NSDatePicker()
-        picker.datePickerStyle = .textFieldAndStepper
+        picker.datePickerStyle = embedded ? .textField : .textFieldAndStepper
         picker.datePickerElements = .yearMonthDay
         picker.datePickerMode = .single
         picker.locale = Locale(identifier: "en_GB")
         picker.font = .systemFont(ofSize: NSFont.systemFontSize)
         picker.controlSize = .regular
-        picker.isBezeled = true
-        picker.drawsBackground = true
+        picker.isBezeled = !embedded
+        picker.drawsBackground = !embedded
         picker.target = context.coordinator
         picker.action = #selector(Coordinator.changed(_:))
         return picker

@@ -76,7 +76,7 @@ struct AIImportView: View {
             HStack {
                 Button(L("Закрыть")) { dismiss() }.keyboardShortcut(.cancelAction)
                 Spacer()
-                Button(L("Скопировать")) { AIPrompt.copy(prompt); store.notice = L("Промпт скопирован") }.disabled(prompt.isEmpty)
+                Button(L("Скопировать")) { AIPrompt.copy(prompt); store.showTransientNotice(L("Промпт скопирован")) }.disabled(prompt.isEmpty)
                 Button(L("Открыть \(agent.title)"), action: openAgent).buttonStyle(.borderedProminent).disabled(prompt.isEmpty)
             }
         }.padding(24).frame(width: 620)
