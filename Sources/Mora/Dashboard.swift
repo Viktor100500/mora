@@ -237,6 +237,7 @@ struct CategoryChart: View {
                 ForEach(Array(totals.prefix(5))) { total in
                     HStack(spacing: 7) {
                         Circle().fill(Color.token(total.color)).frame(width: 7, height: 7)
+                            .padding(3).background(Color.primary.opacity(0.10), in: Circle())
                         Text(total.name).font(.system(size: 11)).lineLimit(1)
                         Spacer(minLength: 4)
                         FinancialText(DisplayMoney.string(total.amount, currency: ledger.preferences.baseCurrency)).font(.system(size: 11, weight: .medium)).lineLimit(1).minimumScaleFactor(0.8)

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.3 — 2026-10-26
+
+- Add a subtle backdrop to category expense rings and legend dots so light colors remain visible.
+
 ## 1.6.2 — 2026-10-26
 
 - Isolate transaction scrolling from the surrounding screen while retaining lazy rows and the visible position.

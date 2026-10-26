@@ -86,6 +86,12 @@ struct CategoryRingChart: View {
             GeometryReader { geometry in
                 if let anchor = proxy.plotFrame {
                     let frame = geometry[anchor]
+                    let diameter = min(frame.width, frame.height)
+                    Circle()
+                        .fill(Color.primary.opacity(0.10))
+                        .frame(width: diameter + 10, height: diameter + 10)
+                        .position(x: frame.midX, y: frame.midY)
+                        .accessibilityHidden(true)
                     VStack(spacing: 5) {
                         Text(L("Всего")).font(.caption).foregroundStyle(.secondary)
                         FinancialText(DisplayMoney.string(expense, currency: currency))
