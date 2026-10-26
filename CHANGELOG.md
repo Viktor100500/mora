@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.1 — 2026-10-26
+
+- Keep transaction entry responsive by recalculating balance previews only for relevant financial changes and updating the preview independently.
+
 ## 1.6.0 — 2026-10-26
 
 - Select Xcode 26.3 explicitly for macOS CI and release builds so macOS 26 APIs compile even when the runner defaults to Xcode 16.4.
