@@ -348,7 +348,7 @@ final class CloudSync: ObservableObject {
                     if failure is CancellationError { store.finishProgressNotice(progressID) }
                     else {
                         store.finishProgressNotice(progressID, message: L("Не удалось загрузить покупки из Wallet"),
-                            detail: failure.localizedDescription, kind: .error, actions: [.inbox], dismissAfter: nil)
+                            detail: failure.localizedDescription, kind: .error, actions: [.inbox])
                     }
                 }
                 throw failure
@@ -362,8 +362,7 @@ final class CloudSync: ObservableObject {
                 store.finishProgressNotice(progressID,
                     message: added > 0 ? L("Загружено из Apple Shortcuts: \(added)") : nil,
                     detail: captures.isEmpty ? nil : L("Покупок на проверке: \(captures.count)"),
-                    kind: captures.isEmpty ? .success : .warning, actions: actions,
-                    dismissAfter: captures.isEmpty ? .seconds(4) : nil)
+                    kind: captures.isEmpty ? .success : .warning, actions: actions)
             }
         }
     }
@@ -425,7 +424,7 @@ final class CloudSync: ObservableObject {
             } else if let batch = store.ledger.importHistory.first(where: { $0.id == batchID }) {
                 store.showNotice(L("Загружено из Apple Shortcuts: \(batch.transactions.count)"),
                     detail: batch.transactions.prefix(3).map(\.merchant).joined(separator: " · "),
-                    actions: [.rollbackImport(batchID), .imports], dismissAfter: .seconds(4))
+                    actions: [.rollbackImport(batchID), .imports])
             }
         }
     }

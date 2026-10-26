@@ -59,7 +59,7 @@ final class FloatingNotificationTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(30)); host.layoutSubtreeIfNeeded()
         XCTAssertEqual(probe.convert(probe.bounds, to: host), baseline)
         XCTAssertEqual(host.fittingSize, hostSize)
-        store.finishProgressNotice(progress, message: "Synthetic saved", actions: store.undoNotificationActions, dismissAfter: nil)
+        store.finishProgressNotice(progress, message: "Synthetic saved", actions: store.undoNotificationActions)
         try await Task.sleep(for: .milliseconds(30)); host.layoutSubtreeIfNeeded()
         XCTAssertEqual(probe.convert(probe.bounds, to: host), baseline)
         store.showNotice("Synthetic warning", detail: "Details that can change notification height without moving the page", kind: .warning)

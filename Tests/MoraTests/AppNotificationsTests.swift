@@ -142,6 +142,34 @@ final class AppNotificationsTests: XCTestCase {
         XCTAssertEqual(restored.events.map(\.message), ["Imported"])
     }
 
+    func testAllCompletedBannersDismissAfterSevenSecondsAndKeepHistoryActions() async throws {
+        let directory = try temporaryDirectory(); defer { try? FileManager.default.removeItem(at: directory) }
+        let regular = FinanceStore(directory: directory.appendingPathComponent("regular"))
+        let transient = FinanceStore(directory: directory.appendingPathComponent("transient"))
+        let progress = FinanceStore(directory: directory.appendingPathComponent("progress"))
+        regular.showNotice("Save failed", kind: .error, actions: [.retryTransaction(UUID())])
+        transient.showTransientNotice("Copied")
+        let id = progress.beginProgressNotice("Loading")
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertTrue(try XCTUnwrap(progress.activeNotice).isInProgress)
+        progress.finishProgressNotice(id, message: "Review purchases", kind: .warning, actions: [.inbox])
+        let failure = try XCTUnwrap(regular.activeNotice)
+        let completed = try XCTUnwrap(progress.activeNotice)
+        try await Task.sleep(for: .seconds(6))
+        XCTAssertNotNil(regular.activeNotice)
+        XCTAssertNotNil(transient.activeNotice)
+        XCTAssertNotNil(progress.activeNotice)
+        try await Task.sleep(for: .milliseconds(1_200))
+        XCTAssertNil(regular.activeNotice)
+        XCTAssertNil(transient.activeNotice)
+        XCTAssertNil(progress.activeNotice)
+        XCTAssertEqual(regular.notifications.events, [failure])
+        XCTAssertEqual(progress.notifications.events, [completed])
+        XCTAssertTrue(transient.notifications.events.isEmpty)
+        await regular.notifications.flush()
+        await progress.notifications.flush()
+    }
+
     func testSuccessfulProgressDismissesBannerButPreservesHistoryAndNewerNotice() async throws {
         let directory = try temporaryDirectory(); defer { try? FileManager.default.removeItem(at: directory) }
         let store = try await store(in: directory)
@@ -159,6 +187,10 @@ final class AppNotificationsTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(50))
         XCTAssertNil(store.activeNotice)
         XCTAssertEqual(store.notifications.events.first?.message, "Manually reviewed Wallet purchase")
+        store.showTransientNotice("Copied", dismissAfter: .milliseconds(10))
+        _ = store.beginProgressNotice("Still loading")
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertTrue(try XCTUnwrap(store.activeNotice).isInProgress)
     }
 
     func testWalletWarningUpdatesAndClearsAfterLastPurchaseIsCorrected() async throws {
@@ -168,7 +200,7 @@ final class AppNotificationsTests: XCTestCase {
         store.reconcileWallet([first, second], householdID: household)
         let id = store.beginProgressNotice("Loading", householdID: household)
         store.finishProgressNotice(id, message: "Imported", detail: "Two to review", kind: .warning,
-                                   actions: [.inbox], dismissAfter: nil)
+                                   actions: [.inbox])
         store.reconcileWallet([second], householdID: household)
         XCTAssertEqual(store.activeNotice?.detail, "Покупок на проверке: 1")
         XCTAssertTrue(try XCTUnwrap(store.notifications.events.first { $0.sourceID == first.id }).isRead)

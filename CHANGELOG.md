@@ -2,6 +2,7 @@
 
 ## 1.6.0 — 2026-10-26
 
+- Dismiss all completed notification banners after seven seconds, including warnings, errors and transient notices; preserve history and available actions.
 - Morph dashboard trend curves through one fixed-topology path when changing aggregation; retain real bucket values for accessibility and hold the plot inset steady.
 - Fade duplicated transaction rows into a lazily rendered scroll view, preserve the viewport anchor and switch selection to the copies only with their filtered rows. Preserve insertion order for identical rows so random UUIDs cannot put a new copy above its original.
 

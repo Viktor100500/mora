@@ -133,15 +133,16 @@ final class FinanceStore: ObservableObject {
         }
     }
     func showNotice(_ message: String, detail: String? = nil, kind: AppNotification.Kind = .success,
-                    actions: [AppNotificationAction] = [], dismissAfter: Duration? = nil) {
+                    actions: [AppNotificationAction] = [], dismissAfter: Duration = .seconds(7)) {
         noticeDismissal?.cancel()
         activeNotice = notifications.record(message, detail: detail, kind: kind, actions: actions)
-        if let dismissAfter, let id = activeNotice?.id { dismissNotice(id, after: dismissAfter) }
+        if let id = activeNotice?.id { dismissNotice(id, after: dismissAfter) }
     }
     func showTransientNotice(_ message: String, detail: String? = nil, kind: AppNotification.Kind = .success,
-                             actions: [AppNotificationAction] = []) {
+                             actions: [AppNotificationAction] = [], dismissAfter: Duration = .seconds(7)) {
         noticeDismissal?.cancel()
         activeNotice = AppNotification(message: message, detail: detail, kind: kind, actions: actions)
+        if let id = activeNotice?.id { dismissNotice(id, after: dismissAfter) }
     }
     func beginProgressNotice(_ message: String, detail: String? = nil, householdID: UUID? = nil) -> UUID {
         noticeDismissal?.cancel()
@@ -151,7 +152,7 @@ final class FinanceStore: ObservableObject {
     }
     func finishProgressNotice(_ id: UUID, message: String? = nil, detail: String? = nil,
                              kind: AppNotification.Kind = .success, actions: [AppNotificationAction] = [],
-                             dismissAfter: Duration? = .seconds(4)) {
+                             dismissAfter: Duration = .seconds(7)) {
         guard let message else {
             notifications.removeProgress(id)
             if activeNotice?.id == id { activeNotice = nil }
@@ -161,7 +162,7 @@ final class FinanceStore: ObservableObject {
         guard activeNotice?.id == id else { return }
         activeNotice = event
         noticeDismissal?.cancel()
-        if let dismissAfter { dismissNotice(id, after: dismissAfter) }
+        dismissNotice(id, after: dismissAfter)
     }
     private func dismissNotice(_ id: UUID, after delay: Duration) {
         noticeDismissal = Task { [weak self] in
@@ -343,7 +344,7 @@ final class FinanceStore: ObservableObject {
                 failedTransactionSaves[id] = submission
                 finishProgressNotice(progress, message: L("Не удалось сохранить операцию"),
                                      detail: submission.value.merchant + "\n" + error.localizedDescription,
-                                     kind: .error, actions: [.retryTransaction(id)], dismissAfter: nil)
+                                     kind: .error, actions: [.retryTransaction(id)])
             }
         }
         return true
