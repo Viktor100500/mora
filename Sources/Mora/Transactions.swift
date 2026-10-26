@@ -287,16 +287,18 @@ struct TransactionEditor: View {
     @State private var saving = false
     @State private var attemptedSave = false
     @State private var newTransactionID = UUID()
-    @State private var previewBalances: [UUID: Decimal] = [:]
-    @State private var previewQuery: BalanceQuery?
     private enum RequiredField: Hashable { case merchant, amount, account, destination, destinationAmount }
     @State private var focusedAmount: RequiredField?
-    private struct BalanceQuery: Equatable {
-        let draft: Transaction?
-        let revision: UInt64
-    }
-    private var balanceQuery: BalanceQuery {
-        BalanceQuery(draft: needsConversion && currentConversion.flatMap({ try? $0.convertedAmount() }) == nil ? nil : makeDraft(), revision: store.revision)
+    private var balanceDraft: Transaction? {
+        guard let amount = AmountInput.parse(amount), amount > 0, let accountID else { return nil }
+        let converted = currentConversion.flatMap { try? $0.convertedAmount() }
+        guard !needsConversion || converted != nil else { return nil }
+        var signedAmount = kind == .income ? amount : -amount
+        if standaloneTransfer { signedAmount = (transaction?.amount ?? 0) > 0 ? amount : -amount }
+        return Transaction(id: newTransactionID, date: TransactionDateEditing.changingDay(of: dateReference, to: date),
+                           merchant: "", amount: converted ?? signedAmount, accountID: accountID, kind: kind,
+                           destinationAccountID: kind == .transfer && !standaloneTransfer ? destinationID : nil,
+                           destinationAmount: kind == .transfer && !standaloneTransfer ? (sameCurrency ? amount : AmountInput.parse(destinationAmount)) : nil)
     }
     init(transaction: Transaction? = nil, template: Transaction? = nil, walletCapture: CloudCapture? = nil, ledger: Ledger? = nil,
          rateClient: VisaRateClient = .shared) {
@@ -418,22 +420,6 @@ struct TransactionEditor: View {
         .task(id: quoteKey) {
             await refreshConversion()
         }
-        .task(id: balanceQuery) {
-            let query = balanceQuery, snapshot = store.ledger.withoutChangeHistory(), originalID = transaction?.id
-            guard let draft = query.draft else { previewBalances = [:]; previewQuery = query; return }
-            let through = max(Date(), draft.date)
-            let balances = await BackgroundWork.shared.perform {
-                var result: [UUID: Decimal] = [:]
-                for id in [draft.accountID, draft.destinationAccountID].compactMap({ $0 }) {
-                    if let account = snapshot.account(id) {
-                        result[id] = snapshot.projectedBalance(account, replacing: originalID, with: draft, through: through)
-                    }
-                }
-                return result
-            }
-            guard !Task.isCancelled, query == balanceQuery else { return }
-            previewBalances = balances; previewQuery = query
-        }
         .task(id: categoryQuery) {
             let query = categoryQuery, snapshot = store.ledger.withoutChangeHistory()
             do {
@@ -506,12 +492,12 @@ struct TransactionEditor: View {
 
     private var transactionPreview: some View {
         VStack(alignment: .leading, spacing: 8) {
-            if let account { balanceLine(account) }
-            if kind == .transfer, !standaloneTransfer, let destination { balanceLine(destination) }
+            TransactionBalancePreview(draft: balanceDraft, originalID: transaction?.id,
+                                      account: account, destination: kind == .transfer && !standaloneTransfer ? destination : nil,
+                                      kind: kind)
             if needsConversion { conversionPreview }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .smoothUpdates(value: previewBalances)
     }
 
     // Measure only the three lines that the quote actually needs. Loading and
@@ -549,16 +535,6 @@ struct TransactionEditor: View {
         .smoothUpdates(value: conversionKey)
         .smoothUpdates(value: ready)
         .smoothUpdates(value: conversionError)
-    }
-
-    private func balanceLine(_ account: Account) -> some View {
-        HStack {
-            Text(kind == .transfer ? account.name : L("Баланс после операции")).lineLimit(1)
-            Spacer()
-            if previewQuery == balanceQuery, let value = previewBalances[account.id] {
-                FinancialText(DisplayMoney.string(value, currency: account.currency)).fontWeight(.semibold)
-            } else { FinancialText("— \(account.currency)").foregroundStyle(.secondary) }
-        }.font(.callout)
     }
 
     private func makeDraft() -> Transaction? {
@@ -605,6 +581,60 @@ struct TransactionEditor: View {
         if saving { dismiss() }
     }
 
+}
+
+// Keep asynchronous balance updates local to the preview, away from the form's input state.
+private struct TransactionBalancePreview: View {
+    @EnvironmentObject private var store: FinanceStore
+    let draft: Transaction?
+    let originalID: UUID?
+    let account: Account?
+    let destination: Account?
+    let kind: TransactionKind
+    @State private var balances: [UUID: Decimal] = [:]
+    @State private var completedQuery: Query?
+
+    private struct Query: Equatable {
+        let draft: Transaction?
+        let revision: UInt64
+    }
+    private var query: Query { Query(draft: draft, revision: store.revision) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            if let account { balanceLine(account) }
+            if let destination { balanceLine(destination) }
+        }
+        .smoothUpdates(value: balances)
+        .task(id: query) {
+            let requested = query, originalID = originalID
+            guard let draft = requested.draft else { balances = [:]; completedQuery = requested; return }
+            let snapshot = store.ledger.withoutChangeHistory()
+            let through = max(Date(), draft.date)
+            let result = await BackgroundWork.shared.perform {
+                guard !Task.isCancelled else { return [UUID: Decimal]() }
+                var values: [UUID: Decimal] = [:]
+                for id in [draft.accountID, draft.destinationAccountID].compactMap({ $0 }) {
+                    if let account = snapshot.account(id) {
+                        values[id] = snapshot.projectedBalance(account, replacing: originalID, with: draft, through: through)
+                    }
+                }
+                return values
+            }
+            guard !Task.isCancelled, requested == query else { return }
+            balances = result; completedQuery = requested
+        }
+    }
+
+    private func balanceLine(_ account: Account) -> some View {
+        HStack {
+            Text(kind == .transfer ? account.name : L("Баланс после операции")).lineLimit(1)
+            Spacer()
+            if completedQuery == query, let value = balances[account.id] {
+                FinancialText(DisplayMoney.string(value, currency: account.currency)).fontWeight(.semibold)
+            } else { FinancialText("— \(account.currency)").foregroundStyle(.secondary) }
+        }.font(.callout)
+    }
 }
 
 private struct PurchaseCurrencyPicker: View {
