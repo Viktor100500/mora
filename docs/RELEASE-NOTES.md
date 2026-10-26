@@ -1,12 +1,14 @@
-Mora 1.5.1 (build 13) is a public macOS preview.
+Mora 1.6.0 (build 37) is a public macOS preview.
 
-- Import statements and screenshots through an AI agent using available MCP tools, the bundled MoraBridge, or a CSV file. The prompt includes account context and an editable request section.
-- Review Wallet purchases in the complete transaction form, with currency conversion, category, notes and tags. Accept formatted Wallet amounts and suggest categories from rules and purchase history.
-- Keep notification history with available actions, and keep unchanged background sync quiet.
-- Copy the support email address with a confirmation; use the feedback button to open the email app. Support details can also be copied.
-- Improve notification placement, settings alignment and date fields.
+- Save new, edited and reviewed transactions in the background. The form closes immediately, standard notifications track progress and failures offer retry with the submitted fields retained for the current session.
+- Preview account balances before saving, including conversion fees, future dates, edits and transfers. Cache daily Visa rates on disk, share concurrent requests and allow saving while the preview rate is still loading.
+- Keep transaction filters when switching sections. Combine multiple types, accounts and categories with checkboxes, choose date ranges in a compact calendar and export exactly the filtered transactions.
+- Keep notifications above the page, retain balances and charts during recalculation, and animate updates with Reduce Motion support. Dashboard lines morph between aggregation modes; duplicated transactions appear smoothly without moving the viewport or briefly losing selection.
+- Match merchants locally against a bundled regional directory containing 187,072 public-source name/type records from Overture Places, New York State food stores and NYC restaurant trading names. Preserve manual categories, recognize transit descriptors, cache validated brand catalogs and explain ambiguous or missing matches. Public-source attribution and coverage details are included with the app.
+- Make Wallet synchronization quieter and more reliable: process incoming purchases and categories together, include purchases arriving during a sync, retain purchase dates in review, update unresolved review counts and clear resolved warnings. Production iPhone senders use no notification or diagnostic delay.
+- Include the accumulated analytics, transaction editing, import and notification improvements since the previous public preview. This release packages Apple Silicon only.
 
-Requirements: macOS 14+. Download arm64 for Apple Silicon or x86_64 for Intel if available. Unzip and move Mora.app to Applications. Checksums are attached beside each ZIP.
+Requirements: macOS 14+ on Apple Silicon (arm64). Unzip and move Mora.app to Applications. Checksums are attached beside each ZIP.
 
 This preview uses ad hoc signing and has not been notarized by Apple. macOS may require manual approval in Privacy & Security after you verify the download source. Do not disable system-wide security protections.
 

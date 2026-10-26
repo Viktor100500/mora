@@ -47,12 +47,9 @@ extension Ledger {
 /// payment processor prefix. Keep brand words intact: arbitrary prefixes,
 /// locations and single-word names are not enough evidence of the same seller.
 private func merchantHistoryKey(_ merchant: String) -> String? {
-    var name = MerchantName.normalized(merchant)
-    for prefix in ["card purchase ", "purchase ", "sq ", "tst ", "pos "] where name.hasPrefix(prefix) {
-        name = String(name.dropFirst(prefix.count)); break
-    }
+    let name = MerchantName.descriptor(merchant)
     var words = name.split(separator: " ").map(String.init)
-    let descriptors: Set<String> = ["market", "store", "shop", "supermarket"]
+    let descriptors: Set<String> = ["market", "markets", "store", "stores", "shop", "supermarket"]
     while words.count > 2, let last = words.last, descriptors.contains(last) { words.removeLast() }
     let key = words.joined(separator: " ")
     guard words.count >= 2, key.count >= 8 else { return nil }

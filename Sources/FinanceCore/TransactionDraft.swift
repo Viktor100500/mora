@@ -13,6 +13,22 @@ public enum TransactionDateEditing {
     }
 }
 
+public extension Ledger {
+    /// Balance after applying a draft once. Editing removes the latest stored
+    /// contribution, including either leg of a transfer and calendar-day cutoff.
+    func projectedBalance(_ account: Account, replacing originalID: UUID?, with draft: Transaction, through date: Date) -> Decimal {
+        let end = Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: date))!
+        func contribution(_ value: Transaction) -> Decimal {
+            guard value.date < end else { return 0 }
+            var result: Decimal = value.accountID == account.id ? value.amount : 0
+            if value.kind == .transfer, value.destinationAccountID == account.id { result += value.destinationAmount ?? 0 }
+            return result
+        }
+        let previous = originalID.flatMap { id in transactions.first { $0.id == id } }.map(contribution) ?? 0
+        return balance(account, through: date) - previous + contribution(draft)
+    }
+}
+
 public extension Transaction {
     /// Apply only fields changed in the editor. A simultaneous change to a
     /// different field (for example background categorization) is preserved.

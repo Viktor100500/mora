@@ -1,5 +1,6 @@
 import XCTest
 import FinanceCore
+import Darwin
 @testable import Mora
 
 @MainActor
@@ -62,6 +63,34 @@ final class LedgerRepositoryTests: XCTestCase {
         XCTAssertFalse(mutation.value)
         let calculationUsedMain = await BackgroundWork.shared.perform { Thread.isMainThread }
         XCTAssertFalse(calculationUsedMain)
+        await store.notifications.flush()
+    }
+
+    func testTransactionSaveWaitsForDiskLockWithoutBlockingUIOrPublishingEarly() async throws {
+        let (store, directory) = try await fixture()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let descriptor = Darwin.open(store.fileURL.appendingPathExtension("lock").path, O_CREAT | O_RDWR, 0o600)
+        XCTAssertGreaterThanOrEqual(descriptor, 0)
+        guard descriptor >= 0 else { return }
+        defer { Darwin.close(descriptor) }
+        XCTAssertEqual(flock(descriptor, LOCK_EX), 0)
+        // A bounded fallback also makes a regression fail instead of hanging.
+        let release = DispatchWorkItem { flock(descriptor, LOCK_UN) }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 3, execute: release)
+        defer { release.cancel(); flock(descriptor, LOCK_UN) }
+        let value = FinanceCore.Transaction(date: Date(), merchant: "Synthetic purchase", amount: -12,
+                                            accountID: store.ledger.accounts[0].id)
+        let began = ContinuousClock.now
+        let save = Task { await store.saveTransaction(value) }
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertLessThan(began.duration(to: .now), .seconds(1), "The UI actor must run while the writer waits")
+        XCTAssertTrue(store.ledger.transactions.isEmpty, "Publish only after the durable write completes")
+        release.cancel()
+        flock(descriptor, LOCK_UN)
+        expectTrue(await save.value)
+        XCTAssertEqual(store.ledger.transactions.map(\.id), [value.id])
+        let saved = try LedgerFile.decode(Data(contentsOf: store.fileURL))
+        XCTAssertEqual(saved.transactions.map(\.id), [value.id])
         await store.notifications.flush()
     }
 

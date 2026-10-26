@@ -17,6 +17,11 @@ final class CloudSync: ObservableObject {
     @Published private(set) var pending: [CloudCapture] = []
     @Published private(set) var lastSync: Date?
     @Published private(set) var conflict = false
+    private var walletProgressID: UUID?
+    private var stagedPending: [CloudCapture]?
+    private var stagedSyncDate: Date?
+    private var importedBatchIDs: [UUID] = []
+    var preparePresentation: (@MainActor (FinanceStore) async -> Void)?
     @Published var error: String? {
         didSet {
             if let error, error != oldValue { store?.notifications.record(error, kind: .error, actions: [.inbox]) }
@@ -81,10 +86,13 @@ final class CloudSync: ObservableObject {
         "session-" + SHA256.hash(data: Data((directory?.path ?? "").utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
-    func run(store: FinanceStore) async {
+    func prepare(store: FinanceStore) async {
         self.store = store
         await store.load()
         await load()
+        if enabled && signedIn && !store.isDemo { await synchronize(inBackground: true) }
+    }
+    func run(store: FinanceStore) async {
         while !Task.isCancelled {
             if enabled && signedIn && !store.isDemo && Date() >= nextAttempt { await synchronize(inBackground: true) }
             do { try await Task.sleep(for: .seconds(8)) } catch { return }
@@ -211,8 +219,14 @@ final class CloudSync: ObservableObject {
     @discardableResult
     private func loadPending(_ id: UUID) async throws -> Bool {
         let captures: [CloudCapture] = try await rpc("mora_list_pending", HouseholdBody(p_household_id: id))
+        if let previous = stagedPending {
+            stagedPending = captures
+            let known = Set(store?.notifications.events.filter { $0.householdID == id }.compactMap(\.sourceID) ?? [])
+            if captures.contains(where: { !previous.contains($0) && !known.contains($0.id) }) { showSyncProgress() }
+            return previous != captures
+        }
         // Also reconcile an empty first response against history from a previous launch.
-        store?.notifications.reconcileWallet(captures, householdID: id)
+        store?.reconcileWallet(captures, householdID: id)
         guard pending != captures else { return false }
         pending = captures
         return true
@@ -280,29 +294,93 @@ final class CloudSync: ObservableObject {
         try await attach(envelope)
     }
 
+    private func showSyncProgress() {
+        guard walletProgressID == nil, let store else { return }
+        walletProgressID = store.beginProgressNotice(L("Загружаем покупки из Wallet…"), householdID: householdID)
+    }
+    private func markSynced() {
+        if stagedPending != nil { stagedSyncDate = Date() }
+        else { lastSync = Date() }
+    }
     func synchronize(inBackground: Bool = false) async {
         guard enabled, householdID != nil else { return }
         await operation(inBackground: inBackground) {
+            guard let store = self.store, let id = self.householdID else { return }
+            let originalIDs = Set(store.ledger.transactions.map(\.id))
+            store.beginDeferredUpdates()
+            self.stagedPending = self.pending
+            self.importedBatchIDs = []
+            self.stagedSyncDate = nil
+            var failure: Error?
             do {
-                try await self.syncNow()
-                try await self.bookWalletPurchases()
+                while true {
+                    try Task.checkCancellation()
+                    try await self.syncNow()
+                    let attempted = self.stagedPending ?? []
+                    try await self.bookWalletPurchases()
+                    if self.walletProgressID != nil { await self.preparePresentation?(store) }
+                    // Recheck both the snapshot version and capture contents. Equal
+                    // counts can hide a new/corrected purchase while rates were loading.
+                    let saved = try await self.checkpoint().envelope
+                    _ = try await self.loadPending(id)
+                    let status: Status = try await self.rpc("mora_get_status", HouseholdBody(p_household_id: id))
+                    if status.version == saved.version,
+                       status.pending_count == (self.stagedPending ?? []).count,
+                       (self.stagedPending ?? []).allSatisfy({ attempted.contains($0) }) { break }
+                }
                 self.failureCount = 0; self.nextAttempt = Date().addingTimeInterval(8)
             } catch {
+                failure = error
                 self.failureCount += 1
                 self.nextAttempt = Date().addingTimeInterval(min(300, 8 * pow(2, Double(min(self.failureCount, 5)))))
-                throw error
+            }
+            // Disk writes stay durable throughout; only their presentation waits.
+            await store.endDeferredUpdates()
+            let captures = self.stagedPending ?? self.pending
+            self.stagedPending = nil
+            if self.pending != captures { self.pending = captures }
+            store.reconcileWallet(captures, householdID: id)
+            if failure == nil, let date = self.stagedSyncDate { self.lastSync = date }
+            let progressID = self.walletProgressID
+            self.walletProgressID = nil
+            if let failure {
+                if let progressID {
+                    if failure is CancellationError { store.finishProgressNotice(progressID) }
+                    else {
+                        store.finishProgressNotice(progressID, message: L("Не удалось загрузить покупки из Wallet"),
+                            detail: failure.localizedDescription, kind: .error, actions: [.inbox], dismissAfter: nil)
+                    }
+                }
+                throw failure
+            }
+            if let progressID {
+                let added = store.ledger.transactions.filter { !originalIDs.contains($0.id) && $0.externalID?.hasPrefix("wallet:") == true }.count
+                var actions: [AppNotificationAction] = []
+                if self.importedBatchIDs.count == 1 { actions.append(.rollbackImport(self.importedBatchIDs[0])) }
+                if !self.importedBatchIDs.isEmpty { actions.append(.imports) }
+                if !captures.isEmpty { actions.append(.inbox) }
+                store.finishProgressNotice(progressID,
+                    message: added > 0 ? L("Загружено из Apple Shortcuts: \(added)") : nil,
+                    detail: captures.isEmpty ? nil : L("Покупок на проверке: \(captures.count)"),
+                    kind: captures.isEmpty ? .success : .warning, actions: actions,
+                    dismissAfter: captures.isEmpty ? .seconds(4) : nil)
             }
         }
     }
     private func bookWalletPurchases() async throws {
         guard let id = householdID, let store else { return }
         var firstError: Error?
-        for capture in pending.sorted(by: { $0.date < $1.date }) {
+        for capture in (stagedPending ?? pending).sorted(by: { $0.date < $1.date }) {
             try Task.checkCancellation()
             do {
                 let local = try await diskLedger()
+                let fetch = walletRate
                 guard let transaction = try await WalletReviewDraft.automaticTransaction(for: capture, in: local,
-                    fetch: walletRate) else { continue }
+                    fetch: { [weak self] amount, from, to, date in
+                        await self?.showSyncProgress()
+                        return try await fetch(amount, from, to, date)
+                    }) else { continue }
+                showSyncProgress()
                 // The editor may have changed local data while the quote was loading.
                 let current = try await diskLedger()
                 let value = try await BackgroundWork.shared.perform { try WalletReviewDraft.transaction(transaction, for: capture, in: current) }
@@ -314,8 +392,8 @@ final class CloudSync: ObservableObject {
                 _ = try await BackgroundWork.shared.perform { try LedgerFile.applyCloud(envelope.snapshot, at: url, mergeAgainst: current) }
                 try await saveCheckpoint(envelope)
                 await store.reloadFromDisk()
-                _ = try await loadPending(id)
-                lastSync = Date()
+                stagedPending?.removeAll { $0.id == capture.id }
+                markSynced()
             } catch is CancellationError { throw CancellationError() }
             catch { if firstError == nil { firstError = error } }
         }
@@ -323,6 +401,7 @@ final class CloudSync: ObservableObject {
         // Other valid purchases in the batch are still allowed to finish.
         // Also recovers purchases committed before a lost response or an older Mora version.
         try await collectWalletImport()
+        _ = try await loadPending(id)
         if let firstError { throw firstError }
     }
 
@@ -340,10 +419,14 @@ final class CloudSync: ObservableObject {
         _ = try await BackgroundWork.shared.perform { try LedgerFile.applyCloud(result.envelope.snapshot, at: url, mergeAgainst: local, recordWalletImport: result.batch_id) }
         try await saveCheckpoint(result.envelope)
         await store.reloadFromDisk()
-        if let batchID = result.batch_id, let batch = store.ledger.importHistory.first(where: { $0.id == batchID }) {
-            store.showNotice(L("Загружено из Apple Shortcuts: \(batch.transactions.count)"),
-                             detail: batch.transactions.prefix(3).map(\.merchant).joined(separator: " · "),
-                             actions: [.rollbackImport(batchID), .imports])
+        if let batchID = result.batch_id {
+            if stagedPending != nil {
+                if !importedBatchIDs.contains(batchID) { importedBatchIDs.append(batchID) }
+            } else if let batch = store.ledger.importHistory.first(where: { $0.id == batchID }) {
+                store.showNotice(L("Загружено из Apple Shortcuts: \(batch.transactions.count)"),
+                    detail: batch.transactions.prefix(3).map(\.merchant).joined(separator: " · "),
+                    actions: [.rollbackImport(batchID), .imports], dismissAfter: .seconds(4))
+            }
         }
     }
 
@@ -355,7 +438,7 @@ final class CloudSync: ObservableObject {
         let initial = try await diskLedger()
         if status.version == saved.version, try await BackgroundWork.shared.perform({ try CloudMerge.same(initial, base) }) {
             // Equal counts can hide a replaced capture or a corrected reason.
-            if try await loadPending(id) { lastSync = Date() }
+            if try await loadPending(id) { markSynced() }
             if conflict { conflict = false }
             return
         }
@@ -378,12 +461,15 @@ final class CloudSync: ObservableObject {
                 remote.version += 1; remote.snapshot = CloudMerge.shared(merged)
             }
             let committedRemote = remote.snapshot, url = store.fileURL
+            let snapshotChanged = try await BackgroundWork.shared.perform { try !CloudMerge.same(base, committedRemote) }
+            if stagedPending != nil, committedRemote.transactions.contains(where: { transaction in
+                transaction.externalID?.hasPrefix("wallet:") == true && !local.transactions.contains(where: { $0.id == transaction.id })
+            }) { showSyncProgress() }
             _ = try await BackgroundWork.shared.perform { try LedgerFile.applyCloud(committedRemote, at: url, mergeAgainst: local) }
             try await saveCheckpoint(remote)
             await store.reloadFromDisk()
             let capturesChanged = try await loadPending(id)
-            let snapshotChanged = try await BackgroundWork.shared.perform { try !CloudMerge.same(base, committedRemote) }
-            if capturesChanged || snapshotChanged { lastSync = Date() }
+            if capturesChanged || snapshotChanged { markSynced() }
             if conflict { conflict = false }
             return
         }
@@ -433,7 +519,7 @@ final class CloudSync: ObservableObject {
             try await self.syncNow()
         }
     }
-    func review(_ capture: CloudCapture, transaction: Transaction) async -> Bool {
+    func review(_ capture: CloudCapture, transaction: Transaction, reportError: Bool = true) async -> Bool {
         var saved = false
         await operation {
             guard let id = self.householdID, let store = self.store else { throw CloudAPIError.unauthorized }
@@ -458,7 +544,7 @@ final class CloudSync: ObservableObject {
             saved = true
             try await self.collectWalletImport()
         }
-        if !saved, let error { store?.error = error }
+        if reportError, !saved, let error { store?.error = error }
         return saved
     }
     func pause(_ paused: Bool) async {

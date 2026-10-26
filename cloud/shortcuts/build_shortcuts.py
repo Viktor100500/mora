@@ -1,9 +1,12 @@
 """Build native Shortcuts from the action format exported by Apple's editor.
 
-Only public configuration is accepted. Phone secrets are entered after import,
-never signed or sent to Apple. Signing is a separate official `shortcuts sign` step.
+Only public configuration is accepted; generated templates contain no phone keys.
+Phone keys can be entered after import or added to a private copy before local
+contacts-only signing. Never send private keys to iCloud notarization. Signing
+is a separate official `shortcuts sign` step.
 """
 import argparse
+import copy
 import json
 import plistlib
 import uuid
@@ -94,10 +97,11 @@ def workflow(config, preview=False, wallet=False, diagnostics=False):
                WFJSONValues=dictionary(fields))
         # A modal result requires interaction and is unsuitable for locked-screen automation.
         # This reports the server response, not merely that the HTTP action ran.
-        action('notification', '', WFNotificationActionTitle='Mora · ответ сервера',
-               WFNotificationActionBody=text(response,
-                   '\nrecorded — расход записан; pending — доставлено, ожидает обработки в Mora.'),
-               WFNotificationActionSound=False)
+        if diagnostics:
+            action('notification', '', WFNotificationActionTitle='Mora · ответ сервера',
+                   WFNotificationActionBody=text(response,
+                       '\nrecorded — расход записан; pending — доставлено, ожидает обработки в Mora.'),
+                   WFNotificationActionSound=False)
     return {'WFWorkflowClientVersion': '4711', 'WFWorkflowMinimumClientVersion': 900,
             'WFWorkflowMinimumClientVersionString': '900',
             'WFWorkflowActions': actions, 'WFWorkflowTypes': ['WFWorkflowTypeShowInSearch'],
@@ -111,18 +115,128 @@ def workflow(config, preview=False, wallet=False, diagnostics=False):
                  'DefaultValue': ''}]}
 
 
+def wallet_delay_diagnostic(config, delay_seconds=5, preview=False):
+    """Read the original Wallet input twice; submit one payment with both snapshots visible.
+
+    This probes whether Wallet properties change during a run. It does not fetch
+    a new transaction from Wallet or guarantee that iOS updates the input object.
+    """
+    if type(delay_seconds) is not int or not 1 <= delay_seconds <= 10:
+        raise ValueError('The diagnostic delay must be an integer from 1 to 10 seconds')
+    result = workflow(config, preview=preview, wallet=True)
+    original = result['WFWorkflowActions']
+    # Preserve the existing credential slot, request identity and capture endpoint.
+    # Freeze the occurrence time and create the event ID once, before waiting.
+    actions = copy.deepcopy(original[:2] + original[5:10])
+    result['WFWorkflowActions'] = actions
+    actions[0]['WFWorkflowActionParameters']['WFCommentActionText'] = (
+        f'Mora · Wallet · проверка {delay_seconds} с\n'
+        'Сравнивает Amount и Merchant исходной транзакции сразу и после паузы. '
+        'Отправляет только один запрос. Если повторное поле пустое, сохраняет первое значение. '
+        'Дата покупки фиксируется до паузы. Это эксперимент, не чтение истории Wallet. '
+        'Нужен интернет; офлайн-очереди нет. Не запускайте вручную без транзакции.')
+
+    def reference(item, name):
+        return {'Type': 'ActionOutput', 'OutputUUID': item['WFWorkflowActionParameters']['UUID'],
+                'OutputName': name}
+
+    def action(identifier, output_name='', **parameters):
+        item = {'WFWorkflowActionIdentifier': 'is.workflow.actions.' + identifier,
+                'WFWorkflowActionParameters': {'UUID': str(uuid.uuid4()).upper(), **parameters}}
+        actions.append(item)
+        return reference(item, output_name)
+
+    phone = reference(actions[1], 'Ключ телефона')
+    date = reference(actions[2], 'Дата покупки')
+    event = reference(actions[6], 'Идентификатор события')
+
+    def snapshot(label):
+        values = {}
+        for key, property_name in [('amount', 'Amount'), ('merchant', 'Merchant')]:
+            # Each read addresses ExtensionInput again, never a converted Text
+            # result or the output of Wait/notification.
+            value = {'Type': 'ExtensionInput', 'Aggrandizements': [
+                {'Type': 'WFPropertyVariableAggrandizement', 'PropertyName': property_name}]}
+            values[key] = action('gettext', f'{property_name} · {label}', WFTextActionText=text(value))
+        return values, action('gettext', f'Снимок · {label}',
+                              WFTextActionText=text('amount=«', values['amount'],
+                                                    '»\nmerchant=«', values['merchant'], '»'))
+
+    before, before_text = snapshot('сразу')
+    if not preview:
+        action('notification', WFNotificationActionTitle='Mora · Wallet сразу',
+               WFNotificationActionBody=text('Событие: ', event, '\n', before_text),
+               WFNotificationActionSound=False)
+    action('delay', WFDelayTime=delay_seconds)
+    after, after_text = snapshot(f'через {delay_seconds} с')
+
+    def choose(value, condition, yes, no, name, other=None):
+        group = str(uuid.uuid4()).upper()
+        parameters = {'GroupingIdentifier': group, 'WFControlFlowMode': 0,
+                      'WFCondition': condition,
+                      'WFInput': {'Type': 'Variable', 'Variable': token(value)}}
+        if other is not None:
+            parameters['WFConditionalActionString'] = text(other)
+        action('conditional', **parameters)
+        action('gettext', name, WFTextActionText=text(yes))
+        action('conditional', GroupingIdentifier=group, WFControlFlowMode=1)
+        action('gettext', name, WFTextActionText=text(no))
+        return action('conditional', name, GroupingIdentifier=group, WFControlFlowMode=2)
+
+    comparison = choose(before_text, 4, 'Без изменений', 'Поля изменились',
+                        'Сравнение полей', other=after_text)  # native "is"
+    selected = {key: choose(after[key], 100, after[key], before[key], f'{key} · к отправке')
+                for key in ('amount', 'merchant')}  # native "has any value"
+    report = action('gettext', 'Результат диагностики', WFTextActionText=text(
+        'Событие: ', event, '\n', comparison, '\nСразу:\n', before_text,
+        f'\nЧерез {delay_seconds} с:\n', after_text,
+        '\nК отправке: «', selected['amount'], '» · «', selected['merchant'], '»'))
+    if not preview:
+        action('notification', WFNotificationActionTitle=f'Mora · Wallet через {delay_seconds} с',
+               WFNotificationActionBody=text(report), WFNotificationActionSound=False)
+    fields = {'p_token': phone, 'p_event_id': event, 'p_amount': selected['amount'],
+              'p_currency': '', 'p_merchant': selected['merchant'], 'p_occurred_at': date}
+    if preview:
+        # No credentials, network, or notifications in the validation variant.
+        action('dictionary', 'Проверка диагностики', WFItems=dictionary({
+            **fields, 'diagnostic_before': before_text, 'diagnostic_after': after_text,
+            'diagnostic_comparison': comparison}))
+    else:
+        response = action('downloadurl', 'Ответ Mora', WFHTTPMethod='POST', WFHTTPBodyType='JSON',
+                          WFURL=config['projectURL'].rstrip('/') + '/rest/v1/rpc/mora_capture_payment',
+                          ShowHeaders=True,
+                          WFHTTPHeaders=dictionary({'apikey': config['publicKey'],
+                                                    'Content-Type': 'application/json'}),
+                          WFJSONValues=dictionary(fields))
+        action('notification', WFNotificationActionTitle='Mora · ответ сервера',
+               WFNotificationActionBody=text('Событие: ', event, '\n', response,
+                   '\nrecorded — расход записан; pending — доставлено во входящие.'),
+               WFNotificationActionSound=False)
+    return result
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--config', type=Path, required=True)
     parser.add_argument('--output-dir', type=Path, required=True)
     parser.add_argument('--diagnostics', action='store_true',
                         help='Notify before reading Wallet fields to distinguish trigger and delivery failures')
+    parser.add_argument('--wallet-delay-diagnostic', action='store_true',
+                        help='Read the original Wallet input before and after a short delay, then POST once')
+    parser.add_argument('--delay-seconds', type=int, default=5,
+                        help='Delay for the repeated Wallet read (1–10 seconds, default 5)')
     args = parser.parse_args()
     config = json.loads(args.config.read_text())
     # Never accept privileged keys for a shareable artifact.
     assert config['projectURL'].startswith('https://') and config['projectURL'].endswith('.supabase.co')
     assert config['publicKey'].startswith('sb_publishable_')
     args.output_dir.mkdir(parents=True, exist_ok=True)
+    if args.wallet_delay_diagnostic:
+        target = args.output_dir / f'Mora-Wallet-{args.delay_seconds}s-Diagnostic.unsigned.shortcut'
+        target.write_bytes(plistlib.dumps(wallet_delay_diagnostic(config, args.delay_seconds),
+                                         fmt=plistlib.FMT_BINARY))
+        print(target)
+        raise SystemExit(0)
     for preview, wallet, name in [(False, True, 'Mora-ApplePay'), (False, False, 'Mora-ApplePay-Dictionary'), (True, False, 'Mora-Payload-Check')]:
         if args.diagnostics and not preview:
             name += '-Diagnostic'

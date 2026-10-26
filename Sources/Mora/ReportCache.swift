@@ -1,8 +1,8 @@
 import Foundation
 import FinanceCore
 
-/// Only immutable results are published on MainActor. A replaced cache is also
-/// a generation token, so an old task cannot refill a newer ledger's cache.
+/// Keep the last rendered values while a new generation calculates. Freshness
+/// is tracked separately from values; older tasks cannot publish into a newer cache.
 @MainActor final class ReportCache {
     var summaries: [Date: Summary] = [:]
     var categories: [Date: [CategoryTotal]] = [:]
@@ -16,6 +16,16 @@ import FinanceCore
     var netWorth: Decimal?
     var monthlyRecurring: Decimal?
     var pending: Set<String> = []
+    var completed: Set<String> = []
+    var tasks: [String: Task<Void, Never>] = [:]
+
+    init(previous: ReportCache? = nil) {
+        guard let previous else { return }
+        summaries = previous.summaries; categories = previous.categories; trends = previous.trends
+        analytics = previous.analytics; insights = previous.insights; transactions = previous.transactions
+        balances = previous.balances; spending = previous.spending; recent = previous.recent
+        netWorth = previous.netWorth; monthlyRecurring = previous.monthlyRecurring
+    }
 }
 
 private struct PreparedReport: Sendable {
@@ -32,11 +42,46 @@ private struct PreparedReport: Sendable {
 }
 
 extension FinanceStore {
-    private func prepareReports(in month: Date, count: Int = 6) {
+    func prepareInitialReports() async { await prepareReportsForPresentation(in: Date()) }
+
+    func prepareReportsForPresentation(in month: Date, includingAllScopes: Bool = false) async {
+        while !Task.isCancelled {
+            let cache = reports
+            await prepareReports(in: month)?.value
+            for detail in includingAllScopes ? TrendDetail.allCases : [.months] {
+                _ = reportAnalytics(in: month, detail: detail, selectedDays: [])
+                if includingAllScopes { _ = reportTrend(ending: month, detail: detail) }
+            }
+            for task in Array(cache.tasks.values) { await task.value }
+            if reports === cache { return }
+        }
+    }
+
+    func prepareAnalyticsForPresentation(in month: Date, detail: TrendDetail, selectedDays: Set<Int>) async {
+        while !Task.isCancelled {
+            let cache = reports
+            _ = reportAnalytics(in: month, detail: detail, selectedDays: selectedDays)
+            for task in Array(cache.tasks.values) { await task.value }
+            if reports === cache { return }
+        }
+    }
+
+    func prepareTrendForPresentation(in month: Date, detail: TrendDetail) async {
+        while !Task.isCancelled {
+            let cache = reports
+            _ = reportTrend(ending: month, detail: detail)
+            for task in Array(cache.tasks.values) { await task.value }
+            if reports === cache { return }
+        }
+    }
+
+    @discardableResult private func prepareReports(in month: Date, count: Int = 6) -> Task<Void, Never>? {
         let cache = reports, key = Dates.month(month), trendKey = "\(key.timeIntervalSince1970)-\(count)"
-        guard cache.trends[trendKey] == nil, cache.pending.insert(trendKey).inserted else { return }
+        guard !cache.completed.contains(trendKey) else { return nil }
+        if let task = cache.tasks[trendKey] { return task }
+        cache.pending.insert(trendKey)
         let snapshot = ledger.withoutChangeHistory()
-        Task { @MainActor [weak self] in
+        let task = Task { @MainActor [weak self] in
             let result = await BackgroundWork.shared.perform {
                 PreparedReport(summary: snapshot.summary(in: key), categories: snapshot.categoryTotals(in: key),
                     trend: snapshot.trend(ending: key, count: count), insights: snapshot.insights(in: key),
@@ -47,14 +92,20 @@ extension FinanceStore {
                     netWorth: snapshot.netWorth, monthlyRecurring: snapshot.monthlyRecurring)
             }
             guard let self, self.reports === cache, !Task.isCancelled else { return }
-            self.objectWillChange.send()
-            cache.summaries[key] = result.summary; cache.categories[key] = result.categories
-            cache.trends[trendKey] = result.trend; cache.insights[key] = result.insights
-            cache.transactions[key] = result.transactions; cache.recent[key] = result.recent; cache.balances = result.balances
-            cache.spending[key] = result.spending; cache.netWorth = result.netWorth
-            cache.monthlyRecurring = result.monthlyRecurring; cache.pending.remove(trendKey)
+            AppMotion.update {
+                self.objectWillChange.send()
+                cache.summaries[key] = result.summary; cache.categories[key] = result.categories
+                cache.trends[trendKey] = result.trend; cache.insights[key] = result.insights
+                cache.transactions[key] = result.transactions; cache.recent[key] = result.recent; cache.balances = result.balances
+                cache.spending[key] = result.spending; cache.netWorth = result.netWorth
+                cache.monthlyRecurring = result.monthlyRecurring
+                cache.completed.insert(trendKey); cache.pending.remove(trendKey); cache.tasks[trendKey] = nil
+            }
         }
+        cache.tasks[trendKey] = task
+        return task
     }
+
     func reportSummary(in month: Date) -> Summary {
         prepareReports(in: month); return reports.summaries[Dates.month(month)] ?? Summary()
     }
@@ -75,18 +126,21 @@ extension FinanceStore {
         let cache = reports, month = Dates.month(month)
         let selectedKey = detail == .selectedDates ? selectedDays.sorted().map(String.init).joined(separator: ",") : ""
         let key = "\(month.timeIntervalSince1970)-\(detail.rawValue)-\(selectedKey)"
-        if let trend = cache.trends[key] { return trend }
+        if cache.completed.contains(key), let trend = cache.trends[key] { return trend }
         if cache.pending.insert(key).inserted {
             let snapshot = ledger.withoutChangeHistory()
-            Task { @MainActor [weak self] in
+            let task = Task { @MainActor [weak self] in
                 let trend = await BackgroundWork.shared.perform { snapshot.trend(ending: month, detail: detail, selectedDays: selectedDays) }
                 guard let self, self.reports === cache, !Task.isCancelled else { return }
-                self.objectWillChange.send()
-                cache.trends[key] = trend
-                cache.pending.remove(key)
+                AppMotion.update {
+                    self.objectWillChange.send()
+                    cache.trends[key] = trend
+                    cache.completed.insert(key); cache.pending.remove(key); cache.tasks[key] = nil
+                }
             }
+            cache.tasks[key] = task
         }
-        return []
+        return cache.trends[key] ?? []
     }
     func reportInsights(in month: Date) -> [String] {
         prepareReports(in: month); return reports.insights[Dates.month(month)] ?? []
@@ -95,20 +149,23 @@ extension FinanceStore {
         let cache = reports, month = Dates.month(month)
         let daysKey = detail == .selectedDates ? selectedDays.sorted().map(String.init).joined(separator: ",") : ""
         let key = "analytics-\(month.timeIntervalSince1970)-\(detail.rawValue)-\(daysKey)"
-        if let report = cache.analytics[key] { return report }
+        if cache.completed.contains(key), let report = cache.analytics[key] { return report }
         if cache.pending.insert(key).inserted {
             let snapshot = ledger.withoutChangeHistory()
-            Task { @MainActor [weak self] in
+            let task = Task { @MainActor [weak self] in
                 let report = await BackgroundWork.shared.perform {
                     snapshot.analyticsReport(ending: month, detail: detail, selectedDays: selectedDays)
                 }
                 guard let self, self.reports === cache, !Task.isCancelled else { return }
-                self.objectWillChange.send()
-                cache.analytics[key] = report
-                cache.pending.remove(key)
+                AppMotion.update {
+                    self.objectWillChange.send()
+                    cache.analytics[key] = report
+                    cache.completed.insert(key); cache.pending.remove(key); cache.tasks[key] = nil
+                }
             }
+            cache.tasks[key] = task
         }
-        return AnalyticsReport()
+        return cache.analytics[key] ?? AnalyticsReport()
     }
     func reportBalance(_ account: Account) -> Decimal {
         prepareReports(in: Date()); return reports.balances[account.id] ?? account.openingBalance

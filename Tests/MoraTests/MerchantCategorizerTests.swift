@@ -39,6 +39,37 @@ final class MerchantCategorizerTests: XCTestCase {
         await worker.process(store: store)
         XCTAssertEqual(store.ledger.transactions[0].categoryID, category)
     }
+    func testRegionalDatasetCategorizesExistingPurchasesOfflineAndHistoryWins() async throws {
+        let (store, preferences, directory) = try await fixture(); defer { try? FileManager.default.removeItem(at: directory) }
+        let cases: [(String, String)] = [("Chapel Deli", "Продукты"), ("Wildberry", "Кафе и рестораны"),
+            ("Net Cost 3100 Ocean Ave", "Продукты"), ("Laghman Express", "Кафе и рестораны"),
+            ("TST* 7th Street Burger- W", "Кафе и рестораны"),
+            ("SQ * Thisbowl Noho", "Кафе и рестораны"), ("The Wild-New", "Покупки"),
+            ("Theperkhouse", "Кафе и рестораны")]
+        await store.update { ledger in
+            ledger.transactions = cases.map { Transaction(date: Date(timeIntervalSince1970: 1234), merchant: $0.0,
+                amount: -10, accountID: ledger.accounts[0].id) }
+        }
+        let worker = MerchantCategorizer(preferences: preferences) { _ in XCTFail("Built-in public data should avoid the network"); return nil }
+        await worker.process(store: store)
+        for (merchant, category) in cases {
+            let transaction = store.ledger.transactions.first { $0.merchant == merchant }!
+            XCTAssertEqual(store.ledger.category(transaction.categoryID)?.name, category, merchant)
+        }
+        await store.undo()
+        await worker.process(store: store)
+        XCTAssertTrue(store.ledger.transactions.allSatisfy { $0.categoryID == nil })
+    }
+    func testCatalogStatusDistinguishesUnknownMerchantFromMissingCategory() async throws {
+        let (store, preferences, directory) = try await fixture(); defer { try? FileManager.default.removeItem(at: directory) }
+        let unknown = MerchantCategorizer(preferences: preferences) { _ in nil }
+        await unknown.process(store: store)
+        XCTAssertTrue(unknown.status?.contains("Продавцов без совпадения") == true)
+        let missing = MerchantCategorizer(preferences: preferences) { _ in .pets }
+        await missing.process(store: store)
+        XCTAssertTrue(missing.status?.contains("нет подходящей категории расходов") == true)
+        XCTAssertNil(store.ledger.transactions[0].categoryID)
+    }
     func testFailureDoesNotAffectSavedPurchaseAndBacksOff() async throws {
         let (store, preferences, directory) = try await fixture(); defer { try? FileManager.default.removeItem(at: directory) }
         var calls = 0
@@ -46,6 +77,23 @@ final class MerchantCategorizerTests: XCTestCase {
         let before = store.ledger
         await worker.process(store: store); await worker.process(store: store)
         XCTAssertEqual(store.ledger, before); XCTAssertEqual(calls, 1); XCTAssertNotNil(worker.status)
+    }
+    func testRegionalCatalogWorksDuringNetworkBackoffAndRespectsToggle() async throws {
+        let (store, preferences, directory) = try await fixture(); defer { try? FileManager.default.removeItem(at: directory) }
+        var calls = 0
+        let worker = MerchantCategorizer(preferences: preferences) { _ in calls += 1; throw URLError(.notConnectedToInternet) }
+        await worker.process(store: store)
+        await store.update { ledger in
+            ledger.transactions.append(Transaction(date: Date(), merchant: "TST* 7th Street Burger- W", amount: -10,
+                accountID: ledger.accounts[0].id))
+        }
+        worker.onlineEnabled = false
+        await worker.process(store: store)
+        XCTAssertNil(store.ledger.transactions.last?.categoryID)
+        worker.onlineEnabled = true
+        await worker.process(store: store)
+        XCTAssertEqual(store.ledger.category(store.ledger.transactions.last?.categoryID)?.name, "Кафе и рестораны")
+        XCTAssertEqual(calls, 1)
     }
     func testNewHistoryVariantIsUsedEvenAfterACatalogMiss() async throws {
         let (store, preferences, directory) = try await fixture(); defer { try? FileManager.default.removeItem(at: directory) }
@@ -74,6 +122,28 @@ final class MerchantCategorizerTests: XCTestCase {
         }
         await worker.process(store: store)
         XCTAssertEqual(store.ledger.transactions[0].categoryID, manual)
+    }
+    func testCategoriesAreAppliedInOnePublicationAfterAllLookups() async throws {
+        let (store, preferences, directory) = try await fixture()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        await store.update { ledger in
+            ledger.transactions.append(Transaction(date: Date(), merchant: "Second unknown shop", amount: -5,
+                accountID: ledger.accounts[0].id))
+        }
+        var lookups = 0, visibleCounts: [Int] = []
+        let worker = MerchantCategorizer(preferences: preferences) { _ in
+            lookups += 1
+            XCTAssertTrue(store.ledger.transactions.allSatisfy { $0.categoryID == nil })
+            return .shopping
+        }
+        let observation = store.$ledger.dropFirst().sink { visibleCounts.append($0.transactions.filter { $0.categoryID != nil }.count) }
+        await worker.process(store: store)
+        XCTAssertEqual(lookups, 2)
+        XCTAssertEqual(visibleCounts, [2])
+        await store.undo()
+        await worker.process(store: store)
+        XCTAssertTrue(store.ledger.transactions.allSatisfy { $0.categoryID == nil })
+        withExtendedLifetime(observation) {}
     }
     func testUndoIsNotImmediatelyReclassifiedEvenAfterRestart() async throws {
         let (store, preferences, directory) = try await fixture(); defer { try? FileManager.default.removeItem(at: directory) }

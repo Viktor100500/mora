@@ -23,6 +23,9 @@ struct MoraApp: App {
                     NSApplication.shared.setActivationPolicy(.regular); NSApplication.shared.activate(ignoringOtherApps: true)
                     appDelegate.finishPendingWrites = {
                         store.beginTermination()
+                        // Accepted reviews may still be waiting for a Visa quote;
+                        // let them enter CloudSync before stopping new cloud work.
+                        await store.finishPendingWrites()
                         await cloud.finishPendingWrites()
                         await categorizer.finishPendingWrites()
                         await store.finishPendingWrites()
@@ -34,8 +37,13 @@ struct MoraApp: App {
                     NSApplication.shared.activate(ignoringOtherApps: true)
                     if let file = await readCSV(at: url, store: store) { sheet = .csv(file.0, file.1) }
                 } }
-                .task { await cloud.run(store: store) }
-                .task { await categorizer.run(store: store) }
+                .task {
+                    cloud.preparePresentation = { [categorizer] store in await categorizer.process(store: store, duringSync: true) }
+                    await cloud.prepare(store: store)
+                    async let sync: Void = cloud.run(store: store)
+                    async let categories: Void = categorizer.run(store: store)
+                    _ = await (sync, categories)
+                }
         }
         .defaultSize(width: 1320, height: 900)
         .windowStyle(.hiddenTitleBar)
@@ -101,50 +109,16 @@ struct ContentView: View {
     @Binding var sheet: EditorSheet?
     @AppStorage("mora.language") private var language = "ru"
     @State private var month = Dates.month(Date())
+    @State private var requestedMonth: Date?
+    @State private var monthPreparation: Task<Void, Never>?
+    @State private var transactionFilters = TransactionSearch()
     @AppStorage("mora.didSeeWelcome") private var didSeeWelcome = false
     @State private var confirmStart = false
     @State private var rollbackRequest: UUID?
     @AppStorage("mora.hideAmounts") private var hideAmounts = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var currency: String { store.ledger.preferences.baseCurrency }
-    private var noticeColor: Color {
-        guard let kind = store.activeNotice?.kind else { return Color.moraGreen }
-        return switch kind {
-        case .warning: Color(red: 0.72, green: 0.49, blue: 0.05)
-        case .error: Color.token("red")
-        case .information: Color.accentColor
-        default: Color.moraGreen
-        }
-    }
     private let dataRefresh = Timer.publish(every: 2, on: .main, in: .default).autoconnect()
-
-    @ViewBuilder private var activeNoticeBanner: some View {
-        if let notice = store.notice {
-            HStack(spacing: 12) {
-                Image(systemName: store.activeNotice?.kind == .error || store.activeNotice?.kind == .warning
-                      ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
-                    .foregroundStyle(noticeColor)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(notice).font(.callout.weight(.medium)).lineLimit(1)
-                    if let detail = store.activeNotice?.detail {
-                        FinancialText(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                    }
-                }
-                Spacer(minLength: 8)
-                if let event = store.activeNotice { NotificationActions(event: event) }
-                Button { store.notice = nil } label: { Image(systemName: "xmark").font(.caption) }
-                    .buttonStyle(.plain).foregroundStyle(.secondary)
-                    .accessibilityLabel(L("Закрыть уведомление"))
-            }
-            .padding(.horizontal, 14).padding(.vertical, 9)
-            .frame(maxWidth: 680, alignment: .leading)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
-            .overlay(RoundedRectangle(cornerRadius: 14).stroke(noticeColor.opacity(0.24), lineWidth: 1))
-            .shadow(color: .black.opacity(0.08), radius: 12, y: 4)
-            .frame(maxWidth: .infinity, alignment: .trailing)
-            .padding(.horizontal, 24).padding(.vertical, 8)
-        }
-    }
 
     @ViewBuilder private var currencyWarning: some View {
         if !store.ledger.missingCurrencies.isEmpty && page != .settings {
@@ -170,14 +144,12 @@ struct ContentView: View {
                     if page == .transactions {
                         VStack(alignment: .leading, spacing: 20) {
                             header
-                            currencyWarning
-                            TransactionsView(sheet: $sheet)
+                            TransactionsView(sheet: $sheet, filters: $transactionFilters)
                         }.padding(24).frame(maxWidth: 1320).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     } else {
                         ScrollView {
                             VStack(alignment: .leading, spacing: 20) {
                                 header
-                                currencyWarning
                                 switch page {
                                 case .overview: DashboardView(month: month, page: $page, sheet: $sheet)
                                 case .transactions: EmptyView() // This screen owns its scrolling above.
@@ -205,11 +177,17 @@ struct ContentView: View {
                 .id(language)
                 .background(scheme == .dark ? Color(nsColor: .windowBackgroundColor) : Color(red: 0.965, green: 0.965, blue: 0.95))
             }
-            .safeAreaInset(edge: .top, spacing: 0) { activeNoticeBanner }
         }
         .frame(minWidth: 1040, minHeight: 700)
         .disabled(store.isLoading || store.isTerminating)
         .overlay { if store.isLoading { ProgressView().controlSize(.large) } }
+        .overlay(alignment: .bottomTrailing) {
+            currencyWarning.frame(maxWidth: 680).padding(24).transition(.opacity)
+        }
+        .modifier(FloatingNotificationOverlay(event: store.activeNotice, close: { store.notice = nil }))
+        .smoothUpdates(value: page)
+        .smoothUpdates(value: month)
+        .onDisappear { monthPreparation?.cancel() }
         .task {
             await store.load()
             if store.isDemo && !didSeeWelcome && !CommandLine.arguments.contains("--demo") && sheet == nil {
@@ -365,21 +343,32 @@ struct ContentView: View {
     private var demoBanner: some View {
         HStack { Image(systemName: "sparkles"); Text(L("Это демо: изучите приложение на примере")).font(.system(size: 12)); Spacer(); Button(L("Начать свой учет")) { confirmStart = true }.font(.system(size: 12, weight: .semibold)).buttonStyle(.plain).underline() }.foregroundStyle(Color.moraGreen).padding(.horizontal, 30).padding(.vertical, 12).background(Color.moraGreen.opacity(0.10))
     }
+    private func selectMonth(_ date: Date) {
+        let next = Dates.month(date)
+        requestedMonth = next
+        monthPreparation?.cancel()
+        monthPreparation = Task { @MainActor in
+            await store.prepareReportsForPresentation(in: next, includingAllScopes: true)
+            guard !Task.isCancelled else { return }
+            AppMotion.update { month = next; requestedMonth = nil }
+        }
+    }
+
     private var header: some View {
         HStack(alignment: .center) {
-            VStack(alignment: .leading, spacing: 8) { Text(L(page.title)).font(.system(size: 30, weight: .semibold, design: .rounded)); Text(page.subtitle).font(.system(size: 13)).foregroundStyle(.secondary) }
+            VStack(alignment: .leading, spacing: 8) { Text(L(page.title)).font(.system(size: 30, weight: .semibold, design: .rounded)).contentTransition(.opacity); Text(page.subtitle).contentTransition(.opacity).font(.system(size: 13)).foregroundStyle(.secondary) }
             Spacer()
             if [.overview, .budgets, .analytics].contains(page) {
                 HStack(spacing: 10) {
-                    Button { month = Calendar.current.date(byAdding: .month, value: -1, to: month)! } label: { Image(systemName: "chevron.left") }.buttonStyle(.plain).help(L("Предыдущий месяц"))
+                    Button { selectMonth(Calendar.current.date(byAdding: .month, value: -1, to: requestedMonth ?? month)!) } label: { Image(systemName: "chevron.left") }.buttonStyle(.plain).help(L("Предыдущий месяц"))
                     Menu {
-                        Button(L("Текущий месяц")) { month = Dates.month(Date()) }
+                        Button(L("Текущий месяц")) { selectMonth(Dates.month(Date())) }
                         ForEach((-24...12).reversed(), id: \.self) { offset in
                             let date = Calendar.current.date(byAdding: .month, value: offset, to: Dates.month(Date()))!
-                            Button(date.formatted(.dateTime.month(.wide).year().locale(L10n.locale))) { month = date }
+                            Button(date.formatted(.dateTime.month(.wide).year().locale(L10n.locale))) { selectMonth(date) }
                         }
                     } label: { Text(month.formatted(.dateTime.month(.wide).year().locale(L10n.locale))).font(.system(size: 13, weight: .medium)).frame(minWidth: 125) }.menuStyle(.borderlessButton).fixedSize()
-                    Button { month = Calendar.current.date(byAdding: .month, value: 1, to: month)! } label: { Image(systemName: "chevron.right") }.buttonStyle(.plain).help(L("Следующий месяц"))
+                    Button { selectMonth(Calendar.current.date(byAdding: .month, value: 1, to: requestedMonth ?? month)!) } label: { Image(systemName: "chevron.right") }.buttonStyle(.plain).help(L("Следующий месяц"))
                 }.padding(12).background(scheme == .dark ? Color(nsColor: .controlBackgroundColor) : .white).clipShape(RoundedRectangle(cornerRadius: 10))
             }
         }

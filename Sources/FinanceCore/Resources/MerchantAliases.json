@@ -4,5 +4,12 @@
     "group": "dining",
     "source": "https://www.vib.com.vn/wps/wcm/connect/a8ff48f0-4546-42b0-a73d-997df2a9fd48/DANH%2BS%C3%81CH%2B%C4%90I%E1%BB%82M%2BCH%E1%BA%A4P%2BNH%E1%BA%ACN%2BTH%E1%BA%BA%2BVIB%2BSUPER%2BCARD.pdf?CVID=p5aqYfI&MOD=AJPERES",
     "evidence": "Public VIB merchant list, June 2024: SIREN47906, MCC 5814."
+  },
+  {
+    "alias": "Theperkhouse",
+    "group": "dining",
+    "prefixAllowed": false,
+    "source": "https://perkhousecoffee.com/",
+    "evidence": "The Perk House Coffee Co., official coffee shop website. Exact compact bank spelling only."
   }
 ]

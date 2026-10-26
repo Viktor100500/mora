@@ -93,7 +93,7 @@ struct CloudSettingsView: View {
         .confirmationDialog("Отключить облако на этом Mac?", isPresented: $confirmDisconnect, titleVisibility: .visible) {
             Button("Отключить") { password = ""; Task { await cloud.disconnect() } }
         } message: { Text("Локальные данные останутся на Mac. Ключи телефонов продолжат работать до отзыва в общей базе. Другие участники сохранят доступ.") }
-        .sheet(item: $selectedCapture) { capture in TransactionEditor(walletCapture: capture, ledger: store.ledger).modifier(FeedbackFooter()).modifier(FinanceErrorAlert()).environmentObject(cloud).environmentObject(store) }
+        .sheet(item: $selectedCapture) { capture in WalletReviewForm(capture: capture).modifier(FeedbackFooter()).modifier(FinanceErrorAlert()).environmentObject(cloud).environmentObject(store) }
         }
     }
     private func navigate(_ request: NotificationNavigation?, scrollProxy: ScrollViewProxy) {

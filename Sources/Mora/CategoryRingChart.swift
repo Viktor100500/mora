@@ -113,6 +113,7 @@ struct CategoryRingChart: View {
                 totals.indices.contains(index) ? CategoryRingHover(bounds: bounds, total: totals[index], expense: expense, currency: currency) : nil
             }
         }
+        .smoothUpdates(value: totals.map(\.amount))
         .accessibilityLabel(L("Распределение расходов по категориям")).financialChart()
     }
 }

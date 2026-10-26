@@ -21,6 +21,7 @@ struct IncomeExpenseChart: View {
             }
         }
         .chartLegend(.hidden).financialChart()
+        .smoothUpdates(value: trend.map { [$0.income, $0.expense] })
         .chartYAxis {
             AxisMarks(position: .leading) { value in
                 AxisGridLine()

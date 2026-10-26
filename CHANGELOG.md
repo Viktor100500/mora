@@ -1,9 +1,49 @@
 # Changelog
 
-## Unreleased
+## 1.6.0 — 2026-10-26
 
+- Morph dashboard trend curves through one fixed-topology path when changing aggregation; retain real bucket values for accessibility and hold the plot inset steady.
+- Fade duplicated transaction rows into a lazily rendered scroll view, preserve the viewport anchor and switch selection to the copies only with their filtered rows. Preserve insertion order for identical rows so random UUIDs cannot put a new copy above its original.
+
+- Float notifications over the whole window with short fade/settle transitions; keep notices and exchange-rate warnings out of page layout so they never push content down.
+- Keep previous report results visible while recalculating a new ledger generation, publish complete report groups together, and prepare initial balances before dismissing the launch loader.
+- Smooth financial text, chart, transaction-row and page updates, respect Reduce Motion, and avoid flashing an empty transaction screen while its first search runs. Prepare the next month or analysis scope before changing the visible selection.
+
+- Fit the transaction preview to its actual balance and quote lines while keeping loading/error states stable; remove excess space above the save buttons.
+- Replace the transaction table header with selection actions in the same footprint, with a compact actions menu at narrow widths, so checking rows never shifts the list or filters.
+
+- Retain transaction filters when switching sections; combine several types, accounts and categories with checkbox popovers and explicit select-all/clear-all behavior.
+- Replace separate date fields with one period control and a compact month calendar, highlighted ranges, month/year navigation and quick presets.
+
+- Keep the transaction preview footer stable during Visa loading; show the potential account balance before saving, including conversion fees, edits, future dates and both transfer legs.
+- Persist Visa rates for each purchase date and currency direction until the next UTC day, share concurrent requests and reuse the rate immediately as the amount changes.
+
+- Preserve the incoming Wallet purchase date when reopening the review form, initialize the native date field before editing, and isolate form state by purchase identity.
+- Order transaction fields as account, type, amount, purchase currency and name; show account currencies first in the purchase currency menu.
+- Close new, edited and reviewed transaction forms immediately after submission; save in the background with standard progress/success/error notifications and a retry action that retains submitted fields. Keep full ledger/history snapshots out of transaction-row rendering.
+- Finish native date-field editing before disabling a saving or terminating form, preventing an AppKit/SwiftUI focus-navigation cycle that can hang the main thread.
+
+- Keep production Wallet senders silent, retire the five-second diagnostic setup from installation instructions, and recommend extracting Wallet fields inside the transaction automation before passing a plain dictionary to the sender.
+- Expand the local merchant directory with the complete NYC restaurant-name feed, preserve branch names and match short multiword bank descriptors correctly; cover THISBOWL Noho, The Wild and the exact Perk House spelling while retaining ambiguity and manual-choice protections.
 - Infer supported Wallet currencies from formatted amounts on the server when Shortcuts cannot provide a separate currency field; keep foreign-currency captures queued for Mora conversion and leave ambiguous symbols for review.
 - Build future public releases for Apple Silicon only, using local pre-release tests instead of rerunning tests in the release workflow.
+
+## 1.5.18 — 2026-10-24
+
+- Reuse the existing notification system for Wallet import progress and completion; keep empty sync checks and previously reported unresolved purchases quiet.
+- Hide successful import notices automatically, update review counts as purchases are corrected, and clear resolved Wallet warnings and unread indicators.
+
+## 1.5.17 — 2026-10-24
+
+- Add a bundled, locally matched regional merchant directory generated from Overture Places and the New York State Retail Food Stores open dataset, with 171,649 source-derived names/types and no per-merchant expense overrides. Keep source licenses and a reproducible extraction script with the app.
+- Import NSI transit networks/operators and recognize contactless pay-as-you-go descriptors while keeping short network names from becoming arbitrary merchant prefixes.
+- Retain independently validated brand feeds on disk, use the last good data during outages, and distinguish missing merchants from missing expense categories. Preserve user history, manual edits and Undo.
+
+## 1.5.16 — 2026-10-24
+
+- Keep a synchronization notice visible at startup while new purchases download and convert in the background. Recheck the server version and pending purchases before finishing, including purchases arriving during the current batch.
+- Publish the final transaction list, categories and Wallet review notifications together instead of refreshing after each purchase; preserve durable writes and concurrent local edits, and report incomplete synchronization on failure.
+- Apply automatic categories in one coordinated change and keep unchanged background polls quiet.
 
 ## 1.5.15 — 2026-10-21
 

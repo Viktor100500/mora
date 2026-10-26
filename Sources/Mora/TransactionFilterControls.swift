@@ -24,40 +24,66 @@ struct TransactionToolbarButtonStyle: ButtonStyle {
     }
 }
 
-struct TransactionFilterMenu<Content: View>: View {
-    var title: String
-    var width: CGFloat
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        Menu { content } label: {
-            HStack(spacing: 8) {
-                Text(title).lineLimit(1).truncationMode(.tail)
-                Spacer(minLength: 4)
-                Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
-            }
-            .font(.body).foregroundStyle(.primary)
-            .padding(.horizontal, 12).frame(width: width, height: 40)
-            .modifier(TransactionFilterSurface())
-            .contentShape(RoundedRectangle(cornerRadius: 9))
-        }
-        .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
-        .help(title)
-    }
+struct FilterChoice<ID: Hashable>: Identifiable {
+    let id: ID
+    let title: String
 }
 
-struct TransactionFilterDate: View {
-    var title: String
-    @Binding var selection: Date
+/// The popover remains open while users build a selection of several values.
+struct TransactionFilterChecklist<ID: Hashable>: View {
+    let title: String
+    let allTitle: String
+    let width: CGFloat
+    @Binding var selection: Set<ID>?
+    let options: [FilterChoice<ID>]
+    @State private var presented = false
+    @State private var search = ""
+
+    private var summary: String {
+        guard let selection else { return allTitle }
+        if selection.count == 1, let option = options.first(where: { selection.contains($0.id) }) { return option.title }
+        return title + " · \(selection.count)"
+    }
 
     var body: some View {
-        HStack(spacing: 6) {
-            Text(title).font(.system(size: 12)).foregroundStyle(.secondary)
-            EuropeanDateField(title: title, selection: $selection, embedded: true)
-                .frame(width: 104, height: 26)
+        Button { presented.toggle() } label: {
+            HStack(spacing: 8) {
+                Text(summary).lineLimit(1).truncationMode(.tail)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .medium)).foregroundStyle(.secondary)
+            }
+            .font(.body).foregroundStyle(selection == nil ? Color.primary : Color.moraGreen)
+            .padding(.horizontal, 12).frame(width: width, height: 40)
+            .modifier(TransactionFilterSurface())
         }
-        .padding(.horizontal, 12).frame(height: 40)
-        .modifier(TransactionFilterSurface())
-        .fixedSize()
+        .buttonStyle(.plain).help(summary)
+        .popover(isPresented: $presented, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text(title).font(.headline)
+                    Spacer()
+                    Button(L("Готово")) { presented = false }.buttonStyle(.plain).foregroundStyle(Color.moraGreen)
+                }
+                if options.count > 8 {
+                    TextField(L("Поиск"), text: $search).textFieldStyle(.roundedBorder)
+                }
+                Toggle(allTitle, isOn: Binding(get: { selection == nil }, set: { selection = $0 ? nil : [] }))
+                    .toggleStyle(.checkbox)
+                Divider()
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(options.filter { search.isEmpty || $0.title.localizedCaseInsensitiveContains(search) }) { option in
+                            Toggle(option.title, isOn: Binding(get: { selection?.contains(option.id) ?? true }, set: { checked in
+                                var next = selection ?? Set(options.map(\.id))
+                                if checked { next.insert(option.id) } else { next.remove(option.id) }
+                                selection = next == Set(options.map(\.id)) ? nil : next
+                            })).toggleStyle(.checkbox).frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }.padding(.vertical, 2)
+                }.frame(height: min(CGFloat(options.count) * 30, 280))
+            }
+            .padding(18).frame(width: 280)
+        }
+        .onChange(of: presented) { _, open in if !open { search = "" } }
     }
 }

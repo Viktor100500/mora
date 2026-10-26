@@ -10,6 +10,8 @@ final class MoraApplicationDelegate: NSObject, NSApplicationDelegate {
         guard let finishPendingWrites else { return .terminateNow }
         guard !terminating else { return .terminateLater }
         terminating = true
+        // Release native date/amount editors before termination disables views.
+        sender.keyWindow?.makeFirstResponder(nil)
         Task { @MainActor in
             await finishPendingWrites()
             sender.reply(toApplicationShouldTerminate: true)

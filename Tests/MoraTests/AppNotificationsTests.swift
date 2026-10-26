@@ -106,6 +106,78 @@ final class AppNotificationsTests: XCTestCase {
         XCTAssertFalse(try XCTUnwrap(history.events.first { $0.householdID == second }).isResolved)
     }
 
+    func testPreviouslyResolvedWalletWarningDoesNotKeepUnreadBadgeAfterUpgrade() async throws {
+        let directory = try temporaryDirectory(); defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("notification-history.json"), household = UUID()
+        let old = AppNotification(message: "Already corrected", kind: .review, sourceID: UUID(),
+                                  householdID: household, isResolved: true)
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode([old]).write(to: file)
+        let history = AppNotifications(fileURL: file)
+        await history.load()
+        XCTAssertEqual(history.unreadCount, 1)
+        history.reconcileWallet([], householdID: household)
+        XCTAssertEqual(history.unreadCount, 0)
+        XCTAssertEqual(history.events.count, 1)
+    }
+
+    func testProgressUsesOneHistoryEventAndIsNotRestoredWhileRunning() async throws {
+        let directory = try temporaryDirectory(); defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("notification-history.json")
+        let history = AppNotifications(fileURL: file)
+        await history.load()
+        let progress = history.record("Loading", progress: true)
+        XCTAssertTrue(progress.isInProgress)
+        await history.flush()
+        let during = AppNotifications(fileURL: file)
+        await during.load()
+        XCTAssertTrue(during.events.isEmpty)
+        let finished = history.finishProgress(progress.id, message: "Imported", actions: [.imports])
+        XCTAssertEqual(finished?.id, progress.id)
+        XCTAssertEqual(history.events.count, 1)
+        XCTAssertFalse(try XCTUnwrap(finished).isInProgress)
+        await history.flush()
+        let restored = AppNotifications(fileURL: file)
+        await restored.load()
+        XCTAssertEqual(restored.events.map(\.message), ["Imported"])
+    }
+
+    func testSuccessfulProgressDismissesBannerButPreservesHistoryAndNewerNotice() async throws {
+        let directory = try temporaryDirectory(); defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try await store(in: directory)
+        let first = store.beginProgressNotice("Loading")
+        store.finishProgressNotice(first, message: "Imported", dismissAfter: .milliseconds(10))
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertNil(store.activeNotice)
+        XCTAssertEqual(store.notifications.events.map(\.message), ["Imported"])
+        let second = store.beginProgressNotice("Loading again")
+        store.finishProgressNotice(second, message: "Imported again", dismissAfter: .milliseconds(10))
+        store.showNotice("An unrelated edit")
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(store.activeNotice?.message, "An unrelated edit")
+        store.showNotice("Manually reviewed Wallet purchase", dismissAfter: .milliseconds(10))
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertNil(store.activeNotice)
+        XCTAssertEqual(store.notifications.events.first?.message, "Manually reviewed Wallet purchase")
+    }
+
+    func testWalletWarningUpdatesAndClearsAfterLastPurchaseIsCorrected() async throws {
+        let directory = try temporaryDirectory(); defer { try? FileManager.default.removeItem(at: directory) }
+        let store = try await store(in: directory)
+        let household = UUID(), first = try capture(), second = try capture()
+        store.reconcileWallet([first, second], householdID: household)
+        let id = store.beginProgressNotice("Loading", householdID: household)
+        store.finishProgressNotice(id, message: "Imported", detail: "Two to review", kind: .warning,
+                                   actions: [.inbox], dismissAfter: nil)
+        store.reconcileWallet([second], householdID: household)
+        XCTAssertEqual(store.activeNotice?.detail, "Покупок на проверке: 1")
+        XCTAssertTrue(try XCTUnwrap(store.notifications.events.first { $0.sourceID == first.id }).isRead)
+        store.reconcileWallet([], householdID: household)
+        XCTAssertNil(store.activeNotice)
+        XCTAssertEqual(store.notifications.unreadCount, 0)
+        XCTAssertTrue(store.notifications.events.allSatisfy(\.isResolved))
+    }
+
     func testClosingBannerKeepsHistoryAndAccountUndoSurvivesRestart() async throws {
         let directory = try temporaryDirectory(); defer { try? FileManager.default.removeItem(at: directory) }
         let store = try await store(in: directory), id = try XCTUnwrap(store.ledger.accounts.first?.id)

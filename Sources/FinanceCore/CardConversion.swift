@@ -13,6 +13,12 @@ public struct CardConversion: Codable, Equatable, Sendable {
     public var bankFeePercent: Decimal? = nil
     public var feePercent: Decimal { bankFeePercent ?? 0 }
 
+    public init(originalAmount: Decimal, originalCurrency: String, accountCurrency: String, rate: Decimal, date: Date,
+                provider: String = "Visa", bankFeePercent: Decimal? = nil) {
+        self.originalAmount = originalAmount; self.originalCurrency = originalCurrency; self.accountCurrency = accountCurrency
+        self.rate = rate; self.date = date; self.provider = provider; self.bankFeePercent = bankFeePercent
+    }
+
     public func applyingFee(of account: Account) -> CardConversion {
         var value = self
         value.bankFeePercent = originalAmount < 0 && account.bankFeePercent != 0 ? account.bankFeePercent : nil
@@ -42,23 +48,79 @@ public struct CardConversion: Codable, Equatable, Sendable {
 public final class VisaRateClient {
     public static let shared = VisaRateClient()
     public static let calculatorURL = URL(string: "https://www.visa.co.uk/support/consumer/travel-support/exchange-rate-calculator.html")!
-    private var cache: [String: Decimal] = [:]
-    public init() {}
+    private let cache: VisaRateCache
+    private let fetchRate: @MainActor @Sendable (String, String, Date) async throws -> Decimal
+    private let now: @Sendable () -> Date
+    private var inFlight: [String: Task<Decimal, Error>] = [:]
+
+    public convenience init() {
+        let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("com.mora.finance.local", isDirectory: true)
+        self.init(cacheURL: directory.appendingPathComponent("visa-rates.json"),
+                  fetchRate: { try await VisaCalculator().fetch(from: $0, to: $1, date: $2) })
+    }
+
+    init(cacheURL: URL?, now: @escaping @Sendable () -> Date = { Date() },
+         fetchRate: @escaping @MainActor @Sendable (String, String, Date) async throws -> Decimal) {
+        cache = VisaRateCache(fileURL: cacheURL); self.now = now; self.fetchRate = fetchRate
+    }
 
     public func conversion(amount: Decimal, from: String, to: String, date: Date) async throws -> CardConversion {
-        guard Locale.commonISOCurrencyCodes.contains(from), Locale.commonISOCurrencyCodes.contains(to), from != to else {
-            throw LedgerError.invalid("Выберите поддерживаемую валюту покупки и счет.")
-        }
-        let key = "\(Dates.string(date))|\(from)|\(to)"
-        let rate: Decimal
-        if let cached = cache[key] { rate = cached }
-        else {
-            rate = try await VisaCalculator().fetch(from: from, to: to, date: date)
-            cache[key] = rate
-        }
+        let rate = try await rate(from: from, to: to, date: date)
         let value = CardConversion(originalAmount: amount, originalCurrency: from, accountCurrency: to, rate: rate, date: Calendar.current.startOfDay(for: date))
         _ = try value.convertedAmount()
         return value
+    }
+
+    public func rate(from: String, to: String, date: Date) async throws -> Decimal {
+        guard Locale.commonISOCurrencyCodes.contains(from), Locale.commonISOCurrencyCodes.contains(to), from != to else {
+            throw LedgerError.invalid("Выберите поддерживаемую валюту покупки и счет.")
+        }
+        // Visa publishes daily rates. Expire at the provider's UTC day boundary,
+        // keeping the purchase's calendar date and direction in the cache key.
+        let day = Int(floor(now().timeIntervalSince1970 / 86_400))
+        let key = "\(day)|\(Dates.string(date))|\(from)|\(to)"
+        let rate: Decimal
+        if let cached = await cache.rate(for: key) { rate = cached }
+        else if let task = inFlight[key] { rate = try await task.value }
+        else {
+            // An editor task can be cancelled on every keystroke or dismissal.
+            // Its shared fetch must survive for other previews and queued saves.
+            let task = Task { [fetchRate, cache] in
+                let rate = try await fetchRate(from, to, date)
+                guard rate > 0, !rate.isNaN else { throw LedgerError.invalid("Visa вернула некорректный курс. Операция не сохранена.") }
+                await cache.store(rate, for: key, day: day)
+                return rate
+            }
+            inFlight[key] = task
+            defer { inFlight[key] = nil }
+            rate = try await task.value
+        }
+        try Task.checkCancellation()
+        return rate
+    }
+}
+
+/// Optional disk caching never turns a successful quote into a failed purchase.
+private actor VisaRateCache {
+    private let fileURL: URL?
+    private var rates: [String: Decimal]?
+    init(fileURL: URL?) { self.fileURL = fileURL }
+    func rate(for key: String) -> Decimal? {
+        if rates == nil {
+            rates = fileURL.flatMap { try? Data(contentsOf: $0) }
+                .flatMap { try? JSONDecoder().decode([String: Decimal].self, from: $0) } ?? [:]
+        }
+        guard let rate = rates?[key], rate > 0, !rate.isNaN else { return nil }
+        return rate
+    }
+    func store(_ rate: Decimal, for key: String, day: Int) {
+        _ = self.rate(for: key)
+        rates = rates?.filter { $0.key.hasPrefix("\(day)|") }
+        rates?[key] = rate
+        guard let fileURL, let data = try? JSONEncoder().encode(rates ?? [:]) else { return }
+        try? FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? data.write(to: fileURL, options: .atomic)
     }
 }
 

@@ -5,6 +5,7 @@ import FinanceCore
 enum AppNotificationAction: Codable, Equatable, Identifiable, Sendable {
     case undo(String), redo(String), rollbackImport(UUID)
     case imports, settings, inbox, review(UUID)
+    case retryTransaction(UUID)
 
     var id: String {
         switch self {
@@ -15,6 +16,7 @@ enum AppNotificationAction: Codable, Equatable, Identifiable, Sendable {
         case .settings: return "settings"
         case .inbox: return "inbox"
         case .review(let id): return "review:\(id)"
+        case .retryTransaction(let id): return "retryTransaction:\(id)"
         }
     }
     var title: String {
@@ -26,6 +28,7 @@ enum AppNotificationAction: Codable, Equatable, Identifiable, Sendable {
         case .settings: return L("Настройки")
         case .inbox: return L("Кликните для проверки")
         case .review: return L("Проверить…")
+        case .retryTransaction: return L("Повторить сохранение")
         }
     }
 }
@@ -42,6 +45,8 @@ struct AppNotification: Codable, Equatable, Identifiable, Sendable {
     var sourceID: UUID? = nil
     var householdID: UUID? = nil
     var isResolved = false
+    var progress: Bool? = nil
+    var isInProgress: Bool { progress == true }
 }
 
 struct NotificationNavigation: Identifiable {
@@ -73,7 +78,7 @@ final class AppNotifications: ObservableObject {
         let task = Task { @MainActor in
             do {
                 let history = try await storage.load()
-                let visibleHistory = history.filter { !Self.isCopyNoise($0.message) }
+                let visibleHistory = history.filter { !Self.isCopyNoise($0.message) && !$0.isInProgress }
                 if events.isEmpty {
                     if !visibleHistory.isEmpty { events = visibleHistory }
                 } else {
@@ -91,11 +96,30 @@ final class AppNotifications: ObservableObject {
 
     @discardableResult
     func record(_ message: String, detail: String? = nil, kind: AppNotification.Kind = .success,
-                actions: [AppNotificationAction] = []) -> AppNotification {
-        let event = AppNotification(message: message, detail: detail, kind: kind, actions: actions)
+                actions: [AppNotificationAction] = [], householdID: UUID? = nil, progress: Bool = false) -> AppNotification {
+        let event = AppNotification(message: message, detail: detail, kind: kind, actions: actions,
+                                    householdID: householdID, progress: progress ? true : nil)
         events.insert(event, at: 0)
         persist()
         return event
+    }
+
+    @discardableResult
+    func finishProgress(_ id: UUID, message: String, detail: String? = nil,
+                        kind: AppNotification.Kind = .success, actions: [AppNotificationAction] = []) -> AppNotification? {
+        guard let index = events.firstIndex(where: { $0.id == id && $0.isInProgress }) else { return nil }
+        var event = events[index]
+        event.message = message; event.detail = detail; event.kind = kind; event.actions = actions
+        event.progress = nil; event.date = Date(); event.isRead = false
+        events[index] = event
+        persist()
+        return event
+    }
+
+    func removeProgress(_ id: UUID) {
+        guard events.contains(where: { $0.id == id && $0.isInProgress }) else { return }
+        events.removeAll { $0.id == id && $0.isInProgress }
+        persist()
     }
 
     private static func isCopyNoise(_ message: String) -> Bool {
@@ -117,7 +141,19 @@ final class AppNotifications: ObservableObject {
         let ids = Set(captures.map(\.id))
         var next = events
         for index in next.indices where next[index].householdID == householdID && next[index].kind == .review {
-            if !next[index].isResolved && next[index].sourceID.map(ids.contains) != true { next[index].isResolved = true }
+            if next[index].sourceID.map(ids.contains) != true {
+                next[index].isResolved = true
+                next[index].isRead = true
+            }
+        }
+        // An import's review action describes the current inbox, not a past count.
+        for index in next.indices where next[index].householdID == householdID &&
+            next[index].sourceID == nil && !next[index].isInProgress && next[index].actions.contains(.inbox) {
+            if captures.isEmpty {
+                next[index].isResolved = true; next[index].isRead = true
+            } else if !next[index].isResolved {
+                next[index].detail = L("Покупок на проверке: \(captures.count)")
+            }
         }
         for capture in captures {
             let detail = [capture.merchant.isEmpty ? L("Продавец не получен") : capture.merchant,
@@ -151,7 +187,7 @@ final class AppNotifications: ObservableObject {
             await load()
             guard !Task.isCancelled else { return }
             guard canPersist else { return }
-            let snapshot = events
+            let snapshot = events.filter { !$0.isInProgress }
             do {
                 try await storage.save(snapshot, revision: version)
                 if revision == version { storageError = nil }

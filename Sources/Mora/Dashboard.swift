@@ -8,6 +8,7 @@ struct DashboardView: View {
     @Binding var page: Page
     @Binding var sheet: EditorSheet?
     @State private var trendDetail: TrendDetail = .months
+    @State private var trendPreparation: Task<Void, Never>?
     @State private var trendPlotInset: CGFloat = 0
     private var ledger: Ledger { store.ledger }
     private var currency: String { ledger.preferences.baseCurrency }
@@ -24,18 +25,7 @@ struct DashboardView: View {
                 MetricCard(title: L("Расходы"), value: DisplayMoney.string(summary.expense, currency: currency), icon: "arrow.up.right", note: L("Без переводов между счетами"), color: "orange")
                 MetricCard(title: L("Разница"), value: DisplayMoney.string(summary.net, currency: currency), icon: "equal", note: L("Доходы минус расходы"), color: summary.net >= 0 ? "green" : "red")
             }
-            BalancedColumns {
-                Card(fillsHeight: true) {
-                    VStack(alignment: .leading, spacing: 20) {
-                        HStack { SectionHeading(title: L("Денежный поток"), subtitle: trendDetail == .months ? L("Доходы и расходы за 6 месяцев") : L("Доходы и расходы за выбранный месяц")); Spacer(); IconTile(icon: "chart.xyaxis.line", color: "green", size: 29) }
-                        TrendDetailPicker(selection: $trendDetail)
-                        TrendChart(ledger: ledger, month: month, cachedTrend: store.reportTrend(ending: month, detail: trendDetail), detail: trendDetail).frame(minHeight: 250, maxHeight: .infinity)
-                            .onPreferenceChange(ChartPlotInsetKey.self) { trendPlotInset = $0 }
-                        HStack(spacing: 18) { ChartLegend(color: .moraGreen, title: L("Доходы")); ChartLegend(color: .token("orange"), title: L("Расходы")); Spacer(); Text(currency).font(.caption).foregroundStyle(.secondary) }.padding(.leading, trendPlotInset)
-                    }
-                }
-                Card(fillsHeight: true) { CategoryChart(ledger: ledger, month: month, cachedTotals: store.reportCategories(in: month), cachedExpense: store.reportSummary(in: month).expense, openAnalytics: { page = .analytics }) }
-            }
+            flowCharts
             Card {
                 VStack(alignment: .leading, spacing: 18) {
                     HStack { SectionHeading(title: L("Последние операции")); Spacer(); Button(L("Все операции →")) { page = .transactions }.buttonStyle(.plain).font(.body).foregroundStyle(Color.moraGreen) }
@@ -83,6 +73,37 @@ struct DashboardView: View {
             }
         }
         .modifier(CategoryRingTooltipLayer())
+        .onDisappear { trendPreparation?.cancel() }
+        .onChange(of: month) { _, _ in trendPreparation?.cancel() }
+    }
+
+    private var flowCharts: some View {
+        BalancedColumns {
+            Card(fillsHeight: true) {
+                VStack(alignment: .leading, spacing: 20) {
+                    HStack { SectionHeading(title: L("Денежный поток"), subtitle: trendDetail == .months ? L("Доходы и расходы за 6 месяцев") : L("Доходы и расходы за выбранный месяц")); Spacer(); IconTile(icon: "chart.xyaxis.line", color: "green", size: 29) }
+                    TrendDetailPicker(selection: trendSelection)
+                    TrendChart(ledger: ledger, month: month, cachedTrend: store.reportTrend(ending: month, detail: trendDetail), detail: trendDetail).frame(minHeight: 250, maxHeight: .infinity)
+                        .onPreferenceChange(ChartPlotInsetKey.self) { if abs(trendPlotInset - $0) > 0.5 { trendPlotInset = $0 } }
+                    HStack(spacing: 18) { ChartLegend(color: .moraGreen, title: L("Доходы")); ChartLegend(color: .token("orange"), title: L("Расходы")); Spacer(); Text(currency).font(.caption).foregroundStyle(.secondary) }.padding(.leading, trendPlotInset)
+                }
+            }
+            Card(fillsHeight: true) { CategoryChart(ledger: ledger, month: month, cachedTotals: store.reportCategories(in: month), cachedExpense: store.reportSummary(in: month).expense, openAnalytics: { page = .analytics }) }
+        }
+    }
+
+    private var trendSelection: Binding<TrendDetail> {
+        Binding(get: { trendDetail }, set: { selectTrend($0) })
+    }
+
+    private func selectTrend(_ detail: TrendDetail) {
+        trendPreparation?.cancel()
+        let requestedMonth = month
+        trendPreparation = Task { @MainActor in
+            await store.prepareTrendForPresentation(in: requestedMonth, detail: detail)
+            guard !Task.isCancelled, requestedMonth == month else { return }
+            AppMotion.update { trendDetail = detail }
+        }
     }
 }
 
@@ -134,27 +155,59 @@ struct TrendChart: View {
     var detail: TrendDetail = .months
     var body: some View {
         let trend = cachedTrend
-        let amounts = trend.flatMap { [$0.income.double, $0.expense.double] }
+        let curve = TrendCurveGeometry(trend)
+        let axisDates = detail.axisDates(trend)
         Chart {
+            // Invisible data marks retain the actual bucket values for VoiceOver;
+            // the persistent, animatable paths below own all visible line geometry.
             ForEach(trend) { item in
-                AreaMark(x: .value(L("Период"), item.date, unit: detail == .months ? .month : .day), y: .value(L("Доход"), item.income.double))
-                    .foregroundStyle(LinearGradient(colors: [.moraGreen.opacity(0.18), .moraGreen.opacity(0.01)], startPoint: .top, endPoint: .bottom)).interpolationMethod(.monotone)
-                LineMark(x: .value(L("Период"), item.date, unit: detail == .months ? .month : .day), y: .value(L("Сумма"), item.income.double), series: .value(L("Тип"), L("Доход")))
-                    .foregroundStyle(Color.moraGreen).lineStyle(StrokeStyle(lineWidth: 2.5)).interpolationMethod(.monotone)
-                LineMark(x: .value(L("Период"), item.date, unit: detail == .months ? .month : .day), y: .value(L("Сумма"), item.expense.double), series: .value(L("Тип"), L("Расход")))
-                    .foregroundStyle(Color.token("orange")).lineStyle(StrokeStyle(lineWidth: 2.5)).interpolationMethod(.monotone)
-                PointMark(x: .value(L("Период"), item.date, unit: detail == .months ? .month : .day), y: .value(L("Доход"), item.income.double)).foregroundStyle(Color.moraGreen).symbolSize(22)
+                PointMark(x: .value(L("Период"), curve.position(item.date)), y: .value(L("Доход"), item.income.double))
+                    .foregroundStyle(Color.clear).symbolSize(0)
+                    .accessibilityLabel(detail.axisLabel(item.date) + " · " + L("Доход"))
+                    .accessibilityValue(DisplayMoney.string(item.income, currency: ledger.preferences.baseCurrency))
+                PointMark(x: .value(L("Период"), curve.position(item.date)), y: .value(L("Расход"), item.expense.double))
+                    .foregroundStyle(Color.clear).symbolSize(0)
+                    .accessibilityLabel(detail.axisLabel(item.date) + " · " + L("Расход"))
+                    .accessibilityValue(DisplayMoney.string(item.expense, currency: ledger.preferences.baseCurrency))
             }
         }
-        .chartYScale(domain: min(0, amounts.min() ?? 0)...max(1, (amounts.max() ?? 0) * 1.1))
+        .chartXScale(domain: 0.0...1.0)
+        .chartYScale(domain: curve.domain)
         .chartLegend(.hidden)
-        .chartXAxis { AxisMarks(values: detail.axisDates(trend)) { value in AxisValueLabel { if let date = value.as(Date.self) { Text(detail.axisLabel(date)).font(.system(size: 10)) } } } }
-        .chartYAxis { AxisMarks(position: .leading) { value in AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4, 4])).foregroundStyle(Color.secondary.opacity(0.16)); AxisValueLabel { if let amount = value.as(Double.self) { FinancialText(amount.formatted(.number.notation(.compactName))).font(.system(size: 9)) } } } }
+        .chartXAxis {
+            AxisMarks(values: axisDates.map(curve.position)) { value in
+                AxisValueLabel {
+                    if let position = value.as(Double.self),
+                       let date = axisDates.min(by: { abs(curve.position($0) - position) < abs(curve.position($1) - position) }) {
+                        Text(detail.axisLabel(date)).font(.system(size: 10)).contentTransition(.opacity)
+                    }
+                }
+            }
+        }
+        .chartYAxis {
+            AxisMarks(position: .leading) { value in
+                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4, 4])).foregroundStyle(Color.secondary.opacity(0.16))
+                AxisValueLabel {
+                    if let amount = value.as(Double.self) {
+                        FinancialText(amount.formatted(.number.notation(.compactName))).font(.system(size: 9))
+                            .frame(width: 38, alignment: .trailing)
+                    }
+                }
+            }
+        }
         .chartOverlay { proxy in
             GeometryReader { geometry in
-                Color.clear.preference(key: ChartPlotInsetKey.self, value: proxy.plotFrame.map { geometry[$0].minX } ?? 0).allowsHitTesting(false)
+                if let anchor = proxy.plotFrame,
+                   let left = proxy.position(forX: 0.0), let right = proxy.position(forX: 1.0),
+                   let bottom = proxy.position(forY: curve.lower), let top = proxy.position(forY: curve.upper) {
+                    let frame = geometry[anchor]
+                    TrendLinePlot(geometry: curve).frame(width: max(0, right - left), height: max(0, bottom - top))
+                        .clipped().position(x: frame.minX + (left + right) / 2, y: frame.minY + (top + bottom) / 2)
+                    Color.clear.preference(key: ChartPlotInsetKey.self, value: frame.minX).allowsHitTesting(false)
+                }
             }
         }
+
         .accessibilityLabel(detail == .months ? L("Доходы и расходы за последние шесть месяцев") : L("Доходы и расходы за выбранный месяц") + " · " + detail.title).financialChart()
     }
 }
@@ -195,31 +248,41 @@ struct CategoryChart: View {
 }
 
 struct TransactionRow: View {
-    var transaction: Transaction; var ledger: Ledger
+    var transaction: Transaction
+    private let category: Category?
+    private let account: Account?
+    private let destinationName: String
     var merchantLines: Int? = 1
     var showsNote = false
+    init(transaction: Transaction, ledger: Ledger, merchantLines: Int? = 1, showsNote: Bool = false) {
+        self.transaction = transaction
+        category = ledger.category(transaction.categoryID)
+        account = ledger.account(transaction.accountID)
+        destinationName = transaction.destinationAccountID.flatMap { ledger.account($0)?.name } ?? ""
+        self.merchantLines = merchantLines
+        self.showsNote = showsNote
+    }
     var body: some View {
-        let category = ledger.category(transaction.categoryID)
         HStack(spacing: 12) {
             IconTile(icon: transaction.kind == .transfer ? "arrow.left.arrow.right" : category?.icon ?? "tag", color: category?.color ?? (transaction.kind == .income ? "green" : "gray"), size: 36)
             VStack(alignment: .leading, spacing: 4) {
-                Text(transaction.merchant).font(.system(size: 13, weight: .medium)).lineLimit(merchantLines).fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
-                HStack(spacing: 5) { Text(transaction.kind == .transfer ? L("Перевод") : category?.name ?? L("Без категории")); Text("·"); Text(ledger.account(transaction.accountID)?.name ?? ""); if let removed = transaction.removedTransferAccountName { Text(L("· удаленный счет: \(removed)")) } else if transaction.kind == .transfer { Text("→ \(transaction.destinationAccountID.flatMap { ledger.account($0)?.name } ?? "")") } }.font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+                Text(transaction.merchant).contentTransition(.opacity).font(.system(size: 13, weight: .medium)).lineLimit(merchantLines).fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
+                HStack(spacing: 5) { Text(transaction.kind == .transfer ? L("Перевод") : category?.name ?? L("Без категории")).contentTransition(.opacity); Text("·"); Text(account?.name ?? ""); if let removed = transaction.removedTransferAccountName { Text(L("· удаленный счет: \(removed)")) } else if transaction.kind == .transfer { Text("→ \(destinationName)") } }.font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
                 if let conversion = transaction.conversion {
                     FinancialText("\(DisplayMoney.string(abs(conversion.originalAmount), currency: conversion.originalCurrency)) · Visa \(Money.plain(conversion.rate))\(conversion.feePercent == 0 ? "" : " + " + Money.plain(conversion.feePercent) + "%")").font(.system(size: 10)).foregroundStyle(.secondary)
                 }
                 if showsNote, !transaction.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text(transaction.note).font(.system(size: 10)).foregroundStyle(.secondary)
+                    Text(transaction.note).contentTransition(.opacity).font(.system(size: 10)).foregroundStyle(.secondary)
                         .lineLimit(1).truncationMode(.tail)
                 }
             }.frame(maxWidth: .infinity, alignment: .leading).layoutPriority(1)
             Spacer(minLength: 12)
             VStack(alignment: .trailing, spacing: 4) {
-                FinancialText((transaction.kind == .income ? "+" : "") + DisplayMoney.string(transaction.amount, currency: ledger.account(transaction.accountID)?.currency ?? "RUB")).font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundStyle(transaction.kind == .income ? Color.moraGreen : .primary).monospacedDigit()
+                FinancialText((transaction.kind == .income ? "+" : "") + DisplayMoney.string(transaction.amount, currency: account?.currency ?? "RUB")).font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundStyle(transaction.kind == .income ? Color.moraGreen : .primary).monospacedDigit()
                 Text(transaction.date.formatted(.dateTime.day().month(.abbreviated).locale(L10n.locale))).font(.system(size: 10)).foregroundStyle(.secondary)
             }
             .fixedSize(horizontal: true, vertical: false)
-        }.padding(.vertical, 3)
+        }.padding(.vertical, 3).smoothUpdates(value: transaction)
     }
 }
 
@@ -241,6 +304,8 @@ struct AnalyticsView: View {
     @EnvironmentObject var store: FinanceStore
     var month: Date
     @State private var daySelection = CalendarDaySelection()
+    @State private var pendingDays: CalendarDaySelection?
+    @State private var analysisPreparation: Task<Void, Never>?
     @State private var incomePlotInset: CGFloat = 0
     @State private var trendDetail: TrendDetail = .months
     private var ledger: Ledger { store.ledger }
@@ -258,39 +323,11 @@ struct AnalyticsView: View {
     var body: some View {
         let report = store.reportAnalytics(in: month, detail: trendDetail, selectedDays: daySelection.days)
         VStack(spacing: 22) {
-            Card {
-                VStack(alignment: .leading, spacing: 20) {
-                    SectionHeading(title: L("Календарь расходов"), subtitle: L("Ctrl/⌘ — отдельные дни · Shift — диапазон"))
-                    let first = Calendar.current.component(.weekday, from: Dates.month(month))
-                    let padding = (first + 5) % 7
-                    let days = Calendar.current.range(of: .day, in: .month, for: month)!.count
-                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 7), spacing: 8) {
-                        ForEach([L("ПН"), L("ВТ"), L("СР"), L("ЧТ"), L("ПТ"), L("СБ"), L("ВС")], id: \.self) { Text($0).font(.caption2).foregroundStyle(.secondary).frame(maxWidth: .infinity) }
-                        ForEach(-padding..<0, id: \.self) { _ in Color.clear.frame(height: 62) }
-                        ForEach(1...days, id: \.self) { day in
-                            let rows = store.reportTransactions(in: month).filter { ledger.isActive($0) && Calendar.current.component(.day, from: $0.date) == day }
-                            let expense = rows.filter { $0.kind == .expense }.reduce(Decimal(0)) { $0 - (ledger.value($1) ?? 0) }
-                            let selected = daySelection.days.contains(day)
-                            VStack(alignment: .leading, spacing: 7) { Text("\(day)").font(.system(size: 11, weight: .medium)); FinancialText(expense > 0 ? DisplayMoney.string(expense, currency: ledger.preferences.baseCurrency) : "—").font(.system(size: 10)).lineLimit(1).minimumScaleFactor(0.5).foregroundStyle(.secondary) }
-                                .frame(maxWidth: .infinity, alignment: .leading).padding(10).frame(height: 62)
-                                .background(Color.moraGreen.opacity(selected ? 0.18 : expense > 0 ? 0.06 : 0.025))
-                                .clipShape(RoundedRectangle(cornerRadius: 8))
-                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? Color.moraGreen : .clear))
-                                .accessibilityHidden(true)
-                                .overlay {
-                                    CalendarDayHitTarget(label: "\(day) · \(month.formatted(.dateTime.month(.wide).year().locale(L10n.locale))) · \(DisplayMoney.string(expense, currency: ledger.preferences.baseCurrency))", selected: selected) { modifiers in
-                                        daySelection.select(day, extending: modifiers.contains(.shift), additive: !modifiers.intersection([.control, .command]).isEmpty)
-                                        trendDetail = .selectedDates
-                                    }
-                                }
-                        }
-                    }
-                }
-            }
+            calendarCard
             Card {
                 VStack(alignment: .leading, spacing: 14) {
                     SectionHeading(title: L("Период анализа"), subtitle: periodDescription)
-                    TrendDetailPicker(selection: $trendDetail, includesSelectedDates: true)
+                    TrendDetailPicker(selection: detailSelection, includesSelectedDates: true)
                 }
             }
             BalancedColumns {
@@ -333,6 +370,58 @@ struct AnalyticsView: View {
             }
         }
         .modifier(CategoryRingTooltipLayer())
-        .onChange(of: Dates.month(month)) { _, _ in daySelection = CalendarDaySelection() }
+        .onDisappear { analysisPreparation?.cancel() }
+        .onChange(of: Dates.month(month)) { _, _ in
+            analysisPreparation?.cancel(); pendingDays = nil
+            AppMotion.update { daySelection = CalendarDaySelection() }
+        }
     }
+
+    private var detailSelection: Binding<TrendDetail> {
+        Binding(get: { trendDetail }, set: { selectAnalysis($0, days: pendingDays ?? daySelection) })
+    }
+
+    private var calendarCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 20) {
+                SectionHeading(title: L("Календарь расходов"), subtitle: L("Ctrl/⌘ — отдельные дни · Shift — диапазон"))
+                let first = Calendar.current.component(.weekday, from: Dates.month(month))
+                let padding = (first + 5) % 7
+                let days = Calendar.current.range(of: .day, in: .month, for: month)!.count
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 7), spacing: 8) {
+                    ForEach([L("ПН"), L("ВТ"), L("СР"), L("ЧТ"), L("ПТ"), L("СБ"), L("ВС")], id: \.self) { Text($0).font(.caption2).foregroundStyle(.secondary).frame(maxWidth: .infinity) }
+                    ForEach(-padding..<0, id: \.self) { _ in Color.clear.frame(height: 62) }
+                    ForEach(1...days, id: \.self) { day in
+                        let rows = store.reportTransactions(in: month).filter { ledger.isActive($0) && Calendar.current.component(.day, from: $0.date) == day }
+                        let expense = rows.filter { $0.kind == .expense }.reduce(Decimal(0)) { $0 - (ledger.value($1) ?? 0) }
+                        let selected = daySelection.days.contains(day)
+                        VStack(alignment: .leading, spacing: 7) { Text("\(day)").font(.system(size: 11, weight: .medium)); FinancialText(expense > 0 ? DisplayMoney.string(expense, currency: ledger.preferences.baseCurrency) : "—").font(.system(size: 10)).lineLimit(1).minimumScaleFactor(0.5).foregroundStyle(.secondary) }
+                            .frame(maxWidth: .infinity, alignment: .leading).padding(10).frame(height: 62)
+                            .background(Color.moraGreen.opacity(selected ? 0.18 : expense > 0 ? 0.06 : 0.025))
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(selected ? Color.moraGreen : .clear))
+                            .accessibilityHidden(true)
+                            .overlay {
+                                CalendarDayHitTarget(label: "\(day) · \(month.formatted(.dateTime.month(.wide).year().locale(L10n.locale))) · \(DisplayMoney.string(expense, currency: ledger.preferences.baseCurrency))", selected: selected) { modifiers in
+                                    var days = pendingDays ?? daySelection
+                                    days.select(day, extending: modifiers.contains(.shift), additive: !modifiers.intersection([.control, .command]).isEmpty)
+                                    selectAnalysis(.selectedDates, days: days)
+                                }
+                            }
+                    }
+                }
+            }
+        }
+    }
+
+    private func selectAnalysis(_ detail: TrendDetail, days: CalendarDaySelection) {
+        analysisPreparation?.cancel(); pendingDays = days
+        let requestedMonth = month
+        analysisPreparation = Task { @MainActor in
+            await store.prepareAnalyticsForPresentation(in: requestedMonth, detail: detail, selectedDays: days.days)
+            guard !Task.isCancelled, requestedMonth == month else { return }
+            AppMotion.update { daySelection = days; trendDetail = detail; pendingDays = nil }
+        }
+    }
+
 }

@@ -67,4 +67,48 @@ final class TransactionSearchTests: XCTestCase {
         let query = TransactionSearch(startDate: Dates.parse("2026-10-11")!, endDate: Dates.parse("2026-10-10")!, accountID: nil, kind: "all", category: "all", text: "")
         XCTAssertThrowsError(try query.prepare(in: .empty))
     }
+    func testMultipleChoicesUseUnionWithinEachFilterAndIntersectionBetweenFilters() throws {
+        let day = Dates.parse("2026-10-10")!
+        let first = Account(name: "First"), second = Account(name: "Second"), other = Account(name: "Other")
+        let food = UUID(), transport = UUID(), salary = UUID()
+        var ledger = Ledger.empty
+        ledger.accounts = [first, second, other]
+        ledger.transactions = [
+            Transaction(date: day, merchant: "Food", amount: -10, accountID: first.id, categoryID: food),
+            Transaction(date: day, merchant: "Salary", amount: 100, accountID: second.id, categoryID: salary, kind: .income),
+            Transaction(date: day, merchant: "Uncategorized", amount: -5, accountID: second.id),
+            Transaction(date: day, merchant: "Transport", amount: -3, accountID: first.id, categoryID: transport),
+            Transaction(date: day, merchant: "Other account", amount: -20, accountID: other.id, categoryID: food),
+            Transaction(date: day, merchant: "Transfer", amount: -30, accountID: other.id, kind: .transfer, destinationAccountID: first.id, destinationAmount: 30)
+        ]
+        var query = TransactionSearch(startDate: day, endDate: day, accountIDs: [first.id, second.id],
+            kinds: [.expense, .income], categoryIDs: [food, salary], includesUncategorized: true)
+        let result = try query.prepare(in: ledger)
+        XCTAssertEqual(Set(result.rows.map(\.merchant)), ["Food", "Salary", "Uncategorized"])
+        XCTAssertEqual(result.expense, 15); XCTAssertEqual(result.income, 100)
+        query.categoryIDs = []; query.includesUncategorized = false
+        XCTAssertTrue(try query.prepare(in: ledger).rows.isEmpty, "Clearing all category checkboxes must match nothing")
+        query.categoryIDs = nil; query.kinds = [.transfer]; query.accountIDs = [first.id, other.id]
+        let transfer = try query.prepare(in: ledger)
+        XCTAssertEqual(transfer.rows.map(\.merchant), ["Transfer"], "Either transfer leg may match, without duplicate rows")
+        XCTAssertEqual(transfer.expense, 0); XCTAssertEqual(transfer.income, 0)
+        query.accountIDs = []
+        XCTAssertTrue(try query.prepare(in: ledger).rows.isEmpty)
+        query.accountIDs = nil; query.kinds = []
+        XCTAssertTrue(try query.prepare(in: ledger).rows.isEmpty)
+    }
+
+    func testIdenticalCopiesFollowExistingRowsRegardlessOfTheirUUID() throws {
+        let day = Dates.parse("2026-10-01")!, account = Account(name: "Synthetic")
+        var original = Transaction(date: day, merchant: "Purchase", amount: -10, accountID: account.id)
+        original.id = UUID(uuidString: "ffffffff-ffff-ffff-ffff-ffffffffffff")!
+        var copy = original; copy.id = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+        var ledger = Ledger.empty; ledger.accounts = [account]; ledger.transactions = [original, copy]
+        let query = TransactionSearch(startDate: day, endDate: day)
+        XCTAssertEqual(try query.prepare(in: ledger).rows.map(\.id), [original.id, copy.id])
+        var secondCopy = original; secondCopy.id = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+        ledger.transactions.append(secondCopy)
+        XCTAssertEqual(try query.prepare(in: ledger).rows.map(\.id), [original.id, copy.id, secondCopy.id])
+    }
+
 }

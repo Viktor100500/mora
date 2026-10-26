@@ -11,7 +11,8 @@ typealias Category = FinanceCore.Category
 final class FinanceStore: ObservableObject {
     @Published private(set) var ledger: Ledger {
         didSet {
-            reports = ReportCache()
+            let sharedAccounts = Set(oldValue.accounts.map(\.id)).intersection(ledger.accounts.map(\.id))
+            reports = ReportCache(previous: oldValue.preferences.baseCurrency == ledger.preferences.baseCurrency && !sharedAccounts.isEmpty ? reports : nil)
             let missing = ledger.missingCurrencies
             if !missing.isEmpty, missing != oldValue.missingCurrencies {
                 notifications.record(L("В итогах не учтены валюты без курса: \(missing.joined(separator: ", "))"),
@@ -24,6 +25,7 @@ final class FinanceStore: ObservableObject {
         didSet { if let error, error != oldValue { notifications.record(error, kind: .error) } }
     }
     @Published private(set) var activeNotice: AppNotification?
+    private var noticeDismissal: Task<Void, Never>?
     var notice: String? {
         get { activeNotice?.message }
         set { if let newValue { showNotice(newValue) } else { activeNotice = nil } }
@@ -40,6 +42,14 @@ final class FinanceStore: ObservableObject {
     @Published private(set) var isLoading = true
     @Published private(set) var isTerminating = false
     private var pendingWrites = 0
+    private struct PendingTransactionSave {
+        let value: Transaction
+        let original: Transaction?
+        let prepare: @MainActor (Transaction) async throws -> Transaction
+        let review: (@MainActor (Transaction) async throws -> Void)?
+    }
+    private var savingTransactions: Set<UUID> = []
+    private var failedTransactionSaves: [UUID: PendingTransactionSave] = [:]
     private var writeWaiters: [CheckedContinuation<Void, Never>] = []
     @Published private(set) var updatingRates = false
     @Published private(set) var rateUpdateError: String? {
@@ -54,6 +64,10 @@ final class FinanceStore: ObservableObject {
     private var notificationTokenCache = ""
     private var lastUpdateChanged = false
     private var loadingTask: Task<Void, Never>?
+    private var presentationDepth = 0
+    private var deferredSnapshot: LedgerSnapshot?
+    var isDeferringUpdates: Bool { presentationDepth > 0 }
+    var latestLedger: Ledger { deferredSnapshot?.ledger ?? ledger }
     var reports = ReportCache()
     let fileURL: URL
     private let repository: LedgerRepository
@@ -83,6 +97,7 @@ final class FinanceStore: ObservableObject {
                     try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: marker.path)
                 }
                 publish(try await repository.load())
+                await prepareInitialReports()
             } catch { self.error = error.localizedDescription; writeBlocked = true }
             isLoading = false
         }
@@ -92,19 +107,74 @@ final class FinanceStore: ObservableObject {
     }
     private func publish(_ snapshot: LedgerSnapshot) {
         guard snapshot.revision > revision else { return }
-        notificationTokenCache = snapshot.token
-        undoDescriptions = snapshot.undoDescriptions; redoDescriptions = snapshot.redoDescriptions
-        imports = snapshot.imports
-        isDemo = snapshot.isDemo; writeBlocked = snapshot.writeBlocked
-        revision = snapshot.revision
-        ledger = snapshot.ledger
+        if isDeferringUpdates {
+            if snapshot.revision > (deferredSnapshot?.revision ?? revision) { deferredSnapshot = snapshot }
+            return
+        }
+        AppMotion.update {
+            notificationTokenCache = snapshot.token
+            undoDescriptions = snapshot.undoDescriptions; redoDescriptions = snapshot.redoDescriptions
+            imports = snapshot.imports
+            isDemo = snapshot.isDemo; writeBlocked = snapshot.writeBlocked
+            revision = snapshot.revision
+            ledger = snapshot.ledger
+        }
         if let warning = snapshot.warning { error = L(warning) }
     }
-    func showNotice(_ message: String, detail: String? = nil, actions: [AppNotificationAction] = []) {
-        activeNotice = notifications.record(message, detail: detail, actions: actions)
+    func beginDeferredUpdates() { presentationDepth += 1 }
+    func endDeferredUpdates() async {
+        guard presentationDepth > 0 else { return }
+        // Include writes from the disk watcher, MCP and editors during the sync.
+        await reloadFromDisk()
+        presentationDepth -= 1
+        if presentationDepth == 0, let snapshot = deferredSnapshot {
+            deferredSnapshot = nil
+            publish(snapshot)
+        }
     }
-    func showTransientNotice(_ message: String) {
-        activeNotice = AppNotification(message: message)
+    func showNotice(_ message: String, detail: String? = nil, kind: AppNotification.Kind = .success,
+                    actions: [AppNotificationAction] = [], dismissAfter: Duration? = nil) {
+        noticeDismissal?.cancel()
+        activeNotice = notifications.record(message, detail: detail, kind: kind, actions: actions)
+        if let dismissAfter, let id = activeNotice?.id { dismissNotice(id, after: dismissAfter) }
+    }
+    func showTransientNotice(_ message: String, detail: String? = nil, kind: AppNotification.Kind = .success,
+                             actions: [AppNotificationAction] = []) {
+        noticeDismissal?.cancel()
+        activeNotice = AppNotification(message: message, detail: detail, kind: kind, actions: actions)
+    }
+    func beginProgressNotice(_ message: String, detail: String? = nil, householdID: UUID? = nil) -> UUID {
+        noticeDismissal?.cancel()
+        let event = notifications.record(message, detail: detail, kind: .information, householdID: householdID, progress: true)
+        activeNotice = event
+        return event.id
+    }
+    func finishProgressNotice(_ id: UUID, message: String? = nil, detail: String? = nil,
+                             kind: AppNotification.Kind = .success, actions: [AppNotificationAction] = [],
+                             dismissAfter: Duration? = .seconds(4)) {
+        guard let message else {
+            notifications.removeProgress(id)
+            if activeNotice?.id == id { activeNotice = nil }
+            return
+        }
+        let event = notifications.finishProgress(id, message: message, detail: detail, kind: kind, actions: actions)
+        guard activeNotice?.id == id else { return }
+        activeNotice = event
+        noticeDismissal?.cancel()
+        if let dismissAfter { dismissNotice(id, after: dismissAfter) }
+    }
+    private func dismissNotice(_ id: UUID, after delay: Duration) {
+        noticeDismissal = Task { [weak self] in
+            do { try await Task.sleep(for: delay) } catch { return }
+            if self?.activeNotice?.id == id { self?.activeNotice = nil }
+        }
+    }
+    func reconcileWallet(_ captures: [CloudCapture], householdID: UUID) {
+        notifications.reconcileWallet(captures, householdID: householdID)
+        guard let current = activeNotice, !current.isInProgress, current.householdID == householdID,
+              let event = notifications.events.first(where: { $0.id == current.id }) else { return }
+        if event.isResolved { noticeDismissal?.cancel(); activeNotice = nil }
+        else if event != current { activeNotice = event }
     }
     var notificationStateToken: String { notificationTokenCache }
     var undoNotificationActions: [AppNotificationAction] {
@@ -116,6 +186,7 @@ final class FinanceStore: ObservableObject {
         case .undo(let token): return undoCount > 0 && !token.isEmpty && token == notificationStateToken
         case .redo(let token): return redoCount > 0 && !token.isEmpty && token == notificationStateToken
         case .rollbackImport(let id): return imports.previews[id] != nil
+        case .retryTransaction(let id): return failedTransactionSaves[id] != nil && !isTerminating
         default: return true
         }
     }
@@ -233,7 +304,54 @@ final class FinanceStore: ObservableObject {
     }
     @discardableResult
     func saveTransaction(_ value: Transaction, replacing originalID: UUID? = nil, original: Transaction? = nil) async -> Bool {
-        await update { ledger in
+        guard !isTerminating else { return false }
+        pendingWrites += 1; defer { finishedWrite() }
+        do {
+            try await persistTransaction(value, replacing: originalID, original: original)
+            return true
+        } catch { self.error = error.localizedDescription; return false }
+    }
+
+    /// Own the submission before the sheet dismisses, including its rate lookup.
+    @discardableResult
+    func enqueueTransaction(_ value: Transaction, original: Transaction? = nil,
+                            prepare: @escaping @MainActor (Transaction) async throws -> Transaction = { $0 },
+                            review: (@MainActor (Transaction) async throws -> Void)? = nil) -> Bool {
+        startTransactionSave(PendingTransactionSave(value: value, original: original, prepare: prepare, review: review))
+    }
+
+    func retryTransactionSave(_ id: UUID) {
+        guard let submission = failedTransactionSaves[id] else { return }
+        _ = startTransactionSave(submission)
+    }
+
+    private func startTransactionSave(_ submission: PendingTransactionSave) -> Bool {
+        let id = submission.value.id
+        guard !isTerminating, savingTransactions.insert(id).inserted else { return false }
+        failedTransactionSaves[id] = nil
+        pendingWrites += 1
+        let progress = beginProgressNotice(L("Сохраняем операцию…"), detail: submission.value.merchant)
+        Task { @MainActor in
+            defer { savingTransactions.remove(id); finishedWrite() }
+            do {
+                let prepared = try await submission.prepare(submission.value)
+                if let review = submission.review { try await review(prepared) }
+                else { try await persistTransaction(prepared, replacing: submission.original?.id, original: submission.original) }
+                finishProgressNotice(progress, message: L("Операция сохранена"), detail: prepared.merchant,
+                                     actions: submission.review == nil ? undoNotificationActions : [])
+            } catch {
+                failedTransactionSaves[id] = submission
+                finishProgressNotice(progress, message: L("Не удалось сохранить операцию"),
+                                     detail: submission.value.merchant + "\n" + error.localizedDescription,
+                                     kind: .error, actions: [.retryTransaction(id)], dismissAfter: nil)
+            }
+        }
+        return true
+    }
+
+    private func persistTransaction(_ value: Transaction, replacing originalID: UUID?, original: Transaction?) async throws {
+        await load()
+        let result = try await repository.mutate { ledger in
             let existing = originalID.flatMap { id in ledger.transactions.first { $0.id == id } }
             guard originalID == nil || existing != nil else { throw LedgerError.invalid(L("Операция уже удалена.")) }
             guard originalID == nil || originalID == value.id else { throw LedgerError.invalid(L("Идентификатор операции изменился.")) }
@@ -249,6 +367,7 @@ final class FinanceStore: ObservableObject {
             }
             replaceOrAppend(saved, in: &ledger.transactions)
         }
+        publish(result.snapshot); lastUpdateChanged = result.changed
     }
     func deleteTransaction(_ id: UUID) async {
         let result = await change { ledger -> (Bool, ChangeDescription) in
@@ -462,6 +581,7 @@ struct FinanceErrorAlert: ViewModifier {
 
 struct ModalFrame<Content: View>: View {
     var title: String; var subtitle: String = ""; var saveTitle = L("Сохранить"); var canSave = true
+    var isSaving = false
     var save: () -> Void
     @ViewBuilder var content: Content
     @Environment(\.dismiss) var dismiss
@@ -471,7 +591,13 @@ struct ModalFrame<Content: View>: View {
             Divider()
             content.padding(24)
             Divider()
-            HStack { Button(L("Отмена")) { dismiss() }.keyboardShortcut(.cancelAction); Spacer(); Button(L(saveTitle), action: save).buttonStyle(.borderedProminent).tint(.moraGreen).disabled(!canSave).keyboardShortcut(.defaultAction) }.padding(20)
+            HStack {
+                Button(L("Отмена")) { dismiss() }.keyboardShortcut(.cancelAction).disabled(isSaving)
+                Spacer()
+                if isSaving { ProgressView(L("Сохраняем…")).controlSize(.small) }
+                Button(L(saveTitle), action: save).buttonStyle(.borderedProminent).tint(.moraGreen)
+                    .disabled(!canSave || isSaving).keyboardShortcut(.defaultAction)
+            }.padding(20)
         }.frame(width: 500)
     }
 }

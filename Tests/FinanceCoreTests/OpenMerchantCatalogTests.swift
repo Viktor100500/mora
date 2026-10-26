@@ -41,4 +41,22 @@ final class OpenMerchantCatalogTests: XCTestCase {
         XCTAssertNil(MerchantGroup.shopping.category(in: ledger))
         XCTAssertNil(ledger.historicalCategory(merchant: "Starbucks", kind: .expense))
     }
+    func testTransitNetworkAndOperatorNamesDoNotBecomeArbitraryPrefixes() throws {
+        var catalog = MerchantCatalog()
+        try catalog.addNSI(Data(#"{"nsi":{"transit/route/subway":{"items":[{"tags":{"network":"PATH","operator":"Example Metropolitan Transit Authority","route":"subway","owner":"Example City"}}]},"operators/route/bus":{"items":[{"tags":{"network":"Example Bus","operator":"Example Bus Company","route":"bus"}}]},"operators/office/company":{"items":[{"tags":{"operator":"Unrelated Company"}}]}}}"#.utf8))
+        XCTAssertEqual(catalog.group(for: "Example Metropolitan Transit Authority"), .transport)
+        XCTAssertEqual(catalog.group(for: "POS *Example Bus Company 123"), .transport)
+        XCTAssertEqual(catalog.group(for: "PATH"), .transport)
+        XCTAssertEqual(catalog.group(for: "Path Tapp Paygo Cp"), .transport)
+        XCTAssertNil(catalog.group(for: "PATH Mental Health"))
+        XCTAssertNil(catalog.group(for: "Example City"))
+        XCTAssertNil(catalog.group(for: "Unrelated Company"))
+    }
+    func testNestedProcessorPrefixesAndConflictingTransitBrand() throws {
+        var catalog = MerchantCatalog()
+        catalog.add("Example Restaurant", group: .dining)
+        XCTAssertEqual(catalog.group(for: "CARD PURCHASE POS TST* Example Restaurant #12"), .dining)
+        try catalog.addNSI(Data(#"{"nsi":{"brands/shop/supermarket":{"items":[{"tags":{"name":"Metro","shop":"supermarket"}}]},"transit/route/subway":{"items":[{"tags":{"network":"Metro","route":"subway"}}]}}}"#.utf8))
+        XCTAssertNil(catalog.group(for: "Metro"))
+    }
 }

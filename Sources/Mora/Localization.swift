@@ -37,6 +37,7 @@ struct EuropeanDateField: NSViewRepresentable {
         picker.controlSize = .regular
         picker.isBezeled = !embedded
         picker.drawsBackground = !embedded
+        picker.dateValue = selection
         picker.target = context.coordinator
         picker.action = #selector(Coordinator.changed(_:))
         return picker

@@ -11,8 +11,10 @@ struct FinancialText: View {
     var body: some View {
         let translated = L(value)
         Text(hidden ? FinancialPrivacy.mask(translated) : translated)
+            .monospacedDigit()
             .contentTransition(.opacity)
-            .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: hidden)
+            .animation(reduceMotion ? nil : AppMotion.content, value: translated)
+            .animation(reduceMotion ? nil : AppMotion.content, value: hidden)
     }
 }
 

@@ -252,6 +252,7 @@ final class CloudSyncTests: XCTestCase {
         defer { try? cleanup() }
         try await prepare()
         let started = expectation(description: "Background request started")
+        started.assertForOverFulfill = false // A completed batch verifies status again.
         SyncStubProtocol.handler = { request in
             switch request.url!.lastPathComponent {
             case "mora_get_status":
@@ -270,6 +271,187 @@ final class CloudSyncTests: XCTestCase {
         XCTAssertEqual(cloud.invitation, "test-invitation")
         XCTAssertFalse(cloud.busy)
         XCTAssertNil(cloud.error)
+    }
+
+    func testBatchPublishesOnceAndDrainsPurchasesArrivingDuringConversion() async throws {
+        defer { try? cleanup() }
+        var ledger = Ledger.empty
+        ledger.accounts = [Account(name: "EUR test", currency: "EUR")]
+        let first = UUID(), second = UUID(), late = UUID(), incomplete = UUID()
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+        func capture(_ id: UUID, amount: String = "$10") throws -> CloudCapture {
+            let data = try JSONSerialization.data(withJSONObject: ["id": id.uuidString,
+                "merchant": "Test shop", "amount": amount, "currency": "USD",
+                "account_id": ledger.accounts[0].id.uuidString, "date": "2026-10-23T12:00:00Z", "label": "Test phone"])
+            return try decoder.decode(CloudCapture.self, from: data)
+        }
+        var remaining = try [capture(first), capture(second), capture(incomplete, amount: "")]
+        var quoteCalls = 0
+        try await prepare(ledger: ledger, walletRate: { amount, from, to, date in
+            quoteCalls += 1
+            XCTAssertEqual(self.store.activeNotice?.isInProgress, true)
+            XCTAssertTrue(self.store.isDeferringUpdates)
+            XCTAssertTrue(self.store.ledger.transactions.isEmpty)
+            XCTAssertTrue(self.cloud.pending.isEmpty)
+            XCTAssertFalse(self.store.notifications.events.contains { $0.kind == .review })
+            if quoteCalls == 2 {
+                // Simulate the two-second disk watcher seeing the first durable write.
+                XCTAssertEqual(try LedgerFile.decode(Data(contentsOf: self.store.fileURL)).transactions.count, 1)
+                await self.store.reloadFromDisk()
+                XCTAssertTrue(self.store.ledger.transactions.isEmpty)
+                remaining.append(try capture(late))
+            }
+            return CardConversion(originalAmount: amount, originalCurrency: from, accountCurrency: to, rate: 1, date: date)
+        })
+        var remote = CloudMerge.shared(store.ledger), version = 1
+        func envelope() throws -> Data {
+            let snapshot = String(decoding: try encoder.encode(remote), as: UTF8.self)
+            return Data("{\"household_id\":\"\(householdID)\",\"name\":\"Test\",\"version\":\(version),\"snapshot\":\(snapshot)}".utf8)
+        }
+        struct Review: Decodable { let p_capture_id: UUID; let p_transaction: FinanceCore.Transaction }
+        struct Save: Decodable { let p_snapshot: Ledger }
+        SyncStubProtocol.handler = { request in
+            switch request.url!.lastPathComponent {
+            case "mora_get_status": return (200, Data("{\"version\":\(version),\"pending_count\":\(remaining.count)}".utf8))
+            case "mora_get_household": return (200, try envelope())
+            case "mora_save_household":
+                remote = try decoder.decode(Save.self, from: SyncStubProtocol.requestBody(request)).p_snapshot
+                version += 1
+                return (200, Data("true".utf8))
+            case "mora_review_capture":
+                let body = try decoder.decode(Review.self, from: SyncStubProtocol.requestBody(request))
+                remote.transactions.append(body.p_transaction)
+                let reviewedID = body.p_capture_id
+                remaining.removeAll { @Sendable in $0.id == reviewedID }
+                version += 1
+                return (200, try envelope())
+            case "mora_collect_wallet_import":
+                return (200, try walletImportResponse(&remote, version: &version, householdID: self.householdID))
+            default: return (200, try encoder.encode(remaining))
+            }
+        }
+        var visibleCounts: [Int] = [], pendingCounts: [Int] = []
+        cloud.preparePresentation = { store in
+            XCTAssertTrue(store.ledger.transactions.isEmpty)
+            XCTAssertFalse(store.latestLedger.transactions.isEmpty)
+            await store.update { ledger in
+                ledger.accounts[0].name = "Edited during sync"
+                let categoryID = ledger.categories.first { $0.name == "Покупки" }!.id
+                for index in ledger.transactions.indices { ledger.transactions[index].categoryID = categoryID }
+            }
+        }
+        let ledgerObservation = store.$ledger.dropFirst().sink { visibleCounts.append($0.transactions.count) }
+        let pendingObservation = cloud.$pending.dropFirst().sink { pendingCounts.append($0.count) }
+        await cloud.synchronize(inBackground: true)
+        XCTAssertNil(cloud.error)
+        XCTAssertEqual(quoteCalls, 3)
+        XCTAssertEqual(visibleCounts, [3])
+        XCTAssertEqual(store.ledger.accounts[0].name, "Edited during sync")
+        XCTAssertTrue(store.ledger.transactions.allSatisfy { $0.categoryID != nil })
+        XCTAssertEqual(pendingCounts, [1])
+        XCTAssertEqual(cloud.pending.map(\.id), [incomplete])
+        XCTAssertEqual(store.notifications.events.filter { $0.kind == .review }.map(\.sourceID), [incomplete])
+        XCTAssertEqual(store.activeNotice?.message, "Загружено из Apple Shortcuts: 3")
+        XCTAssertEqual(store.activeNotice?.kind, .warning)
+        XCTAssertFalse(store.isDeferringUpdates)
+        XCTAssertFalse(store.activeNotice?.isInProgress == true)
+        withExtendedLifetime((ledgerObservation, pendingObservation)) {}
+    }
+
+    func testFailedBatchReleasesPresentationAndDoesNotReportSuccess() async throws {
+        defer { try? cleanup() }
+        try await prepare()
+        SyncStubProtocol.handler = { _ in (503, Data("{\"message\":\"Test offline\"}".utf8)) }
+        await cloud.synchronize(inBackground: true)
+        XCTAssertFalse(store.isDeferringUpdates)
+        XCTAssertFalse(store.activeNotice?.isInProgress == true)
+        XCTAssertNotNil(cloud.error)
+        XCTAssertNil(store.activeNotice)
+        XCTAssertFalse(store.notifications.events.contains { $0.message == "Синхронизация завершена" })
+    }
+
+    func testEmptyManualAndBackgroundChecksDoNotCreateNotices() async throws {
+        defer { try? cleanup() }
+        try await prepare()
+        SyncStubProtocol.handler = { request in
+            let response = request.url!.lastPathComponent == "mora_get_status" ? "{\"version\":1,\"pending_count\":0}" : "[]"
+            return (200, Data(response.utf8))
+        }
+        var displayed: [AppNotification] = []
+        let observation = store.$activeNotice.compactMap { $0 }.sink { displayed.append($0) }
+        await cloud.synchronize()
+        await cloud.synchronize(inBackground: true)
+        XCTAssertTrue(displayed.isEmpty)
+        XCTAssertTrue(store.notifications.events.isEmpty)
+        XCTAssertNil(store.activeNotice)
+        withExtendedLifetime(observation) {}
+    }
+
+    func testPreviouslyReportedIncompleteWalletPurchaseDoesNotReannounce() async throws {
+        defer { try? cleanup() }
+        try await prepare()
+        let data = Data("[{\"id\":\"\(UUID())\",\"merchant\":\"\",\"amount\":\"\",\"currency\":\"\",\"account_id\":\"\(UUID())\",\"date\":\"2026-10-23T12:00:00Z\",\"label\":\"Test phone\"}]".utf8)
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        let captures = try decoder.decode([CloudCapture].self, from: data)
+        store.reconcileWallet(captures, householdID: householdID)
+        store.notifications.markAllRead()
+        SyncStubProtocol.handler = { request in
+            (200, request.url!.lastPathComponent == "mora_get_status"
+                ? Data("{\"version\":1,\"pending_count\":1}".utf8) : data)
+        }
+        var displayed: [AppNotification] = []
+        let observation = store.$activeNotice.compactMap { $0 }.sink { displayed.append($0) }
+        await cloud.synchronize()
+        await cloud.synchronize(inBackground: true)
+        XCTAssertTrue(displayed.isEmpty)
+        XCTAssertEqual(cloud.pending.count, 1)
+        XCTAssertEqual(store.notifications.events.count, 1)
+        XCTAssertEqual(store.notifications.unreadCount, 0)
+        withExtendedLifetime(observation) {}
+    }
+
+    func testCancelledBatchClearsProgressAndReleasesDeferredUpdates() async throws {
+        defer { try? cleanup() }
+        var ledger = Ledger.empty
+        ledger.accounts = [Account(name: "EUR test", currency: "EUR")]
+        let quoting = expectation(description: "Conversion started")
+        try await prepare(ledger: ledger, walletRate: { _, _, _, _ in
+            quoting.fulfill()
+            try await Task.sleep(for: .seconds(10))
+            throw CancellationError()
+        })
+        let captures = "[{\"id\":\"\(UUID())\",\"merchant\":\"Test\",\"amount\":\"$10\",\"currency\":\"USD\",\"account_id\":\"\(ledger.accounts[0].id)\",\"date\":\"2026-10-23T12:00:00Z\",\"label\":\"Test phone\"}]"
+        SyncStubProtocol.handler = { request in
+            (200, Data((request.url!.lastPathComponent == "mora_get_status" ? "{\"version\":1,\"pending_count\":1}" : captures).utf8))
+        }
+        let syncing = Task { await cloud.synchronize(inBackground: true) }
+        await fulfillment(of: [quoting], timeout: 2)
+        XCTAssertEqual(store.activeNotice?.isInProgress, true)
+        syncing.cancel()
+        await syncing.value
+        XCTAssertFalse(store.isDeferringUpdates)
+        XCTAssertFalse(store.activeNotice?.isInProgress == true)
+        XCTAssertNil(cloud.error)
+        XCTAssertFalse(store.notifications.events.contains { $0.message == "Синхронизация завершена" })
+    }
+
+    func testDeferredPresentationPreservesConcurrentEditsAndPublishesLatestSnapshot() async throws {
+        defer { try? cleanup() }
+        var ledger = Ledger.empty
+        ledger.accounts = [Account(name: "Original")]
+        try await prepare(ledger: ledger)
+        var visibleNames: [String] = []
+        let observation = store.$ledger.dropFirst().sink { visibleNames.append($0.accounts[0].name) }
+        store.beginDeferredUpdates()
+        expectTrue(await store.update { $0.accounts[0].name = "First edit" })
+        await store.reloadFromDisk()
+        expectTrue(await store.update { $0.accounts[0].name = "Latest edit" })
+        XCTAssertEqual(store.ledger.accounts[0].name, "Original")
+        await store.endDeferredUpdates()
+        XCTAssertEqual(visibleNames, ["Latest edit"])
+        XCTAssertEqual(store.ledger.accounts[0].name, "Latest edit")
+        withExtendedLifetime(observation) {}
     }
 
     func testFullReviewSavesAllFieldsAndCanRetryWithoutDuplicating() async throws {

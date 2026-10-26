@@ -118,7 +118,7 @@ private struct NotificationsPanel: View {
         }
         .frame(width: 420, height: 500)
         .onAppear { notifications.markAllRead() }
-        .onChange(of: notifications.events.map(\.id)) { _, _ in notifications.markAllRead() }
+        .onChange(of: notifications.events) { _, _ in notifications.markAllRead() }
     }
 }
 
@@ -140,7 +140,10 @@ private struct NotificationRow: View {
     }
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: icon).foregroundStyle(color).frame(width: 20).padding(.top, 2)
+            Group {
+                if event.isInProgress { ProgressView().controlSize(.small) }
+                else { Image(systemName: icon).foregroundStyle(color) }
+            }.frame(width: 20).padding(.top, 2)
             VStack(alignment: .leading, spacing: 8) {
                 Text(L(event.message)).font(.callout.weight(.medium)).fixedSize(horizontal: false, vertical: true)
                 if let detail = event.detail { FinancialText(detail).font(.caption).foregroundStyle(.primary.opacity(0.78)) }
@@ -207,11 +210,77 @@ struct NotificationActionButton: View {
         case .settings: navigate(.page(.settings), window: "main")
         case .inbox: navigate(.inbox, window: "cloud")
         case .review(let id): navigate(.capture(id), window: "cloud")
+        case .retryTransaction(let id): store.retryTransactionSave(id)
         }
      } }
     private func navigate(_ destination: NotificationNavigation.Destination, window: String) {
         onNavigate()
         store.notifications.request(destination)
         openWindow(id: window)
+    }
+}
+
+/// A window overlay never contributes a safe-area inset or participates in page layout.
+struct FloatingNotificationOverlay: ViewModifier {
+    var event: AppNotification?
+    var close: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        content.overlay(alignment: .topTrailing) {
+            ZStack(alignment: .topTrailing) {
+                if let event {
+                    AppNoticeBanner(event: event, close: close)
+                        .id(event.id)
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .offset(y: -8)))
+                }
+            }
+            .padding(.horizontal, 24).padding(.top, 12)
+            .animation(reduceMotion ? nil : AppMotion.notification, value: event)
+        }
+    }
+}
+
+private struct AppNoticeBanner: View {
+    let event: AppNotification
+    let close: () -> Void
+    private var noticeColor: Color {
+        switch event.kind {
+        case .warning: Color(red: 0.72, green: 0.49, blue: 0.05)
+        case .error: Color.token("red")
+        case .information: Color.accentColor
+        default: Color.moraGreen
+        }
+    }
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                if event.isInProgress { ProgressView().controlSize(.small).transition(.opacity) }
+                else {
+                    Image(systemName: event.kind == .error || event.kind == .warning
+                          ? "exclamationmark.circle.fill" : "checkmark.circle.fill")
+                        .foregroundStyle(noticeColor).transition(.opacity)
+                }
+            }.frame(width: 18, height: 18)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(event.message).font(.callout.weight(.medium)).lineLimit(1).contentTransition(.opacity)
+                if let detail = event.detail {
+                    FinancialText(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1).transition(.opacity)
+                }
+            }
+            Spacer(minLength: 8)
+            NotificationActions(event: event)
+            if !event.isInProgress {
+                Button(action: close) { Image(systemName: "xmark").font(.caption) }
+                    .buttonStyle(.plain).foregroundStyle(.secondary)
+                    .accessibilityLabel(L("Закрыть уведомление"))
+            }
+        }
+        .frame(minHeight: 34)
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .frame(maxWidth: 680, alignment: .leading)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(noticeColor.opacity(0.24), lineWidth: 1))
+        .shadow(color: .black.opacity(0.08), radius: 12, y: 4)
     }
 }
