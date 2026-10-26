@@ -8,6 +8,8 @@ permissions:
 jobs:
   test:
     runs-on: macos-15
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
@@ -17,6 +19,11 @@ jobs:
         run: python3 scripts/check-publication.py --tree HEAD
       - name: Test publication guards
         run: python3 scripts/test-publication.py
+      - name: Verify Xcode and macOS SDK
+        run: |
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
+          swift --version
       - name: Test Swift
         run: swift test
       - name: Check Python syntax

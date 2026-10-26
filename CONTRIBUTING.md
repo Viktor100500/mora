@@ -4,7 +4,7 @@ Mora is source available under [LICENSE](LICENSE), not a permissively licensed o
 
 ## Local checks
 
-Use macOS 14+ and Swift 6. Run `swift test`, then `zsh scripts/build-app.sh`. MCP dependencies are optional and pinned in `mcp/requirements.txt`; `zsh scripts/setup-mcp.sh` creates a local environment and launch configuration.
+Use macOS 14+ and Xcode 26 or newer (Swift 6 with the macOS 26 SDK). The deployment target remains macOS 14; CI selects Xcode 26.3 explicitly. Run `swift test`, then `zsh scripts/build-app.sh`. MCP dependencies are optional and pinned in `mcp/requirements.txt`; `zsh scripts/setup-mcp.sh` creates a local environment and launch configuration.
 
 Keep tests offline, temporary and synthetic. Never point tests at a real ledger or cloud project. The optional PostgreSQL integration test is described in [cloud/README.md](cloud/README.md).
 
