@@ -87,9 +87,11 @@ struct CategoryRingChart: View {
                 if let anchor = proxy.plotFrame {
                     let frame = geometry[anchor]
                     let diameter = min(frame.width, frame.height)
+                    // Follow the sectors without tinting the center of the chart.
+                    let ringWidth = diameter * 0.12
                     Circle()
-                        .fill(Color.primary.opacity(0.10))
-                        .frame(width: diameter + 10, height: diameter + 10)
+                        .stroke(Color.primary.opacity(0.10), lineWidth: ringWidth + 3)
+                        .frame(width: diameter - ringWidth, height: diameter - ringWidth)
                         .position(x: frame.midX, y: frame.midY)
                         .accessibilityHidden(true)
                     VStack(spacing: 5) {

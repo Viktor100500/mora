@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.4 — 2026-10-26
+
+- Keep the center of category charts clear while preserving contrast around light-colored sectors.
+
 ## 1.6.3 — 2026-10-26
 
 - Add a subtle backdrop to category expense rings and legend dots so light colors remain visible.
