@@ -17,7 +17,6 @@ struct TransactionsView: View {
     @Binding var sheet: EditorSheet?
     @Binding var filters: TransactionSearch
     @State private var presentation = TransactionListPresentation()
-    @State private var scrollAnchor: UUID?
     private var selection: Set<UUID> {
         get { presentation.selection }
         nonmutating set { presentation.selection = newValue }
@@ -38,7 +37,7 @@ struct TransactionsView: View {
         SearchRequest(query: filters, revision: store.revision)
     }
     var body: some View {
-        VStack(spacing: 18) {
+        VStack(spacing: CardLayout.spacing) {
             filterBar
             VStack(alignment: .leading, spacing: 0) {
                 TransactionListHeader(rowCount: rows.count, selectionCount: selection.count,
@@ -53,42 +52,9 @@ struct TransactionsView: View {
                     EmptyState(icon: "arrow.left.arrow.right", title: L("Операций не найдено"), text: filters.text.isEmpty ? L("Добавьте операцию или импортируйте выписку. Также можно изменить фильтры и период.") : L("Попробуйте другой запрос или сбросьте фильтры."), button: L("Добавить операцию")) { sheet = .transaction(nil) }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    // Keep a stable viewport anchor and own row transitions rather
-                    // than relying on AppKit List's immediate insertion/reload behavior.
-                    ScrollView {
-                        LazyVStack(spacing: 0) {
-                            ForEach(rows) { t in
-                                HStack(spacing: 12) {
-                                    Toggle(isOn: Binding(get: { selection.contains(t.id) }, set: { if $0 { selection.insert(t.id) } else { selection.remove(t.id) } })) { EmptyView() }.toggleStyle(.checkbox)
-                                        .labelsHidden().frame(width: 20, height: 36)
-                                        .accessibilityLabel(L("Выбрать: \(t.merchant)"))
-                                    TransactionRow(transaction: t, ledger: store.ledger, showsNote: true)
-                                        .contentShape(Rectangle()).onTapGesture { sheet = .transaction(t) }
-                                    GlassEditButton { sheet = .transaction(t) }
-                                }
-                                .frame(minHeight: 64)
-                                .padding(.horizontal, 18).padding(.vertical, 8)
-                                .background(selection.contains(t.id) ? Color.moraGreen.opacity(0.06) : Color.clear)
-                                .smoothUpdates(value: selection.contains(t.id))
-                                .overlay(alignment: .bottom) {
-                                    if t.id != rows.last?.id { Divider().padding(.leading, 18).opacity(0.55) }
-                                }
-                                .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
-                                .contextMenu {
-                                    Button(L("Подробности операции")) { detailsTransaction = t }
-                                    Divider()
-                                    Button(L("Редактировать")) { sheet = .transaction(t) }
-                                    Button(L("Дублировать")) { duplicateTransactions([t.id]) }.disabled(presentation.duplicating)
-                                    if t.kind != .transfer { Button(L("Разделить по категориям")) { sheet = .split(t) } }
-                                    Button(L("Создать похожую")) { sheet = .similar(t) }
-                                    Button(L("Удалить"), role: .destructive) { Task { @MainActor in  await store.deleteTransaction(t.id)  } }
-                                }
-                            }
-                        }
-                        .scrollTargetLayout()
-                    }
-                    .scrollPosition(id: $scrollAnchor, anchor: .top)
-                    .modifier(ConsistentScrollEdges())
+                    TransactionRowsList(rows: rows, selection: Binding(get: { selection }, set: { selection = $0 }),
+                                        sheet: $sheet, detailsTransaction: $detailsTransaction,
+                                        duplicating: presentation.duplicating, duplicate: duplicateTransactions)
                 }
                 Divider()
                 HStack {
@@ -229,6 +195,56 @@ struct TransactionsView: View {
             })
             presentation.completedDuplication(copyIDs)
         }
+    }
+}
+
+/// Scroll position belongs to the list, so scrolling does not invalidate the
+/// filters, totals, and selection controls surrounding it.
+private struct TransactionRowsList: View {
+    @EnvironmentObject private var store: FinanceStore
+    let rows: [Transaction]
+    @Binding var selection: Set<UUID>
+    @Binding var sheet: EditorSheet?
+    @Binding var detailsTransaction: Transaction?
+    let duplicating: Bool
+    let duplicate: (Set<UUID>) -> Void
+    @State private var scrollAnchor: UUID?
+
+    var body: some View {
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                ForEach(rows) { t in
+                    HStack(spacing: 12) {
+                        Toggle(isOn: Binding(get: { selection.contains(t.id) }, set: { if $0 { selection.insert(t.id) } else { selection.remove(t.id) } })) { EmptyView() }.toggleStyle(.checkbox)
+                            .labelsHidden().frame(width: 20, height: 36)
+                            .accessibilityLabel(L("Выбрать: \(t.merchant)"))
+                        TransactionRow(transaction: t, ledger: store.ledger, showsNote: true)
+                            .contentShape(Rectangle()).onTapGesture { sheet = .transaction(t) }
+                        GlassEditButton { sheet = .transaction(t) }
+                    }
+                    .frame(minHeight: 64)
+                    .padding(.horizontal, 18).padding(.vertical, 8)
+                    .background(selection.contains(t.id) ? Color.moraGreen.opacity(0.06) : Color.clear)
+                    .smoothUpdates(value: selection.contains(t.id))
+                    .overlay(alignment: .bottom) {
+                        if t.id != rows.last?.id { Divider().padding(.leading, 18).opacity(0.55) }
+                    }
+                    .transition(.opacity.combined(with: .scale(scale: 0.98, anchor: .top)))
+                    .contextMenu {
+                        Button(L("Подробности операции")) { detailsTransaction = t }
+                        Divider()
+                        Button(L("Редактировать")) { sheet = .transaction(t) }
+                        Button(L("Дублировать")) { duplicate([t.id]) }.disabled(duplicating)
+                        if t.kind != .transfer { Button(L("Разделить по категориям")) { sheet = .split(t) } }
+                        Button(L("Создать похожую")) { sheet = .similar(t) }
+                        Button(L("Удалить"), role: .destructive) { Task { @MainActor in await store.deleteTransaction(t.id) } }
+                    }
+                }
+            }
+            .scrollTargetLayout()
+        }
+        .scrollPosition(id: $scrollAnchor, anchor: .top)
+        .modifier(ConsistentScrollEdges())
     }
 }
 

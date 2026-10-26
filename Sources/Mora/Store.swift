@@ -515,6 +515,8 @@ extension Color {
     }
 }
 
+enum CardLayout { static let spacing: CGFloat = 20 }
+
 struct Card<Content: View>: View {
     @Environment(\.colorScheme) private var scheme
     var padding: CGFloat = 22

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.2 — 2026-10-26
+
+- Isolate transaction scrolling from the surrounding screen while retaining lazy rows and the visible position.
+- Match card spacing throughout the app to the overview and allow overview metric descriptions to wrap at narrow widths.
+
 ## 1.6.1 — 2026-10-26
 
 - Keep transaction entry responsive by recalculating balance previews only for relevant financial changes and updating the preview independently.

@@ -15,11 +15,11 @@ struct DashboardView: View {
 
     var body: some View {
         let summary = store.reportSummary(in: month)
-        VStack(spacing: 20) {
+        VStack(spacing: CardLayout.spacing) {
             if ledger.accounts.isEmpty {
                 Card { EmptyState(icon: "wallet.bifold", title: L("Нет счетов"), text: L("Добавьте счет и начальный остаток. Для импорта истории укажите остаток перед первой операцией."), button: L("Добавить счет")) { sheet = .account(nil) } }
             }
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 20), count: 4), spacing: 20) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: CardLayout.spacing), count: 4), spacing: CardLayout.spacing) {
                 MetricCard(title: L("Общий капитал"), value: DisplayMoney.string(store.reportNetWorth, currency: currency), icon: "wallet.bifold", note: L("На сегодня · активные счета"), color: "green")
                 MetricCard(title: L("Доходы"), value: DisplayMoney.string(summary.income, currency: currency), icon: "arrow.down.left", note: L("За выбранный месяц"), color: "green")
                 MetricCard(title: L("Расходы"), value: DisplayMoney.string(summary.expense, currency: currency), icon: "arrow.up.right", note: L("Без переводов между счетами"), color: "orange")
@@ -110,7 +110,7 @@ struct DashboardView: View {
 /// Measures both cards at their actual widths, then gives them the same height.
 /// The category column grows with the window instead of staying at 310 points.
 struct BalancedColumns: Layout {
-    var spacing: CGFloat = 20
+    var spacing: CGFloat = CardLayout.spacing
     private func widths(_ width: CGFloat) -> [CGFloat] {
         let secondary = min(400, max(280, (width - spacing) / 3))
         return [max(0, width - spacing - secondary), secondary]
@@ -138,7 +138,8 @@ struct MetricCard: View {
             VStack(alignment: .leading, spacing: 16) {
                 HStack { Text(title).font(.system(size: 12)).foregroundStyle(.secondary); Spacer(minLength: 4); IconTile(icon: icon, color: color, size: 29) }
                 FinancialText(value).font(.system(size: 26, weight: .semibold, design: .rounded)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.55)
-                Text(note).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(2).frame(height: 25, alignment: .topLeading)
+                Text(note).font(.system(size: 10)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true).frame(minHeight: 25, alignment: .topLeading)
             }
         }
     }
@@ -322,7 +323,7 @@ struct AnalyticsView: View {
     }
     var body: some View {
         let report = store.reportAnalytics(in: month, detail: trendDetail, selectedDays: daySelection.days)
-        VStack(spacing: 22) {
+        VStack(spacing: CardLayout.spacing) {
             calendarCard
             Card {
                 VStack(alignment: .leading, spacing: 14) {

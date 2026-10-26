@@ -8,10 +8,10 @@ struct AccountsView: View {
     @Binding var sheet: EditorSheet?
     @State private var deletingAccount: Account?
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        VStack(alignment: .leading, spacing: CardLayout.spacing) {
             HStack { Text(L("\(store.ledger.accounts.count) счетов · остатки на сегодня")).font(.callout).foregroundStyle(.secondary); Spacer(); Button { sheet = .account(nil) } label: { Label(L("Добавить счет"), systemImage: "plus") }.buttonStyle(.borderedProminent) }
             if store.ledger.accounts.isEmpty { Card { EmptyState(icon: "wallet.bifold", title: L("Нет счетов"), text: L("Банковская карта, наличные, накопления или кредит. Укажите начальный остаток и валюту."), button: L("Добавить счет")) { sheet = .account(nil) } } }
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 20) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: CardLayout.spacing), count: 2), spacing: CardLayout.spacing) {
                 ForEach(store.ledger.accounts) { account in
                     Card {
                         VStack(alignment: .leading, spacing: 22) {
@@ -119,12 +119,12 @@ struct BudgetsView: View {
         let ledger = store.ledger
         let total = ledger.budgets.reduce(Decimal(0)) { $0 + $1.limit }
         let spent = ledger.budgets.reduce(Decimal(0)) { $0 + store.reportSpending(category: $1.categoryID, in: month) }
-        VStack(spacing: 22) {
+        VStack(spacing: CardLayout.spacing) {
             Card {
                 HStack { VStack(alignment: .leading, spacing: 10) { SectionHeading(title: L("Месячный план"), subtitle: L("Лимиты повторяются каждый месяц · \(ledger.preferences.baseCurrency)")); FinancialText(DisplayMoney.string(total, currency: ledger.preferences.baseCurrency)).font(.system(size: 32, weight: .semibold, design: .rounded)) }; Spacer(); VStack(alignment: .trailing, spacing: 10) { Text(L("Осталось в категориях с бюджетом")).font(.caption).foregroundStyle(.secondary); FinancialText(DisplayMoney.string(total - spent, currency: ledger.preferences.baseCurrency)).font(.title2.weight(.semibold)).foregroundStyle(spent > total ? Color.token("red") : .moraGreen); Button(L("Добавить бюджет")) { sheet = .budget(nil) }.buttonStyle(.borderedProminent) } }
             }
             if ledger.budgets.isEmpty { Card { EmptyState(icon: "chart.pie", title: L("Нет бюджетов"), text: L("Добавьте месячный лимит для категории расходов."), button: L("Создать бюджет")) { sheet = .budget(nil) } } }
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 20) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: CardLayout.spacing), count: 2), spacing: CardLayout.spacing) {
                 ForEach(ledger.budgets) { budget in
                     let spent = store.reportSpending(category: budget.categoryID, in: month)
                     Card {
@@ -160,10 +160,10 @@ struct GoalsView: View {
     @EnvironmentObject var store: FinanceStore
     @Binding var sheet: EditorSheet?
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        VStack(alignment: .leading, spacing: CardLayout.spacing) {
             HStack { Text(L("Прогресс накоплений обновляется вручную.")).foregroundStyle(.secondary).font(.callout); Spacer(); Button(L("Создать цель")) { sheet = .goal(nil) }.buttonStyle(.borderedProminent) }
             if store.ledger.goals.isEmpty { Card { EmptyState(icon: "flag", title: L("Нет целей"), text: L("Укажите название, сумму и срок накопления."), button: L("Создать цель")) { sheet = .goal(nil) } } }
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 20) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: CardLayout.spacing), count: 2), spacing: CardLayout.spacing) {
                 ForEach(store.ledger.goals) { goal in
                     Card {
                         VStack(alignment: .leading, spacing: 22) {
@@ -211,7 +211,7 @@ struct RecurringView: View {
     @Binding var sheet: EditorSheet?
     @State private var paymentToConfirm: RecurringPayment?
     var body: some View {
-        VStack(spacing: 22) {
+        VStack(spacing: CardLayout.spacing) {
             Card {
                 HStack { VStack(alignment: .leading, spacing: 10) { SectionHeading(title: L("Платежи в месяц"), subtitle: L("Месячный эквивалент активных платежей")); FinancialText(DisplayMoney.string(store.reportMonthlyRecurring, currency: store.ledger.preferences.baseCurrency)).font(.system(size: 32, weight: .semibold, design: .rounded)) }; Spacer(); Button(L("Добавить платеж")) { sheet = .recurring(nil) }.buttonStyle(.borderedProminent) }
             }
@@ -276,11 +276,11 @@ struct CategoriesView: View {
     @Binding var sheet: EditorSheet?
     @State private var deletingCategory: Category?
     var body: some View {
-        VStack(spacing: 22) {
+        VStack(spacing: CardLayout.spacing) {
             Card {
                 VStack(alignment: .leading, spacing: 20) {
                     HStack { SectionHeading(title: L("Категории"), subtitle: L("Отдельные категории для доходов и расходов")); Spacer(); Button(L("Добавить")) { sheet = .category(nil) }.buttonStyle(.borderedProminent) }
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: CardLayout.spacing), count: 3), spacing: CardLayout.spacing) {
                         ForEach(store.ledger.categories) { c in
                             HStack(spacing: 10) {
                                 IconTile(icon: c.icon, color: c.color, size: 30)

@@ -129,7 +129,7 @@ struct SettingsView: View {
             .filter { ledger.preferences.rates[$0] != nil }.sorted()
     }
     var body: some View {
-        VStack(spacing: 22) {
+        VStack(spacing: CardLayout.spacing) {
             LanguageSettingsCard()
             Card {
                 VStack(alignment: .leading, spacing: 22) {
