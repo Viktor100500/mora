@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.6.6 — 2026-10-27
+
+- Commit the first reviewed purchase and its card-to-account choice atomically, and keep historical amount suggestions in the known purchase currency.
+
+- Use one Apple Pay key per person for all of their cards: the Shortcuts sender passes the Wallet card name, a new card appears after its first purchase, and its purchases wait until an account is chosen in the review form or the new Apple Pay cards list. Purchases without a card name keep the key's main account; older senders keep working.
+- When Wallet starts the automation before the purchase is priced (transit, deferred authorizations), keep the purchase in the inbox and prefill the last amount paid at the same merchant in its original currency for one-click confirmation. No merchant- or city-specific rules.
+- Add the `wallet_cards` Supabase migration with card listing and linking RPCs and integration checks.
+
 ## 1.6.5 — 2026-10-27
 
 - Report a cloud connection outage once, retry silently, and notify when the connection is restored.

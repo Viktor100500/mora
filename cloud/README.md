@@ -23,9 +23,9 @@
 
 ## Apple Pay / Wallet
 
-Это экспериментальная интеграция через «Быстрые команды», **не банковская синхронизация**. Следуйте [инструкции для iPhone](shortcuts/IPHONE-SETUP.md). Каждой карте нужен отдельный ключ с доступом только на отправку покупок в выбранный счет.
+Это экспериментальная интеграция через «Быстрые команды», **не банковская синхронизация**. Следуйте [инструкции для iPhone](shortcuts/IPHONE-SETUP.md). У каждого человека один ключ телефона с доступом только на отправку покупок. Автоматизация передаёт название карты; новая карта появляется в Mora после первой покупки, и её покупки ждут, пока участник не выберет для неё счёт. Покупки без названия карты идут в основной счёт ключа.
 
-Если сумма, продавец или валюта неизвестны, покупка попадает во входящие для проверки. Сверяйте итог с выпиской. Прошлые покупки, возвраты, платежи физической картой и работа без интернета не гарантируются. Очередь повторной отправки в команде пока не реализована.
+Если сумма, продавец или валюта неизвестны, покупка попадает во входящие для проверки. Сумма бывает пустой, когда iOS запускает автоматизацию раньше, чем банк или транспортный оператор пришлёт её в Wallet. Тогда форма проверки предлагает сумму прошлой покупки у того же продавца. Сверяйте итог с выпиской. Прошлые покупки, возвраты, платежи физической картой и работа без интернета не гарантируются. Очередь повторной отправки в команде пока не реализована.
 
 Сумма может приходить с символом валюты, например `$31.54`, или разделителями групп, например `1 234,56 €`. При пустом поле сервер определяет поддерживаемую валюту из форматированной суммы; явный код валюты имеет приоритет. `$` считается USD, `€` — EUR, `₽` — RUB. Открытая Mora автоматически обрабатывает полные покупки, включая старые входящие: получает тот же курс Visa, что форма обычной операции, применяет комиссию счета и округление в его валюте. Ручное подтверждение не требуется. При недоступности курса покупка остается во входящих до автоматической повторной попытки. Пока Mora закрыта или синхронизация выключена, сервер сохраняет такие покупки во входящие.
 
@@ -60,3 +60,9 @@ pnpm test
 Apply `wallet_import_batches` after the Wallet review migration. `mora_collect_wallet_import` collects all recorded, unbatched Wallet purchases currently in the household into one import, regardless of purchase date or phone. Mora calls it after loading/booking the available purchases; subsequent loads create subsequent batches. It also picks up purchases from older Mora versions. Incomplete captures stay pending until reviewed. Collection takes the existing household lock, requires membership and is idempotent across retries and concurrent Macs. It never recreates removed purchases.
 
 Batch records use the existing import-history format, with `source: Apple Shortcuts`; the existing batch preview and rollback apply. Swift histories remain computer-local.
+
+### Wallet cards
+
+Apply `wallet_cards` after the currency inference migration and before installing a sender that passes `card`. `mora_capture_payment` gains an optional seventh argument `p_card`; the six-argument call is unchanged. Each new card is remembered per phone key and holds its purchases with the reason «Новая карта: выберите для неё счёт» until a member links it with `mora_link_wallet_card` (Mora does this from the review form or the Apple Pay cards list). Linking moves the card's waiting purchases to that account and recomputes their reasons; Mora then books complete ones as usual. `mora_list_pending` adds `card_id`, `card` and `card_linked`; `mora_list_wallet_cards` lists cards of active keys in the household.
+
+The first reviewed purchase links an unassigned card and records the transaction under the same household lock and database transaction. A failed review leaves the card unlinked; a retry cannot replace an already committed purchase. Historical amount suggestions only use the known purchase currency when one was supplied.

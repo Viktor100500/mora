@@ -30,6 +30,20 @@ class WorkflowTests(unittest.TestCase):
         response = actions[kinds.index('downloadurl')]['WFWorkflowActionParameters']['UUID']
         self.assertEqual(next(iter(body['Value']['attachmentsByRange'].values()))['OutputUUID'], response)
 
+    def test_dictionary_sender_passes_card_without_merchant_specific_rules(self):
+        actions = workflow(CONFIG, wallet=False)['WFWorkflowActions']
+        card = next(a for a in actions if a['WFWorkflowActionParameters'].get('WFDictionaryKey') == 'card')
+        post = next(a for a in actions if a['WFWorkflowActionIdentifier'].endswith('.downloadurl'))
+        items = {i['WFKey']['Value']['string']: i['WFValue']['Value'] for i in
+                 post['WFWorkflowActionParameters']['WFJSONValues']['Value']['WFDictionaryFieldValueItems']}
+        self.assertEqual(set(items), {'p_token', 'p_event_id', 'p_amount', 'p_currency', 'p_merchant', 'p_occurred_at', 'p_card'})
+        self.assertEqual(next(iter(items['p_card']['attachmentsByRange'].values()))['OutputUUID'],
+                         card['WFWorkflowActionParameters']['UUID'])
+        kinds = [a['WFWorkflowActionIdentifier'].rsplit('.', 1)[-1] for a in actions]
+        self.assertEqual(kinds.count('replace'), 1)  # only the event UUID; no amount rules for particular merchants
+        wallet = workflow(CONFIG, wallet=True)['WFWorkflowActions'][-1]
+        self.assertNotIn('p_card', str(wallet))  # the direct Transaction variant keeps the six-field call
+
     def test_preview_has_no_network_or_notifications(self):
         actions = workflow(CONFIG, preview=True, diagnostics=True)['WFWorkflowActions']
         kinds = [a['WFWorkflowActionIdentifier'].rsplit('.', 1)[-1] for a in actions]
@@ -49,7 +63,7 @@ class WorkflowTests(unittest.TestCase):
                 else:
                     keys = [a['WFWorkflowActionParameters']['WFDictionaryKey'] for a in actions
                             if a['WFWorkflowActionIdentifier'].endswith('.getvalueforkey')]
-                    self.assertEqual(keys, ['amount', 'merchant', 'currency'])
+                    self.assertEqual(keys, ['amount', 'merchant', 'currency', 'card'])
 
 
 class DiagnosticRunner:

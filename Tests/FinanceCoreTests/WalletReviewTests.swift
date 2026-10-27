@@ -2,9 +2,11 @@ import XCTest
 @testable import FinanceCore
 
 final class WalletReviewTests: XCTestCase {
-    private func capture(account: UUID, amount: String = "$31.54", currency: String = "", merchant: String = "Test cafe") throws -> CloudCapture {
-        let object = ["id": UUID().uuidString, "merchant": merchant, "amount": amount, "currency": currency,
+    private func capture(account: UUID, amount: String = "$31.54", currency: String = "", merchant: String = "Test cafe",
+                         card: (id: UUID, name: String, linked: Bool)? = nil) throws -> CloudCapture {
+        var object: [String: Any] = ["id": UUID().uuidString, "merchant": merchant, "amount": amount, "currency": currency,
                       "account_id": account.uuidString, "date": "2026-10-16T20:19:00Z", "label": "Настя · Alta · EUR"]
+        if let card { object["card_id"] = card.id.uuidString; object["card"] = card.name; object["card_linked"] = card.linked }
         let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode(CloudCapture.self, from: JSONSerialization.data(withJSONObject: object))
     }
@@ -86,5 +88,67 @@ final class WalletReviewTests: XCTestCase {
         XCTAssertEqual(reviewed.conversion, conversion)
         ledger.transactions.append(reviewed)
         XCTAssertNoThrow(try WalletReviewDraft.transaction(value, for: capture, in: ledger))
+    }
+
+    func testNewCardPurchaseWaitsForAccountChoiceAndLinkedCardBooksAutomatically() async throws {
+        var ledger = Ledger.empty
+        ledger.accounts = [Account(name: "USD card", currency: "USD")]
+        let cardID = UUID()
+        let waiting = try capture(account: ledger.accounts[0].id, card: (cardID, "Chase Sapphire", false))
+        XCTAssertTrue(waiting.awaitsCardLink)
+        XCTAssertEqual(waiting.card, "Chase Sapphire")
+        let none = try await WalletReviewDraft.automaticTransaction(for: waiting, in: ledger) { _, _, _, _ in
+            XCTFail("A purchase of an unlinked card must not request a rate"); throw CancellationError()
+        }
+        XCTAssertNil(none)
+        let linked = try capture(account: ledger.accounts[0].id, card: (cardID, "Chase Sapphire", true))
+        XCTAssertFalse(linked.awaitsCardLink)
+        let booked = try await WalletReviewDraft.automaticTransaction(for: linked, in: ledger) { _, _, _, _ in throw CancellationError() }
+        XCTAssertEqual(booked?.amount, Decimal(string: "-31.54"))
+        XCTAssertFalse(try capture(account: ledger.accounts[0].id).awaitsCardLink)
+    }
+    func testKnownPurchaseCurrencyNeverUsesAnAmountFromAnotherCurrency() throws {
+        var ledger = Ledger.empty
+        ledger.accounts = [Account(name: "EUR", currency: "EUR"), Account(name: "USD", currency: "USD")]
+        let eur = ledger.accounts[0].id, usd = ledger.accounts[1].id
+        ledger.transactions = [
+            Transaction(date: Date(timeIntervalSince1970: 1000), merchant: "Test shop", amount: -12, accountID: usd),
+            Transaction(date: Date(timeIntervalSince1970: 2000), merchant: "Test shop", amount: -20, accountID: eur)
+        ]
+        let draft = WalletReviewDraft(capture: try capture(account: eur, amount: "", currency: "USD", merchant: "Test shop"), ledger: ledger)
+        XCTAssertEqual(draft.prefillAmount, "12")
+        XCTAssertEqual(draft.prefillCurrency, "USD")
+        ledger.transactions.removeFirst()
+        let unmatched = WalletReviewDraft(capture: try capture(account: eur, amount: "", currency: "USD", merchant: "Test shop"), ledger: ledger)
+        XCTAssertNil(unmatched.suggestion)
+        XCTAssertEqual(unmatched.prefillAmount, "")
+        XCTAssertEqual(unmatched.prefillCurrency, "USD")
+    }
+    func testMissingAmountSuggestsLastPaidAmountAtTheSameMerchantInItsOriginalCurrency() throws {
+        var ledger = Ledger.empty
+        ledger.accounts = [Account(name: "EUR", currency: "EUR"), Account(name: "USD", currency: "USD")]
+        let eur = ledger.accounts[0].id, usd = ledger.accounts[1].id
+        var converted = Transaction(date: Date(timeIntervalSince1970: 2_000_000), merchant: "OMNY", amount: Decimal(string: "-2.78")!, accountID: eur)
+        converted.conversion = CardConversion(originalAmount: -3, originalCurrency: "USD", accountCurrency: "EUR",
+                                              rate: Decimal(string: "0.926")!, date: converted.date)
+        ledger.transactions = [
+            Transaction(date: Date(timeIntervalSince1970: 1_000_000), merchant: "omny", amount: Decimal(string: "-2.90")!, accountID: usd),
+            converted,
+            Transaction(date: Date(timeIntervalSince1970: 3_000_000), merchant: "PATH", amount: Decimal(string: "-3.25")!, accountID: usd),
+            Transaction(date: Date(timeIntervalSince1970: 4_000_000), merchant: "OMNY", amount: 3, accountID: usd, kind: .income),
+        ]
+        let draft = WalletReviewDraft(capture: try capture(account: eur, amount: "", merchant: " OMNY "), ledger: ledger)
+        XCTAssertEqual(draft.amount, "")
+        XCTAssertEqual(draft.suggestion?.currency, "USD")
+        XCTAssertEqual(Decimal(string: draft.prefillAmount), 3)
+        XCTAssertEqual(draft.prefillCurrency, "USD")
+        let path = WalletReviewDraft(capture: try capture(account: usd, amount: "$0.00", merchant: "PATH"), ledger: ledger)
+        XCTAssertEqual(Decimal(string: path.prefillAmount), Decimal(string: "3.25"))
+        XCTAssertEqual(path.prefillCurrency, "USD")
+        let priced = WalletReviewDraft(capture: try capture(account: usd, amount: "$4.10", merchant: "OMNY"), ledger: ledger)
+        XCTAssertNil(priced.suggestion)
+        XCTAssertEqual(priced.prefillAmount, "4.1")
+        XCTAssertNil(WalletReviewDraft(capture: try capture(account: usd, amount: "", merchant: "Unknown shop"), ledger: ledger).suggestion)
+        XCTAssertNil(WalletReviewDraft(capture: try capture(account: usd, amount: "", merchant: ""), ledger: ledger).suggestion)
     }
 }

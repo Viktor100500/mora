@@ -1060,5 +1060,15 @@
   "Прошлый месяц": "Last month",
   "Этот год": "This year",
   "Поиск": "Search",
-  "Действия": "Actions"
+  "Действия": "Actions",
+  "Новая карта: {0}": "New card: {0}",
+  "без названия": "unnamed",
+  "Выбранный счет запомнится для этой карты. Следующие покупки ею будут записываться туда автоматически.": "The selected account will be remembered for this card. Its next purchases will be booked there automatically.",
+  "Wallet не передал сумму. Подставлена сумма прошлой покупки «{0}» от {1}. Проверьте ее.": "Wallet did not provide the amount. The amount of the previous purchase at “{0}” on {1} was filled in. Please check it.",
+  "Новая карта в Wallet: выберите счет": "New Wallet card: choose an account",
+  "Новая карта: выберите для неё счёт": "New card: choose an account for it",
+  "Выберите счет · покупок ждут: {0}": "Choose an account · purchases waiting: {0}",
+  "Один ключ на человека и его iPhone — для всех его карт. Счет для каждой карты выбирается после первой покупки ею.": "One key per person and iPhone, for all of their cards. Each card's account is chosen after its first purchase.",
+  "Карты Apple Pay": "Apple Pay cards",
+  "Новая карта появляется после первой покупки ею. Покупки новой карты ждут, пока вы не выберете счет.": "A new card appears after its first purchase. Its purchases wait until you choose an account."
 }

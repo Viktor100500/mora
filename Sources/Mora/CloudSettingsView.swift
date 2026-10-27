@@ -62,7 +62,7 @@ struct CloudSettingsView: View {
                 else {
                     HStack { Label(cloud.email, systemImage: "person.crop.circle"); Spacer(); Button("Отключить облако…") { confirmDisconnect = true } }
                     if cloud.householdID == nil { householdCard }
-                    else { syncCard; inviteCard; phoneCard; inboxCard.id("wallet-inbox") }
+                    else { syncCard; inviteCard; phoneCard; cardsCard.id("wallet-cards"); inboxCard.id("wallet-inbox") }
                 }
                 Text("Первое подключение требует бесплатного проекта Supabase и установки схемы Mora. Оплата iPhone передает доступные сведения о покупке; это не банковская выписка. Автоматизация настраивается отдельно на каждом телефоне.").font(.caption).foregroundStyle(.secondary)
                 Link("Настройка автоматизации Apple", destination: URL(string: "https://support.apple.com/en-ng/guide/shortcuts/apd65c67538a/ios")!).font(.caption)
@@ -191,12 +191,13 @@ struct CloudSettingsView: View {
     private var phoneCard: some View {
         Card {
             VStack(alignment: .leading, spacing: 14) {
-                SectionHeading(title: "Apple Pay → расход", subtitle: "Один ключ для одной карты и счета. Настройте автоматизацию отдельно на каждом iPhone.")
+                SectionHeading(title: "Apple Pay → расход", subtitle: "Один ключ на человека и его iPhone — для всех его карт. Счет для каждой карты выбирается после первой покупки ею.")
                 TextField("Название телефона или карты", text: $phoneLabel).textFieldStyle(.roundedBorder)
-                Picker("Счет для расходов", selection: $account) {
+                Picker("Основной счет", selection: $account) {
                     Text("Выберите счет").tag(Optional<UUID>.none)
                     ForEach(accounts) { Text("\($0.name) · \($0.currency)").tag(Optional($0.id)) }
                 }
+                Text("Основной счет используется, только если iPhone не передал название карты.").font(.caption).foregroundStyle(.secondary)
                 Button("Создать ключ для «Быстрых команд»") {
                     if let account { Task { await cloud.issueToken(account: account, label: phoneLabel) } }
                 }.disabled(cloud.busy || !cloud.enabled || account == nil || phoneLabel.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -208,9 +209,9 @@ struct CloudSettingsView: View {
                     }
                 }
                 DisclosureGroup("Как настроить команду") {
-                    Text("1. В «Быстрых командах» создайте автоматизацию Wallet / «Транзакция» для выбранной карты и включите немедленный запуск.\n2. Получите сумму, валюту и продавца из входной транзакции. Не вводите фиксированную валюту для покупок в разных валютах.\n3. Создайте UUID события и текущую дату в ISO 8601.\n4. Добавьте «Получить содержимое URL»: POST, заголовок apikey и JSON с полями ниже.\n5. Проверьте ответ: recorded — расход записан; pending — покупка доставлена и ожидает обработки Mora или ручной проверки.")
+                    Text("1. В «Быстрых командах» создайте автоматизацию Wallet / «Транзакция» для всех своих карт и включите немедленный запуск.\n2. Получите сумму, продавца и «Карту или пропуск» из входной транзакции. Не вводите фиксированную валюту для покупок в разных валютах.\n3. Создайте UUID события и текущую дату в ISO 8601.\n4. Добавьте «Получить содержимое URL»: POST, заголовок apikey и JSON с полями ниже.\n5. Проверьте ответ: recorded — расход записан; pending — покупка доставлена и ожидает обработки Mora, выбора счета для новой карты или ручной проверки.")
                         .font(.callout).textSelection(.enabled).padding(.top, 8)
-                    Text("p_token · p_event_id · p_amount · p_currency · p_merchant · p_occurred_at")
+                    Text("p_token · p_event_id · p_amount · p_currency · p_merchant · p_occurred_at · p_card")
                         .font(.system(.caption, design: .monospaced)).textSelection(.enabled).padding(.top, 8)
                     Text("Сумма передается текстом, без разделителей тысяч (например 12.50). При повторной отправке используйте прежний UUID и дату. Все данные и ответ сохраняйте до подтверждения сервера; простой HTTP-запрос не обеспечивает очередь без интернета.")
                         .font(.caption).foregroundStyle(.secondary).padding(.top, 8)
@@ -222,7 +223,38 @@ struct CloudSettingsView: View {
                         if !token.revoked { Button("Отозвать") { Task { await cloud.revokeToken(token.id) } }.disabled(cloud.busy) }
                     }.font(.callout)
                 }
-                Text("Ключ может только добавлять расходы в выбранный счет. Он не позволяет читать операции или менять другие счета. При потере телефона отзовите ключ.").font(.caption).foregroundStyle(.secondary)
+                Text("Ключ может только добавлять расходы: в основной счет или в счета, выбранные для его карт. Он не позволяет читать операции. При потере телефона отзовите ключ.").font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
+    private var cardsCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 14) {
+                SectionHeading(title: "Карты Apple Pay", subtitle: "Новая карта появляется после первой покупки ею. Покупки новой карты ждут, пока вы не выберете счет.")
+                if cloud.walletCards.isEmpty {
+                    Text("Карт пока нет. Оплатите любой картой из автоматизации — она появится здесь.").foregroundStyle(.secondary)
+                }
+                ForEach(cloud.walletCards) { card in
+                    HStack(alignment: .firstTextBaseline) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Label(card.card, systemImage: "creditcard")
+                            Text(card.label).font(.caption).foregroundStyle(.secondary)
+                            if card.account_id == nil {
+                                Text(card.pending_count > 0 ? L("Выберите счет · покупок ждут: \(card.pending_count)") : L("Выберите счет"))
+                                    .font(.caption).foregroundStyle(.orange)
+                            }
+                        }
+                        Spacer()
+                        Picker(L("Счет"), selection: Binding(get: { card.account_id }, set: { value in
+                            Task { await cloud.linkCard(card.id, account: value) }
+                        })) {
+                            Text(L("Не выбран")).tag(Optional<UUID>.none)
+                            ForEach(store.ledger.accounts.filter { !$0.archived || $0.id == card.account_id }) {
+                                Text("\($0.name) · \($0.currency)").tag(Optional($0.id))
+                            }
+                        }.labelsHidden().frame(maxWidth: 260).disabled(cloud.busy)
+                    }.font(.callout)
+                }
             }
         }
     }
@@ -243,6 +275,9 @@ struct CloudSettingsView: View {
                                 Text("Валюта покупки не передана").font(.caption).foregroundStyle(.secondary)
                             }
                             Text("Источник: \(capture.label)").font(.caption).foregroundStyle(.secondary)
+                            if let card = capture.card, !card.isEmpty {
+                                Text("Карта: \(card)").font(.caption).foregroundStyle(.secondary)
+                            }
                             Text(L(waiting ? "Ожидает автоматической записи" : capture.reason ?? "Проверьте покупку")).font(.caption).foregroundStyle(.orange)
                         }
                         Spacer()

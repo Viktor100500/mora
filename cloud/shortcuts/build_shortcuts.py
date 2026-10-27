@@ -48,7 +48,7 @@ def workflow(config, preview=False, wallet=False, diagnostics=False):
         return {"Type": "ActionOutput", "OutputUUID": identifier_uuid, "OutputName": output_name}
 
     action('comment', '', WFCommentActionText=(
-        ('Mora · Apple Pay\nПринимает транзакцию Wallet. Mora считает $ валютой USD и автоматически пересчитывает покупку в валюту счета. ' if wallet else 'Mora · Apple Pay\nПринимает словарь amount, merchant, currency. ')
+        ('Mora · Apple Pay\nПринимает транзакцию Wallet. Mora считает $ валютой USD и автоматически пересчитывает покупку в валюту счета. ' if wallet else 'Mora · Apple Pay\nПринимает словарь amount, merchant, card, currency. Один ключ на человека: счет выбирается в Mora для каждой карты. ')
         + 'Если код валюты неизвестен, оставьте поле пустым: сервер определит ее по сумме, если распознает символ или код. '
         'Ключ только записывает в выбранный счёт. '
         'Для первой версии требуется интернет; очередь повторной отправки не включена.'))
@@ -70,7 +70,7 @@ def workflow(config, preview=False, wallet=False, diagnostics=False):
         # unknown symbols remain pending instead of being guessed.
         values['currency'] = action('gettext', 'Валюта для проверки', WFTextActionText='')
     else:
-        for key in ('amount', 'merchant', 'currency'):
+        for key in ('amount', 'merchant', 'currency', 'card'):
             values[key] = action('getvalueforkey', key, WFDictionaryKey=key,
                                  WFInput=token({"Type": "ExtensionInput"}))
     date = action('format.date', 'Дата покупки', WFDate=text({"Type": "CurrentDate"}),
@@ -86,6 +86,9 @@ def workflow(config, preview=False, wallet=False, diagnostics=False):
     fields = {'p_token': phone, 'p_event_id': event, 'p_amount': values['amount'],
               'p_currency': values['currency'], 'p_merchant': values['merchant'],
               'p_occurred_at': date}
+    if 'card' in values:
+        # Requires the wallet_cards migration; an unknown card waits for an account in Mora.
+        fields['p_card'] = values['card']
     if preview:
         action('dictionary', 'Тестовый запрос', WFItems=dictionary(fields))
     else:
@@ -111,7 +114,7 @@ def workflow(config, preview=False, wallet=False, diagnostics=False):
             'WFWorkflowIcon': {'WFWorkflowIconGlyphNumber': 61440, 'WFWorkflowIconStartColor': -12365313},
             'WFWorkflowImportQuestions': [] if preview else [
                 {'ActionIndex': 1, 'Category': 'Parameter', 'ParameterKey': 'WFTextActionText',
-                 'Text': 'Вставьте ключ телефона, созданный в Mora для нужной карты. Ключ только отправляет покупки в выбранный счёт.',
+                 'Text': 'Вставьте ключ телефона, созданный в Mora. Один ключ на человека — для всех его карт.',
                  'DefaultValue': ''}]}
 
 

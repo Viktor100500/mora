@@ -27,6 +27,25 @@ final class AppNotificationsTests: XCTestCase {
         return try decoder.decode(CloudCapture.self, from: JSONSerialization.data(withJSONObject: object))
     }
 
+    func testNewWalletCardAsksForAnAccountAndShowsTheCard() throws {
+        let history = AppNotifications(), household = UUID(), id = UUID(), card = UUID()
+        func purchase(linked: Bool) throws -> CloudCapture {
+            let object: [String: Any] = ["id": id.uuidString, "merchant": "OMNY", "amount": "", "currency": "",
+                                         "account_id": UUID().uuidString, "date": "2026-10-27T12:00:00Z",
+                                         "reason": linked ? "Не получена положительная сумма" : "Новая карта: выберите для неё счёт",
+                                         "label": "iPhone", "card_id": card.uuidString, "card": "Chase Sapphire", "card_linked": linked]
+            let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+            return try decoder.decode(CloudCapture.self, from: JSONSerialization.data(withJSONObject: object))
+        }
+        history.reconcileWallet([try purchase(linked: false)], householdID: household)
+        XCTAssertEqual(history.events.first?.message, L("Новая карта в Wallet: выберите счет"))
+        XCTAssertTrue(history.events.first?.detail?.contains("iPhone · Chase Sapphire") == true)
+        XCTAssertEqual(history.events.first?.actions, [.review(id)])
+        history.reconcileWallet([try purchase(linked: true)], householdID: household)
+        XCTAssertEqual(history.events.count, 1)
+        XCTAssertEqual(history.events.first?.message, L("Покупка из Wallet ожидает обработки"))
+    }
+
     func testHistoryAndActionsSurviveRestartAndReadStateDoesNotRemoveEvents() async throws {
         let directory = try temporaryDirectory(); defer { try? FileManager.default.removeItem(at: directory) }
         let file = directory.appendingPathComponent("notification-history.json")

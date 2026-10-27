@@ -15,6 +15,7 @@ final class CloudSync: ObservableObject {
     @Published private(set) var households: [CloudHousehold] = []
     @Published private(set) var phoneTokens: [CloudPhoneToken] = []
     @Published private(set) var pending: [CloudCapture] = []
+    @Published private(set) var walletCards: [CloudWalletCard] = []
     @Published private(set) var lastSync: Date?
     @Published private(set) var conflict = false
     private var walletProgressID: UUID?
@@ -75,6 +76,16 @@ final class CloudSync: ObservableObject {
     private struct ResolveBody: Encodable, Sendable {
         let p_household_id: UUID; let p_capture_id: UUID; let p_account_id: UUID
         let p_amount: String; let p_merchant: String; let p_dismiss: Bool
+    }
+    private struct LinkCardBody: Encodable, Sendable {
+        let p_household_id: UUID; let p_card_id: UUID; let p_account_id: UUID?
+        // Explicit null: PostgREST matches functions by argument names.
+        func encode(to encoder: Encoder) throws {
+            var c = encoder.container(keyedBy: CodingKeys.self)
+            try c.encode(p_household_id, forKey: .p_household_id); try c.encode(p_card_id, forKey: .p_card_id)
+            if let p_account_id { try c.encode(p_account_id, forKey: .p_account_id) } else { try c.encodeNil(forKey: .p_account_id) }
+        }
+        private enum CodingKeys: String, CodingKey { case p_household_id, p_card_id, p_account_id }
     }
     private struct ReviewBody: Encodable, Sendable {
         let p_household_id: UUID; let p_capture_id: UUID; let p_transaction: Transaction
@@ -243,11 +254,23 @@ final class CloudSync: ObservableObject {
     private func loadLists(_ id: UUID) async throws {
         let tokens: [CloudPhoneToken] = try await rpc("mora_list_phone_tokens", HouseholdBody(p_household_id: id))
         if phoneTokens != tokens { phoneTokens = tokens }
+        try await loadWalletCards(id)
         _ = try await loadPending(id)
+    }
+    /// Cards need the Wallet cards migration; an older server simply has none.
+    private func loadWalletCards(_ id: UUID) async throws {
+        do {
+            let cards: [CloudWalletCard] = try await rpc("mora_list_wallet_cards", HouseholdBody(p_household_id: id))
+            if walletCards != cards { walletCards = cards }
+        } catch CloudAPIError.response(let code, _) where code == 404 {
+            if !walletCards.isEmpty { walletCards = [] }
+        }
     }
     @discardableResult
     private func loadPending(_ id: UUID) async throws -> Bool {
         let captures: [CloudCapture] = try await rpc("mora_list_pending", HouseholdBody(p_household_id: id))
+        let knownCards = Set(walletCards.map(\.id))
+        if captures.contains(where: { $0.card_id.map { !knownCards.contains($0) } ?? false }) { try await loadWalletCards(id) }
         if let previous = stagedPending {
             stagedPending = captures
             let known = Set(store?.notifications.events.filter { $0.householdID == id }.compactMap(\.sourceID) ?? [])
@@ -539,6 +562,18 @@ final class CloudSync: ObservableObject {
             self.issuedToken = nil
         }
     }
+    /// Choose the account for a Wallet card (nil unlinks). Its waiting purchases move to
+    /// that account and complete ones are booked by the next synchronization.
+    func linkCard(_ card: UUID, account: UUID?) async {
+        await operation {
+            guard let id = self.householdID else { return }
+            let _: Int = try await self.rpc("mora_link_wallet_card", LinkCardBody(p_household_id: id, p_card_id: card, p_account_id: account))
+            try await self.loadWalletCards(id)
+            _ = try await self.loadPending(id)
+        }
+        nextAttempt = .distantPast
+        if account != nil { await synchronize(inBackground: true) }
+    }
     func resolve(_ capture: CloudCapture, account: UUID, amount: String, merchant: String, dismiss: Bool = false) async {
         await operation {
             guard let h = self.householdID else { return }
@@ -558,6 +593,11 @@ final class CloudSync: ObservableObject {
                 if reviewed.categoryID == nil && reviewed.kind != .transfer { reviewed.categoryID = local.suggestedCategory(merchant: reviewed.merchant, kind: reviewed.kind) }
                 return try WalletReviewDraft.transaction(reviewed, for: capture, in: local)
             }
+            // The first reviewed purchase of a new card also chooses that card's account.
+            // Use the latest inbox state: the card may have been linked while the form was open.
+            let current = self.pending.first { $0.id == capture.id } ?? capture
+            // The server links a new card and commits this review atomically.
+            // Another Mac must not auto-book the purchase between those steps.
             let envelope: CloudEnvelope = try await self.rpc("mora_review_capture",
                 ReviewBody(p_household_id: id, p_capture_id: capture.id, p_transaction: value))
             guard envelope.household_id == id else { throw CloudAPIError.invalidResponse }
@@ -566,6 +606,7 @@ final class CloudSync: ObservableObject {
             _ = try await BackgroundWork.shared.perform { try LedgerFile.applyCloud(envelope.snapshot, at: url, mergeAgainst: local) }
             try await self.saveCheckpoint(envelope)
             await store.reloadFromDisk()
+            if current.awaitsCardLink { try await self.loadWalletCards(id); self.nextAttempt = .distantPast }
             _ = try await self.loadPending(id)
             self.lastSync = Date()
             // The purchase is already committed; collecting history can safely retry later.
@@ -588,7 +629,7 @@ final class CloudSync: ObservableObject {
             settings?.enabled = false; settings?.householdID = nil; settings?.householdName = ""
             try await persistSettings()
             session = nil; signedIn = false; enabled = false; householdID = nil; householdName = ""
-            households = []; pending = []; phoneTokens = []; invitation = nil; issuedToken = nil; conflict = false; error = nil
+            households = []; pending = []; phoneTokens = []; walletCards = []; invitation = nil; issuedToken = nil; conflict = false; error = nil
         }
     }
 }

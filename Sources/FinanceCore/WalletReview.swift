@@ -11,6 +11,21 @@ public struct WalletReviewDraft: Sendable {
     public let date: Date
     public let accountID: UUID?
     public let tags = ["Apple Wallet"]
+    /// Wallet sometimes starts the automation before the issuer has priced the purchase
+    /// (transit and other deferred authorizations). The review form then offers the last
+    /// amount paid at the same merchant; it is never booked automatically.
+    public let suggestion: AmountSuggestion?
+    public var prefillAmount: String { amount.isEmpty ? suggestion?.amount ?? "" : amount }
+    public var prefillCurrency: String {
+        amount.isEmpty && currency == Self.unknownCurrency ? suggestion?.currency ?? currency : currency
+    }
+
+    public struct AmountSuggestion: Equatable, Sendable {
+        public let amount: String
+        public let currency: String
+        public let date: Date
+        public let merchant: String
+    }
 
     public init(capture: CloudCapture, ledger: Ledger, locale: Locale = .current, timeZone: TimeZone = .current) {
         let formatter = DateFormatter()
@@ -29,6 +44,25 @@ public struct WalletReviewDraft: Sendable {
             let code = Locale.commonISOCurrencyCodes.first { raw.hasPrefix($0) || raw.hasSuffix($0) }
             currency = code ?? (raw.contains("€") ? "EUR" : raw.contains("₽") ? "RUB" : raw.contains("$") ? "USD" : Self.unknownCurrency)
         }
+        suggestion = amount.isEmpty ? Self.lastAmount(merchant: merchant, in: ledger,
+            currency: currency == Self.unknownCurrency ? nil : currency) : nil
+    }
+
+    /// The most recent expense at the same merchant, in the currency it was actually paid.
+    public static func lastAmount(merchant: String, in ledger: Ledger, currency: String? = nil) -> AmountSuggestion? {
+        let key = MerchantName.normalized(merchant)
+        guard !key.isEmpty else { return nil }
+        let match = ledger.transactions
+            .filter {
+                let originalCurrency = $0.conversion?.originalCurrency ?? ledger.account($0.accountID)?.currency
+                return $0.kind == .expense && $0.amount < 0 && MerchantName.normalized($0.merchant) == key
+                    && (currency == nil || originalCurrency == currency)
+            }
+            .max { $0.date < $1.date }
+        guard let match else { return nil }
+        let original = match.conversion?.originalAmount ?? match.amount
+        guard let currency = match.conversion?.originalCurrency ?? ledger.account(match.accountID)?.currency, original != 0 else { return nil }
+        return AmountSuggestion(amount: Money.plain(abs(original)), currency: currency, date: match.date, merchant: match.merchant)
     }
 
     private static func automaticAmount(_ input: String) -> Decimal? {
@@ -60,6 +94,8 @@ public struct WalletReviewDraft: Sendable {
         if let existing = ledger.transactions.first(where: { $0.id == capture.id && $0.externalID == externalID }) {
             return existing
         }
+        // A new card waits for the user's account choice; it is never guessed.
+        guard !capture.awaitsCardLink else { return nil }
         let draft = WalletReviewDraft(capture: capture, ledger: ledger)
         guard let accountID = draft.accountID, let account = ledger.account(accountID),
               !draft.merchant.isEmpty, let amount = automaticAmount(capture.amount),

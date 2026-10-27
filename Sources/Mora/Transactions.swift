@@ -284,6 +284,8 @@ struct TransactionEditor: View {
     @Environment(\.dismiss) var dismiss
     var transaction: Transaction?
     private let walletCapture: CloudCapture?
+    private let amountSuggestion: WalletReviewDraft.AmountSuggestion?
+    private let newWalletCard: String?
     private let dateReference: Date
     private let rateClient: VisaRateClient
     @State private var merchant: String
@@ -323,13 +325,15 @@ struct TransactionEditor: View {
         let transaction = transaction ?? template.map { $0.similarTransaction() }
         self.walletCapture = walletCapture
         let draft = walletCapture.map { WalletReviewDraft(capture: $0, ledger: ledger ?? .empty, locale: L10n.locale) }
+        amountSuggestion = draft?.amount.isEmpty == true ? draft?.suggestion : nil
+        newWalletCard = walletCapture.flatMap { $0.awaitsCardLink ? ($0.card ?? "") : nil }
         dateReference = transaction?.date ?? draft?.date ?? Date()
-        _merchant = State(initialValue: transaction?.merchant ?? draft?.merchant ?? ""); _amount = State(initialValue: transaction.map { Money.plain(abs($0.conversion?.originalAmount ?? $0.amount)) } ?? draft?.amount ?? "")
+        _merchant = State(initialValue: transaction?.merchant ?? draft?.merchant ?? ""); _amount = State(initialValue: transaction.map { Money.plain(abs($0.conversion?.originalAmount ?? $0.amount)) } ?? draft?.prefillAmount ?? "")
         _kind = State(initialValue: transaction?.kind ?? .expense); _date = State(initialValue: dateReference)
         _accountID = State(initialValue: transaction?.accountID ?? (walletCapture == nil ? ledger?.suggestedTransactionAccountID : draft?.accountID)); _categoryID = State(initialValue: transaction?.categoryID)
         _destinationID = State(initialValue: transaction?.destinationAccountID); _destinationAmount = State(initialValue: transaction?.destinationAmount.map(Money.plain) ?? "")
         _note = State(initialValue: transaction?.note ?? draft?.note ?? ""); _tags = State(initialValue: transaction?.tags.joined(separator: ", ") ?? draft?.tags.joined(separator: ", ") ?? "")
-        let initialCurrency = transaction?.conversion?.originalCurrency ?? draft?.currency ?? ""
+        let initialCurrency = transaction?.conversion?.originalCurrency ?? draft?.prefillCurrency ?? ""
         _currency = State(initialValue: initialCurrency == WalletReviewDraft.unknownCurrency ? "" : initialCurrency)
     }
     private var account: Account? { accountID.flatMap { store.ledger.account($0) } }
@@ -382,6 +386,18 @@ struct TransactionEditor: View {
         ModalFrame(title: walletCapture != nil ? L("Проверить покупку") : transaction == nil ? L("Новая операция") : L("Редактировать операцию"), canSave: !saving && (walletCapture == nil || !cloud.busy), save: save) {
             VStack(alignment: .leading, spacing: 18) {
                 if store.ledger.accounts.isEmpty { Text(L("Сначала добавьте счет в разделе «Счета».")).foregroundStyle(.orange) }
+                if let card = newWalletCard {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L("Новая карта: \(card.isEmpty ? L("без названия") : card)")).font(.callout.weight(.semibold))
+                            Text(L("Выбранный счет запомнится для этой карты. Следующие покупки ею будут записываться туда автоматически.")).font(.caption).foregroundStyle(.secondary)
+                        }
+                    } icon: { Image(systemName: "creditcard").foregroundStyle(Color.moraGreen) }
+                }
+                if let suggestion = amountSuggestion {
+                    Label(L("Wallet не передал сумму. Подставлена сумма прошлой покупки «\(suggestion.merchant)» от \(suggestion.date.formatted(date: .abbreviated, time: .omitted)). Проверьте ее."),
+                          systemImage: "clock.arrow.circlepath").font(.caption).foregroundStyle(.orange)
+                }
                 Form {
                     LabeledContent(kind == .transfer && !standaloneTransfer ? L("Со счета") : L("Счет")) {
                         Picker(L("Счет"), selection: $accountID) { Text(L("Выберите счет")).tag(Optional<UUID>.none); ForEach(store.ledger.accounts.filter { !$0.archived || $0.id == transaction?.accountID }) { Text($0.name + " · " + $0.currency).tag(Optional($0.id)) } }

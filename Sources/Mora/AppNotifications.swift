@@ -172,18 +172,20 @@ final class AppNotifications: ObservableObject {
             }
         }
         for capture in captures {
+            let source = [capture.label, capture.card].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · ")
             let detail = [capture.merchant.isEmpty ? L("Продавец не получен") : capture.merchant,
-                          "\(capture.amount) \(capture.currency) · \(capture.label)",
+                          "\(capture.amount) \(capture.currency) · \(source)",
                           L(capture.reason ?? "Проверьте покупку")].joined(separator: "\n")
+            let message = capture.awaitsCardLink ? L("Новая карта в Wallet: выберите счет") : L("Покупка из Wallet ожидает обработки")
             if let index = next.firstIndex(where: { $0.sourceID == capture.id && $0.householdID == householdID }) {
-                if next[index].message != L("Покупка из Wallet ожидает обработки") || next[index].detail != detail || next[index].isResolved {
-                    next[index].message = L("Покупка из Wallet ожидает обработки")
+                if next[index].message != message || next[index].detail != detail || next[index].isResolved {
+                    next[index].message = message
                     next[index].detail = detail
                     next[index].isResolved = false
                     next[index].isRead = false
                 }
             } else {
-                let event = AppNotification(message: L("Покупка из Wallet ожидает обработки"), detail: detail,
+                let event = AppNotification(message: message, detail: detail,
                                             kind: .review, actions: [.review(capture.id)], sourceID: capture.id,
                                             householdID: householdID)
                 next.insert(event, at: 0)

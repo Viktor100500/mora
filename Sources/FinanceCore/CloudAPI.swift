@@ -71,6 +71,23 @@ public struct CloudCapture: Codable, Identifiable, Equatable, Sendable {
     public let date: Date
     public let reason: String?
     public let label: String
+    /// The Wallet trigger's "Card or Pass" text, when the iPhone sender passed it.
+    public var card: String? = nil
+    public var card_id: UUID? = nil
+    public var card_linked: Bool? = nil
+    /// A purchase from a card that has no account yet waits for the user's choice.
+    public var awaitsCardLink: Bool { card_id != nil && card_linked != true }
+}
+/// A Wallet card seen by one phone key. `account_id == nil` means it is not linked yet.
+public struct CloudWalletCard: Codable, Identifiable, Equatable, Sendable {
+    public let id: UUID
+    public let card: String
+    public let account_id: UUID?
+    public let token_id: UUID
+    public let label: String
+    public let default_account_id: UUID
+    public let last_seen: Date?
+    public let pending_count: Int
 }
 
 public enum CloudAPIError: LocalizedError, Sendable {
