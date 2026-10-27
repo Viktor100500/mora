@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "Mora",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v14), .iOS(.v17)],
     products: [.executable(name: "Mora", targets: ["Mora"]), .executable(name: "MoraBridge", targets: ["MoraBridge"]), .library(name: "FinanceCore", targets: ["FinanceCore"])],
     targets: [
         .target(name: "FinanceCore", resources: [.copy("Resources/Localization"), .copy("Resources/MerchantAliases.json"), .copy("Resources/MerchantPlaces.deflate"), .copy("Resources/PlacesAttribution.txt")]),

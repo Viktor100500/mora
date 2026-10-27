@@ -13,7 +13,14 @@ public final class UILocalization: @unchecked Sendable {
     private let templates: [(regex: NSRegularExpression, english: String)]
     private var cache: [String: String] = [:]
     private let lock = NSLock()
-    public init(applicationResourcesURL: URL? = Bundle.main.resourceURL) {
+    public convenience init(applicationResourcesURL: URL? = Bundle.main.resourceURL) {
+        self.init(exact: Self.bundledTranslations(applicationResourcesURL))
+    }
+    /// Shared translations plus strings that exist only in another app's interface.
+    public convenience init(applicationResourcesURL: URL? = Bundle.main.resourceURL, supplement: [String: String]) {
+        self.init(exact: Self.bundledTranslations(applicationResourcesURL).merging(supplement) { $1 })
+    }
+    private static func bundledTranslations(_ applicationResourcesURL: URL?) -> [String: String] {
         // SwiftPM's generated accessor looks beside the executable and in its
         // build directory. A distributed macOS app keeps resources in Contents/Resources.
         let executableResources = Bundle.main.executableURL?.deletingLastPathComponent()
@@ -23,7 +30,10 @@ public final class UILocalization: @unchecked Sendable {
         }.first ?? Bundle.module
         let data = resourceBundle.url(forResource: "en", withExtension: "json", subdirectory: "Localization")
             .flatMap { try? Data(contentsOf: $0) }
-        exact = data.flatMap { try? JSONDecoder().decode([String: String].self, from: $0) } ?? [:]
+        return data.flatMap { try? JSONDecoder().decode([String: String].self, from: $0) } ?? [:]
+    }
+    private init(exact: [String: String]) {
+        self.exact = exact
         templates = exact.filter { $0.key.contains("{0}") }.sorted {
             // Prefer specific sentences over broad templates such as “{0} transactions”.
             $0.key.count > $1.key.count

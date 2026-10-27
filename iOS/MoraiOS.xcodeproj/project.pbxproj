@@ -1,0 +1,630 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		085F4559E5194E9DC9816727 /* PlansScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EB3D7140356CF3382C702ED /* PlansScreens.swift */; };
+		098BA3CE366093E8E5331CDB /* Localization.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9AC73B755D7E67297AE96D1 /* Localization.swift */; };
+		0D5C6F9C0B69FE94F1926DE6 /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D3D1434CFE66D39D0B602795 /* WelcomeView.swift */; };
+		1133888B890EB3C1A8FA30F6 /* AnalyticsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B24112A18F8359DF9CB0001 /* AnalyticsScreen.swift */; };
+		129FCB8A9685F1D935FDC35E /* ChangeDescription.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3E78F6ACDBE2C140769209A /* ChangeDescription.swift */; };
+		12C5CA0ED2B9C15CC6FA43F8 /* MobileStrings.json in Resources */ = {isa = PBXBuildFile; fileRef = 263002D25366E09E01B9CF43 /* MobileStrings.json */; };
+		35873C37AADE829EA8F0AA59 /* FinanceCore in Frameworks */ = {isa = PBXBuildFile; productRef = 261299B9EF33104DB0E57FE7 /* FinanceCore */; };
+		432494E72479380325F37A61 /* FinanceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2416F36C6721CE96EB36684 /* FinanceStore.swift */; };
+		47DF943863B3B7E04EFFE1BA /* CloudSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F6A6EC2D5631B2FD2C571AD /* CloudSync.swift */; };
+		5AE34127A645E0401C5747E3 /* Privacy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EDE0057776581121FB80FCE /* Privacy.swift */; };
+		5BBED0ADBF01093A70E94AD4 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B8D07C72F2ADAD285B72897 /* RootView.swift */; };
+		5FC30B7EB94BBB5B7C508FD5 /* MoreScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B73290723DB39F73BF342AFD /* MoreScreen.swift */; };
+		60096CF674B3199D24AB1AB5 /* MoraApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F4E44FD82A4CF0B2F08C570 /* MoraApp.swift */; };
+		6516965CD47DAF731ACE56E3 /* LedgerRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5681EBC601A1218085F1AC1A /* LedgerRepository.swift */; };
+		66937E5EF2D39C492F4E49D9 /* Files.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82E5A0638F195085193DE6F5 /* Files.swift */; };
+		7A0FAC2A8A759AA6E0522800 /* OverviewScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6376376D9EC5F6E8AE7DFB56 /* OverviewScreen.swift */; };
+		7E0492BAFA581CDC5F053656 /* AccountsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0A2F4EF48693450012E079 /* AccountsScreen.swift */; };
+		8948AAA8431B51D6BAB4196B /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E05AB6AF2B45D97DA131D38 /* SettingsScreen.swift */; };
+		8B6894C18A118F40390C1F08 /* TransactionsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF18FC467A335C0717CE8A3B /* TransactionsScreen.swift */; };
+		93EFDDAE568584166D654CE1 /* FinanceStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0318B2C398473B18013456E /* FinanceStoreTests.swift */; };
+		A3D9EB13A2AB05BEA95256C1 /* CloudScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85BFEB921FC926A84CB68715 /* CloudScreen.swift */; };
+		AEE49357E8A3A6C9EE9AAE83 /* TransactionEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1CED08EE69D8287C08552F /* TransactionEditor.swift */; };
+		C1ACF4FB85C7D4AC8437A0B0 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7EABC9B8C57126A5C9087F8 /* Components.swift */; };
+		CC257AB75FA52B7F53DC6CAB /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0F407065AB8FA06ADF586CC7 /* InfoPlist.strings */; };
+		D0FF25F050A0E85A5510A5ED /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9ABBD1E8E150D6529D1A8D84 /* Assets.xcassets */; };
+		D83EF4C0E53A8CDF4D3861E9 /* ReportCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14EC5F098BA136755B3F0442 /* ReportCache.swift */; };
+		E2527261C36FAE22159C7811 /* ImportScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = F65900D0DE8EB82F68603C47 /* ImportScreens.swift */; };
+		EE55AA1EA36D48FFC1AC6E74 /* LocalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B496B3B0EE4A5574647F3A61 /* LocalizationTests.swift */; };
+		F5B39C87B5B6C70718F3B778 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA8A1CFFB3223DBA4B5EC2EF /* Theme.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A5CB87052B8C7B734A3A4252 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 59A076F63398180725E4763C /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 8A23A3F2FEF5B62F7714917E;
+			remoteInfo = MoraiOS;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		14EC5F098BA136755B3F0442 /* ReportCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportCache.swift; sourceTree = "<group>"; };
+		263002D25366E09E01B9CF43 /* MobileStrings.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = MobileStrings.json; sourceTree = "<group>"; };
+		2B8D07C72F2ADAD285B72897 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		4C64ADB3C448D67004348947 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		4EB3D7140356CF3382C702ED /* PlansScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlansScreens.swift; sourceTree = "<group>"; };
+		5681EBC601A1218085F1AC1A /* LedgerRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LedgerRepository.swift; path = ../Sources/Mora/LedgerRepository.swift; sourceTree = "<group>"; };
+		6376376D9EC5F6E8AE7DFB56 /* OverviewScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverviewScreen.swift; sourceTree = "<group>"; };
+		673982E053F10FF262CF1BF0 /* MoraiOS.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = MoraiOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6A1CED08EE69D8287C08552F /* TransactionEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionEditor.swift; sourceTree = "<group>"; };
+		6F4E44FD82A4CF0B2F08C570 /* MoraApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoraApp.swift; sourceTree = "<group>"; };
+		7B24112A18F8359DF9CB0001 /* AnalyticsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsScreen.swift; sourceTree = "<group>"; };
+		7E05AB6AF2B45D97DA131D38 /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
+		7E19C5DC0D52A24B7BC428CB /* ru */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ru; path = ru.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		7F6A6EC2D5631B2FD2C571AD /* CloudSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSync.swift; sourceTree = "<group>"; };
+		82E5A0638F195085193DE6F5 /* Files.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Files.swift; sourceTree = "<group>"; };
+		85BFEB921FC926A84CB68715 /* CloudScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudScreen.swift; sourceTree = "<group>"; };
+		99498B2673D2067EFC542157 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		9ABBD1E8E150D6529D1A8D84 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		9EDE0057776581121FB80FCE /* Privacy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Privacy.swift; sourceTree = "<group>"; };
+		A4268DBCDBF2D3C22A9524B9 /* MoraiOSTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MoraiOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AF0A2F4EF48693450012E079 /* AccountsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountsScreen.swift; sourceTree = "<group>"; };
+		B496B3B0EE4A5574647F3A61 /* LocalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationTests.swift; sourceTree = "<group>"; };
+		B73290723DB39F73BF342AFD /* MoreScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreScreen.swift; sourceTree = "<group>"; };
+		BA8A1CFFB3223DBA4B5EC2EF /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		BF18FC467A335C0717CE8A3B /* TransactionsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionsScreen.swift; sourceTree = "<group>"; };
+		C0318B2C398473B18013456E /* FinanceStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinanceStoreTests.swift; sourceTree = "<group>"; };
+		C7EABC9B8C57126A5C9087F8 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
+		D3D1434CFE66D39D0B602795 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
+		E91EAABA36757BE5E8763162 /* FinanceApp */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FinanceApp; path = ..; sourceTree = SOURCE_ROOT; };
+		F2416F36C6721CE96EB36684 /* FinanceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinanceStore.swift; sourceTree = "<group>"; };
+		F3E78F6ACDBE2C140769209A /* ChangeDescription.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ChangeDescription.swift; path = ../Sources/Mora/ChangeDescription.swift; sourceTree = "<group>"; };
+		F65900D0DE8EB82F68603C47 /* ImportScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportScreens.swift; sourceTree = "<group>"; };
+		F9AC73B755D7E67297AE96D1 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		0F54B1E727409D9564AD28D7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				35873C37AADE829EA8F0AA59 /* FinanceCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		06B33ECE88E25CA0E6731713 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				6F4E44FD82A4CF0B2F08C570 /* MoraApp.swift */,
+				2B8D07C72F2ADAD285B72897 /* RootView.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+		2E7D4C892AB9C7D4CA7060EB /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				9ABBD1E8E150D6529D1A8D84 /* Assets.xcassets */,
+				263002D25366E09E01B9CF43 /* MobileStrings.json */,
+				0F407065AB8FA06ADF586CC7 /* InfoPlist.strings */,
+			);
+			path = Resources;
+			sourceTree = "<group>";
+		};
+		301CBED7D7E456976A96DC65 /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				82E5A0638F195085193DE6F5 /* Files.swift */,
+				F9AC73B755D7E67297AE96D1 /* Localization.swift */,
+				9EDE0057776581121FB80FCE /* Privacy.swift */,
+				BA8A1CFFB3223DBA4B5EC2EF /* Theme.swift */,
+			);
+			path = Support;
+			sourceTree = "<group>";
+		};
+		4258304EE895216499B056A2 /* Shared */ = {
+			isa = PBXGroup;
+			children = (
+				F3E78F6ACDBE2C140769209A /* ChangeDescription.swift */,
+				5681EBC601A1218085F1AC1A /* LedgerRepository.swift */,
+			);
+			name = Shared;
+			sourceTree = "<group>";
+		};
+		7B872FB881248CD652422852 /* Store */ = {
+			isa = PBXGroup;
+			children = (
+				F2416F36C6721CE96EB36684 /* FinanceStore.swift */,
+				14EC5F098BA136755B3F0442 /* ReportCache.swift */,
+			);
+			path = Store;
+			sourceTree = "<group>";
+		};
+		87C0A6DB66BAA52E413604BF /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				673982E053F10FF262CF1BF0 /* MoraiOS.app */,
+				A4268DBCDBF2D3C22A9524B9 /* MoraiOSTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		8AFD6A3C4F7C7AD386A1C37F /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				E91EAABA36757BE5E8763162 /* FinanceApp */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		A702C4F880CB268EF68A23E8 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				AF0A2F4EF48693450012E079 /* AccountsScreen.swift */,
+				7B24112A18F8359DF9CB0001 /* AnalyticsScreen.swift */,
+				C7EABC9B8C57126A5C9087F8 /* Components.swift */,
+				F65900D0DE8EB82F68603C47 /* ImportScreens.swift */,
+				B73290723DB39F73BF342AFD /* MoreScreen.swift */,
+				6376376D9EC5F6E8AE7DFB56 /* OverviewScreen.swift */,
+				4EB3D7140356CF3382C702ED /* PlansScreens.swift */,
+				7E05AB6AF2B45D97DA131D38 /* SettingsScreen.swift */,
+				6A1CED08EE69D8287C08552F /* TransactionEditor.swift */,
+				BF18FC467A335C0717CE8A3B /* TransactionsScreen.swift */,
+				D3D1434CFE66D39D0B602795 /* WelcomeView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		D959190400F712DD4E2DCA26 /* Cloud */ = {
+			isa = PBXGroup;
+			children = (
+				85BFEB921FC926A84CB68715 /* CloudScreen.swift */,
+				7F6A6EC2D5631B2FD2C571AD /* CloudSync.swift */,
+			);
+			path = Cloud;
+			sourceTree = "<group>";
+		};
+		DEE772C6E709C09FAB27D177 = {
+			isa = PBXGroup;
+			children = (
+				F34AA61C3617AC4E544A439E /* Mora */,
+				F74CDBF0C1AA9272556F6394 /* MoraTests */,
+				8AFD6A3C4F7C7AD386A1C37F /* Packages */,
+				4258304EE895216499B056A2 /* Shared */,
+				87C0A6DB66BAA52E413604BF /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		F34AA61C3617AC4E544A439E /* Mora */ = {
+			isa = PBXGroup;
+			children = (
+				99498B2673D2067EFC542157 /* Info.plist */,
+				06B33ECE88E25CA0E6731713 /* App */,
+				D959190400F712DD4E2DCA26 /* Cloud */,
+				2E7D4C892AB9C7D4CA7060EB /* Resources */,
+				7B872FB881248CD652422852 /* Store */,
+				301CBED7D7E456976A96DC65 /* Support */,
+				A702C4F880CB268EF68A23E8 /* Views */,
+			);
+			path = Mora;
+			sourceTree = "<group>";
+		};
+		F74CDBF0C1AA9272556F6394 /* MoraTests */ = {
+			isa = PBXGroup;
+			children = (
+				C0318B2C398473B18013456E /* FinanceStoreTests.swift */,
+				B496B3B0EE4A5574647F3A61 /* LocalizationTests.swift */,
+			);
+			path = MoraTests;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		28DEE8F645081B1284AC8DA5 /* MoraiOSTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = ED67C7D8FF1FDFE213AA37BD /* Build configuration list for PBXNativeTarget "MoraiOSTests" */;
+			buildPhases = (
+				94934AFA0F65027B6EF41EFD /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				0E80113216976B20AB3AF484 /* PBXTargetDependency */,
+			);
+			name = MoraiOSTests;
+			packageProductDependencies = (
+			);
+			productName = MoraiOSTests;
+			productReference = A4268DBCDBF2D3C22A9524B9 /* MoraiOSTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		8A23A3F2FEF5B62F7714917E /* MoraiOS */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FFAD9AF6B95C18002917D10A /* Build configuration list for PBXNativeTarget "MoraiOS" */;
+			buildPhases = (
+				9F157390FBF17B155922E920 /* Sources */,
+				C643BE21EDC1DF14D58D0DC7 /* Resources */,
+				0F54B1E727409D9564AD28D7 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MoraiOS;
+			packageProductDependencies = (
+				261299B9EF33104DB0E57FE7 /* FinanceCore */,
+			);
+			productName = MoraiOS;
+			productReference = 673982E053F10FF262CF1BF0 /* MoraiOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		59A076F63398180725E4763C /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					8A23A3F2FEF5B62F7714917E = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = 442D4005A20F9F2D8EA85AA5 /* Build configuration list for PBXProject "MoraiOS" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+				ru,
+			);
+			mainGroup = DEE772C6E709C09FAB27D177;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				71AF215B541558072E15A27F /* XCLocalSwiftPackageReference ".." */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 87C0A6DB66BAA52E413604BF /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				8A23A3F2FEF5B62F7714917E /* MoraiOS */,
+				28DEE8F645081B1284AC8DA5 /* MoraiOSTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		C643BE21EDC1DF14D58D0DC7 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D0FF25F050A0E85A5510A5ED /* Assets.xcassets in Resources */,
+				CC257AB75FA52B7F53DC6CAB /* InfoPlist.strings in Resources */,
+				12C5CA0ED2B9C15CC6FA43F8 /* MobileStrings.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		94934AFA0F65027B6EF41EFD /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				93EFDDAE568584166D654CE1 /* FinanceStoreTests.swift in Sources */,
+				EE55AA1EA36D48FFC1AC6E74 /* LocalizationTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9F157390FBF17B155922E920 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7E0492BAFA581CDC5F053656 /* AccountsScreen.swift in Sources */,
+				1133888B890EB3C1A8FA30F6 /* AnalyticsScreen.swift in Sources */,
+				129FCB8A9685F1D935FDC35E /* ChangeDescription.swift in Sources */,
+				A3D9EB13A2AB05BEA95256C1 /* CloudScreen.swift in Sources */,
+				47DF943863B3B7E04EFFE1BA /* CloudSync.swift in Sources */,
+				C1ACF4FB85C7D4AC8437A0B0 /* Components.swift in Sources */,
+				66937E5EF2D39C492F4E49D9 /* Files.swift in Sources */,
+				432494E72479380325F37A61 /* FinanceStore.swift in Sources */,
+				E2527261C36FAE22159C7811 /* ImportScreens.swift in Sources */,
+				6516965CD47DAF731ACE56E3 /* LedgerRepository.swift in Sources */,
+				098BA3CE366093E8E5331CDB /* Localization.swift in Sources */,
+				60096CF674B3199D24AB1AB5 /* MoraApp.swift in Sources */,
+				5FC30B7EB94BBB5B7C508FD5 /* MoreScreen.swift in Sources */,
+				7A0FAC2A8A759AA6E0522800 /* OverviewScreen.swift in Sources */,
+				085F4559E5194E9DC9816727 /* PlansScreens.swift in Sources */,
+				5AE34127A645E0401C5747E3 /* Privacy.swift in Sources */,
+				D83EF4C0E53A8CDF4D3861E9 /* ReportCache.swift in Sources */,
+				5BBED0ADBF01093A70E94AD4 /* RootView.swift in Sources */,
+				8948AAA8431B51D6BAB4196B /* SettingsScreen.swift in Sources */,
+				F5B39C87B5B6C70718F3B778 /* Theme.swift in Sources */,
+				AEE49357E8A3A6C9EE9AAE83 /* TransactionEditor.swift in Sources */,
+				8B6894C18A118F40390C1F08 /* TransactionsScreen.swift in Sources */,
+				0D5C6F9C0B69FE94F1926DE6 /* WelcomeView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		0E80113216976B20AB3AF484 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 8A23A3F2FEF5B62F7714917E /* MoraiOS */;
+			targetProxy = A5CB87052B8C7B734A3A4252 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		0F407065AB8FA06ADF586CC7 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				4C64ADB3C448D67004348947 /* en */,
+				7E19C5DC0D52A24B7BC428CB /* ru */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		3FB4659DE4B871F5C80BCD70 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mora.finance.ios.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Mora.app/Mora";
+			};
+			name = Debug;
+		};
+		76E1F54203FFDE4FA9531DEB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = Mora/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mora.finance.ios;
+				PRODUCT_MODULE_NAME = MoraiOS;
+				PRODUCT_NAME = Mora;
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		BCE30933C473708F0E64C320 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		C0081D3D561F35B344D44373 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mora.finance.ios.tests;
+				SDKROOT = iphoneos;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Mora.app/Mora";
+			};
+			name = Release;
+		};
+		D00F07EA73DCC7592C635AE0 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MARKETING_VERSION = 1.0.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		E451C69494BE0F4D4C758615 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				ENABLE_PREVIEWS = YES;
+				INFOPLIST_FILE = Mora/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.mora.finance.ios;
+				PRODUCT_MODULE_NAME = MoraiOS;
+				PRODUCT_NAME = Mora;
+				SDKROOT = iphoneos;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		442D4005A20F9F2D8EA85AA5 /* Build configuration list for PBXProject "MoraiOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D00F07EA73DCC7592C635AE0 /* Debug */,
+				BCE30933C473708F0E64C320 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		ED67C7D8FF1FDFE213AA37BD /* Build configuration list for PBXNativeTarget "MoraiOSTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3FB4659DE4B871F5C80BCD70 /* Debug */,
+				C0081D3D561F35B344D44373 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		FFAD9AF6B95C18002917D10A /* Build configuration list for PBXNativeTarget "MoraiOS" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				76E1F54203FFDE4FA9531DEB /* Debug */,
+				E451C69494BE0F4D4C758615 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		71AF215B541558072E15A27F /* XCLocalSwiftPackageReference ".." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ..;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		261299B9EF33104DB0E57FE7 /* FinanceCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = FinanceCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 59A076F63398180725E4763C /* Project object */;
+}

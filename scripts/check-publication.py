@@ -14,7 +14,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parent.parent
 PUBLIC_FILES = {'.gitignore', '.gitattributes', 'README.md', 'CHANGELOG.md', 'CONTRIBUTING.md', 'SECURITY.md', 'LICENSE', 'Package.swift'}
-PUBLIC_DIRS = {'.github', '.githooks', 'Examples', 'Prompts', 'Resources', 'Sources', 'Tests', 'cloud', 'docs', 'mcp', 'plugins', 'scripts'}
+PUBLIC_DIRS = {'.github', '.githooks', 'Examples', 'Prompts', 'Resources', 'Sources', 'Tests', 'cloud', 'docs', 'iOS', 'mcp', 'plugins', 'scripts'}
 PRIVATE_NAMES = {'ledger.json', 'notification-history.json', 'cloud-settings.json', 'cloud-checkpoint.json', 'cloud-project.json', 'MoraCloud.json', 'client-config.json', 'runtime.sh', 'mcp-http-token', '.DS_Store'}
 PRIVATE_PARTS = {'outputs', 'build', '.build', '.venv', '.swiftpm', 'node_modules', '__pycache__', 'private-notes', '.env'}
 PRIVATE_DOCS = {'cloud/VERIFICATION.md', 'docs/localization-and-navigation.md', 'docs/scrolling-regression.md'}

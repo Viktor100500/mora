@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.7 — 2026-10-27
+
+- Add Mora for iPhone (`iOS/`, iOS 17+): overview, transactions with filters and bulk actions, transaction entry with Visa conversion, analytics with a spending calendar, accounts, categories and rules, budgets, goals, recurring payments, CSV import and import history, JSON backups, undo and redo, and the shared Supabase database with the Apple Pay inbox. It reuses `FinanceCore` and the Mac ledger format; the interface language follows the iPhone.
+- Build `FinanceCore` for iOS: the Visa calculator no longer requires AppKit, and UI translations accept app-specific supplements. The Mac app's behavior is unchanged.
+
 ## 1.6.6 — 2026-10-27
 
 - Commit the first reviewed purchase and its card-to-account choice atomically, and keep historical amount suggestions in the known purchase currency.

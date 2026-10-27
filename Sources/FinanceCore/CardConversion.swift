@@ -1,6 +1,10 @@
 import Foundation
 import WebKit
+#if canImport(AppKit)
 import AppKit
+#elseif canImport(UIKit)
+import UIKit
+#endif
 
 public struct CardConversion: Codable, Equatable, Sendable {
     public var originalAmount: Decimal
@@ -180,11 +184,23 @@ private final class VisaCalculator: NSObject, WKNavigationDelegate {
         """)
     }
     func fetch(from: String, to: String, date: Date) async throws -> Decimal {
+        #if canImport(AppKit)
         _ = NSApplication.shared
+        #endif
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 1000, height: 800), configuration: configuration)
         webView.navigationDelegate = self
+        #if canImport(UIKit) && !canImport(AppKit)
+        // iOS throttles scripts in a web view outside a window. Keep the
+        // calculator in the key window, invisible and without touches.
+        webView.isUserInteractionEnabled = false
+        webView.alpha = 0.01
+        webView.frame.origin = CGPoint(x: -2000, y: 0)
+        let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
+        window?.insertSubview(webView, at: 0)
+        defer { webView.removeFromSuperview() }
+        #endif
         defer { webView.stopLoading(); webView.navigationDelegate = nil }
         webView.load(URLRequest(url: VisaRateClient.calculatorURL, timeoutInterval: 20))
         _ = try await waitFor("Boolean(get('input_amount_paid'))")
