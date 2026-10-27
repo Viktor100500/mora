@@ -62,6 +62,19 @@ public struct CloudPhoneToken: Codable, Identifiable, Equatable, Sendable {
     public let revoked: Bool
 }
 public struct CloudIssuedToken: Codable, Sendable { public let id: UUID; public let token: String }
+/// An AI agent connected to the household through the remote MCP function.
+public struct CloudAgentConnection: Codable, Identifiable, Equatable, Sendable {
+    public let id: UUID
+    public let label: String
+    public let created_at: Date
+    public let last_used_at: Date?
+}
+public extension CloudConfiguration {
+    /// The MCP address for an agent key; the key in the path is the agent's only credential.
+    func agentURL(token: String) -> URL {
+        projectURL.appendingPathComponent("functions/v1/mora-mcp").appendingPathComponent(token)
+    }
+}
 public struct CloudCapture: Codable, Identifiable, Equatable, Sendable {
     public let id: UUID
     public let merchant: String
@@ -116,6 +129,10 @@ public struct CloudAPI: Sendable {
     public func signIn(email: String, password: String) async throws -> CloudSession {
         struct Body: Encodable { let email: String; let password: String }
         return try await request("auth/v1/token?grant_type=password", body: Body(email: email, password: password), accessToken: nil)
+    }
+    /// Needs "Allow anonymous sign-ins" in the project; used by iPhones paired with a Mac.
+    public func signInAnonymously() async throws -> CloudSession {
+        try await request("auth/v1/signup", body: ["data": [String: String]()], accessToken: nil)
     }
     public func refresh(_ token: String) async throws -> CloudSession {
         try await request("auth/v1/token?grant_type=refresh_token", body: ["refresh_token": token], accessToken: nil)

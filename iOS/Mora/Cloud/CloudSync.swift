@@ -22,6 +22,9 @@ final class CloudSync: ObservableObject {
     @Published private(set) var conflict = false
     @Published var error: String?
     @Published var invitation: String?
+    @Published private(set) var agents: [CloudAgentConnection] = []
+    /// Shown once after connecting an agent: only its hash stays in the database.
+    @Published var newAgentURL: URL?
     private weak var store: FinanceStore?
     private let transport: URLSession
     private var session: CloudSession?
@@ -65,6 +68,8 @@ final class CloudSync: ObservableObject {
         }
         private enum CodingKeys: String, CodingKey { case p_household_id, p_card_id, p_account_id }
     }
+    private struct AgentBody: Encodable, Sendable { let p_household_id: UUID; let p_label: String }
+    private struct RevokeAgentBody: Encodable, Sendable { let p_token_id: UUID }
     private struct ReviewBody: Encodable, Sendable {
         let p_household_id: UUID; let p_capture_id: UUID; let p_transaction: Transaction
     }
@@ -436,6 +441,30 @@ final class CloudSync: ObservableObject {
         }
     }
 
+    // MARK: AI agents
+
+    func loadAgents() async {
+        await operation {
+            guard let id = self.householdID else { return }
+            self.agents = try await self.rpc("mora_list_agent_tokens", HouseholdBody(p_household_id: id))
+        }
+    }
+    func connectAgent(label: String) async {
+        await operation {
+            guard let id = self.householdID, let configuration = self.settings?.configuration else { return }
+            let issued: CloudIssuedToken = try await self.rpc("mora_create_agent_token", AgentBody(p_household_id: id, p_label: label))
+            self.newAgentURL = configuration.agentURL(token: issued.token)
+            self.agents = try await self.rpc("mora_list_agent_tokens", HouseholdBody(p_household_id: id))
+        }
+    }
+    func revokeAgent(_ agent: CloudAgentConnection) async {
+        await operation {
+            guard let id = self.householdID else { return }
+            let _: Bool = try await self.rpc("mora_revoke_agent_token", RevokeAgentBody(p_token_id: agent.id))
+            self.agents = try await self.rpc("mora_list_agent_tokens", HouseholdBody(p_household_id: id))
+        }
+    }
+
     // MARK: Wallet inbox
 
     func linkCard(_ card: UUID, account: UUID?) async {
@@ -503,7 +532,7 @@ final class CloudSync: ObservableObject {
             settings?.enabled = false; settings?.householdID = nil; settings?.householdName = ""
             try await persistSettings()
             session = nil; signedIn = false; enabled = false; householdID = nil; householdName = ""
-            households = []; pending = []; walletCards = []; invitation = nil; conflict = false; error = nil
+            households = []; pending = []; walletCards = []; agents = []; newAgentURL = nil; invitation = nil; conflict = false; error = nil
         }
     }
 }

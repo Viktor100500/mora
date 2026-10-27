@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.11 — 2026-10-27
+
+- Import via AI agent through the shared database: the new `agent_import` migration and the `mora-mcp` Supabase Edge Function give Claude, ChatGPT and other MCP clients a remote MCP server. `get_mora_context` reads accounts, categories and recent transactions; `add_transactions` validates every row and records new ones as one import that can be rolled back. Each connection has its own revocable key.
+- iPhone: More → Import via AI connects and disconnects agents, shows the connection address once with setup steps, and copies a ready request.
+
 ## 1.6.10 — 2026-10-27
 
 - iPhone: transaction descriptions wrap to two lines instead of being cut off.

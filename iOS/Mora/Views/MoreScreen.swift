@@ -23,6 +23,7 @@ struct MoreScreen: View {
                 }
                 Section(L("Импорт")) {
                     Button { importingCSV = true } label: { Label(L("Импортировать CSV…"), systemImage: "tablecells") }
+                    NavigationLink { AIImportScreen() } label: { Label(L("Импорт через AI"), systemImage: "sparkles") }
                     NavigationLink { ImportHistoryScreen() } label: { Label(L("История импортов"), systemImage: "clock.arrow.circlepath") }
                 }
                 Section {
@@ -52,6 +53,7 @@ struct MoreScreen: View {
                 case "categories": CategoriesScreen()
                 case "cloud": CloudScreen()
                 case "imports": ImportHistoryScreen()
+                case "ai": AIImportScreen()
                 case "budgets": BudgetsScreen()
                 case "goals": GoalsScreen()
                 default: RecurringScreen()

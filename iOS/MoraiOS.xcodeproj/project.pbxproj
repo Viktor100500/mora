@@ -20,6 +20,7 @@
 		5BBED0ADBF01093A70E94AD4 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B8D07C72F2ADAD285B72897 /* RootView.swift */; };
 		5FC30B7EB94BBB5B7C508FD5 /* MoreScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B73290723DB39F73BF342AFD /* MoreScreen.swift */; };
 		60096CF674B3199D24AB1AB5 /* MoraApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F4E44FD82A4CF0B2F08C570 /* MoraApp.swift */; };
+		650885242DBE201F24A31FB8 /* AIImportScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45201D32ED9DE875ED483E1D /* AIImportScreen.swift */; };
 		6516965CD47DAF731ACE56E3 /* LedgerRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5681EBC601A1218085F1AC1A /* LedgerRepository.swift */; };
 		657B7726F17D4315E713C6EB /* CurrencyPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B4EB47169E11E5D33A55AF /* CurrencyPicker.swift */; };
 		66937E5EF2D39C492F4E49D9 /* Files.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82E5A0638F195085193DE6F5 /* Files.swift */; };
@@ -55,6 +56,7 @@
 		14EC5F098BA136755B3F0442 /* ReportCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportCache.swift; sourceTree = "<group>"; };
 		263002D25366E09E01B9CF43 /* MobileStrings.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = MobileStrings.json; sourceTree = "<group>"; };
 		2B8D07C72F2ADAD285B72897 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		45201D32ED9DE875ED483E1D /* AIImportScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIImportScreen.swift; sourceTree = "<group>"; };
 		4C64ADB3C448D67004348947 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		4EB3D7140356CF3382C702ED /* PlansScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlansScreens.swift; sourceTree = "<group>"; };
 		5681EBC601A1218085F1AC1A /* LedgerRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LedgerRepository.swift; path = ../Sources/Mora/LedgerRepository.swift; sourceTree = "<group>"; };
@@ -86,7 +88,7 @@
 		F3E78F6ACDBE2C140769209A /* ChangeDescription.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ChangeDescription.swift; path = ../Sources/Mora/ChangeDescription.swift; sourceTree = "<group>"; };
 		F65900D0DE8EB82F68603C47 /* ImportScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportScreens.swift; sourceTree = "<group>"; };
 		F9AC73B755D7E67297AE96D1 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
-		"TEMP_190B2E87-B7FE-48F9-BB82-6DD1C6EDD5A7" /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
+		"TEMP_E60A2727-1DA7-4B3C-A463-B600A0F9A266" /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -170,6 +172,7 @@
 			isa = PBXGroup;
 			children = (
 				AF0A2F4EF48693450012E079 /* AccountsScreen.swift */,
+				45201D32ED9DE875ED483E1D /* AIImportScreen.swift */,
 				7B24112A18F8359DF9CB0001 /* AnalyticsScreen.swift */,
 				C7EABC9B8C57126A5C9087F8 /* Components.swift */,
 				91B4EB47169E11E5D33A55AF /* CurrencyPicker.swift */,
@@ -229,10 +232,10 @@
 			path = MoraTests;
 			sourceTree = "<group>";
 		};
-		"TEMP_9BEB305E-7546-4EFE-9EF3-DAA19E303803" /* iOS */ = {
+		"TEMP_B17C7C98-981C-4EC1-A9D3-3C195C3EA562" /* iOS */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_190B2E87-B7FE-48F9-BB82-6DD1C6EDD5A7" /* Signing.xcconfig */,
+				"TEMP_E60A2727-1DA7-4B3C-A463-B600A0F9A266" /* Signing.xcconfig */,
 			);
 			path = iOS;
 			sourceTree = "<group>";
@@ -343,6 +346,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				650885242DBE201F24A31FB8 /* AIImportScreen.swift in Sources */,
 				7E0492BAFA581CDC5F053656 /* AccountsScreen.swift in Sources */,
 				1133888B890EB3C1A8FA30F6 /* AnalyticsScreen.swift in Sources */,
 				129FCB8A9685F1D935FDC35E /* ChangeDescription.swift in Sources */,
@@ -435,7 +439,7 @@
 		};
 		BCE30933C473708F0E64C320 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_190B2E87-B7FE-48F9-BB82-6DD1C6EDD5A7" /* Signing.xcconfig */;
+			baseConfigurationReference = "TEMP_E60A2727-1DA7-4B3C-A463-B600A0F9A266" /* Signing.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -468,7 +472,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -482,7 +486,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.4;
+				MARKETING_VERSION = 1.0.5;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -512,7 +516,7 @@
 		};
 		D00F07EA73DCC7592C635AE0 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_190B2E87-B7FE-48F9-BB82-6DD1C6EDD5A7" /* Signing.xcconfig */;
+			baseConfigurationReference = "TEMP_E60A2727-1DA7-4B3C-A463-B600A0F9A266" /* Signing.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -545,7 +549,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 5;
+				CURRENT_PROJECT_VERSION = 6;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -565,7 +569,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.4;
+				MARKETING_VERSION = 1.0.5;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

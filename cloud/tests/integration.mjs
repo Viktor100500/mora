@@ -352,6 +352,63 @@ try {
     const legacy=await capture(anon,phone2.token,uuid(),'1.00','USD','Legacy sender');
     assert.equal(withoutCard.state,'recorded'); assert.equal(withoutCard.card,null); assert.equal(legacy.state,'recorded');
   });
+  await check('AI agent keys read context and record one rollbackable import',async()=>{
+    const agent=await rpc(owner,'mora_create_agent_token',[h,'Claude']);
+    await denied(()=>rpc(outsider,'mora_create_agent_token',[h,'Other']));
+    await denied(()=>anon.query('select * from public.mora_agent_tokens'));
+    const context=await rpc(anon,'mora_agent_context',[agent.token]);
+    assert(context.accounts.some(a=>a.name==='Shared test account'));
+    assert(!JSON.stringify(context).includes(agent.token));
+    const rows=[{date:'2026-10-20',description:'Cafe latte',amount:4.5,account:'shared test account'},
+      {date:'2026-10-20',description:'Cafe latte',amount:4.5,account:'Shared test account'},
+      {date:'2026-10-21',description:'Book',amount:12,account:'Shared test account',external_id:'statement-1'}];
+    const result=await rpc(anon,'mora_agent_add_transactions',[agent.token,rows,'Statement',true]);
+    assert.equal(result.added,3,'Identical rows in one request are separate purchases');
+    assert.equal(result.transactions[0].category,'Cafe');
+    const ledger=(await rpc(owner,'mora_get_household',[h])).snapshot;
+    const batch=ledger.imports.find(b=>b.id===result.import_id.toUpperCase());
+    assert.equal(batch.source,'AI agent'); assert.equal(batch.transactions.length,3);
+    assert(ledger.transactions.filter(t=>t.importBatchID===batch.id).every(t=>t.date.endsWith('T12:00:00Z')));
+    const again=await rpc(anon,'mora_agent_add_transactions',[agent.token,[rows[0],{...rows[2],date:'2026-10-25'}],null,true]);
+    assert.equal(again.added,0); assert.equal(again.skipped_duplicates.length,2);
+    const version=(await rpc(owner,'mora_get_status',[h])).version;
+    await assert.rejects(()=>rpc(anon,'mora_agent_add_transactions',[agent.token,
+      [{date:'2026-10-26',description:'Valid',amount:1,account:'Shared test account'},{date:'2026-10-26',description:'Bad',amount:1.234,account:'Missing'}],null,true]),
+      error=>error.message.includes('row 2'));
+    assert.equal((await rpc(owner,'mora_get_status',[h])).version,version,'A rejected request records nothing');
+    // The MCP function, with PostgREST replaced by the anonymous database role.
+    const {handle}=await import('../supabase/functions/mora-mcp/index.ts');
+    const env={url:'https://example-project.supabase.co',key:'sb_publishable_test',fetch:async(url,init)=>{
+      const name=new URL(url).pathname.split('/').pop(), body=JSON.parse(init.body), names=Object.keys(body);
+      assert.equal(init.headers.apikey,'sb_publishable_test'); assert.equal(init.headers.authorization,undefined);
+      try {
+        const values=names.map(n=>body[n]!==null&&typeof body[n]==='object'?JSON.stringify(body[n]):body[n]);
+        const value=(await anon.query(`select public.${name}(${names.map((n,i)=>`${n}=>$${i+1}`).join(',')}) as value`,values)).rows[0].value;
+        return new Response(JSON.stringify(value));
+      } catch (error) { return new Response(JSON.stringify({message:error.message,code:error.code}),{status:400}); }
+    }};
+    const mcp=async(message,token=agent.token)=>{
+      const response=await handle(new Request(`${env.url}/functions/v1/mora-mcp/${token}`,{method:'POST',body:JSON.stringify(message)}),env);
+      return response.status===200?response.json():response.status;
+    };
+    assert.equal((await mcp({jsonrpc:'2.0',id:1,method:'initialize',params:{protocolVersion:'2025-06-18'}})).result.protocolVersion,'2025-06-18');
+    assert.equal(await mcp({jsonrpc:'2.0',method:'notifications/initialized'}),202);
+    assert.deepEqual((await mcp({jsonrpc:'2.0',id:2,method:'tools/list'})).result.tools.map(t=>t.name),['get_mora_context','add_transactions']);
+    assert.equal(await mcp({jsonrpc:'2.0',id:3,method:'tools/list'},'not-a-key'),404);
+    const read=(await mcp({jsonrpc:'2.0',id:4,method:'tools/call',params:{name:'get_mora_context',arguments:{}}})).result;
+    assert(read.structuredContent.recent_transactions.some(t=>t.description==='Book'));
+    const write=(await mcp({jsonrpc:'2.0',id:5,method:'tools/call',params:{name:'add_transactions',
+      arguments:{source:'MCP check',transactions:[{date:'2026-10-27',description:'Salary',amount:500,kind:'income',account:'Shared test account'}]}}})).result;
+    assert.equal(write.isError,undefined); assert.equal(write.structuredContent.added,1);
+    const invalid=(await mcp({jsonrpc:'2.0',id:6,method:'tools/call',params:{name:'add_transactions',
+      arguments:{transactions:[{date:'2026-10-27',description:'X',amount:1,account:'Missing'}]}}})).result;
+    assert.equal(invalid.isError,true); assert(invalid.content[0].text.includes('row 1'));
+    assert.equal(await rpc(member,'mora_revoke_agent_token',[agent.id]),true);
+    await denied(()=>rpc(anon,'mora_agent_context',[agent.token]));
+    assert.deepEqual(await rpc(owner,'mora_list_agent_tokens',[h]),[]);
+    const revoked=(await mcp({jsonrpc:'2.0',id:7,method:'tools/call',params:{name:'get_mora_context',arguments:{}}})).result;
+    assert.equal(revoked.isError,true); assert(revoked.content[0].text.includes('revoked'));
+  });
   assert(saved.includes('-123456789012.123456'));
   await fs.mkdir(path.join(here,'fixtures'),{recursive:true});
   await fs.writeFile(path.join(here,'fixtures/backend-ledger.json'),saved+'\n');
