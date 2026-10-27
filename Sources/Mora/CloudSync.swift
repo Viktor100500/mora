@@ -546,6 +546,19 @@ final class CloudSync: ObservableObject {
             self.invitation = try await self.rpc("mora_create_invitation", HouseholdBody(p_household_id: id))
         }
     }
+    /// A one-time invitation for an iPhone the user approved on this Mac.
+    /// It replaces any code shown for another participant, as a new code always does.
+    func pairingInvitation() async -> PairingInvitation? {
+        var result: PairingInvitation?
+        await operation {
+            guard let id = self.householdID, let configuration = self.settings?.configuration else { return }
+            let code: String = try await self.rpc("mora_create_invitation", HouseholdBody(p_household_id: id))
+            self.invitation = nil
+            result = PairingInvitation(projectURL: configuration.projectURL, publicKey: configuration.publicKey,
+                                       invitation: code, householdName: self.householdName)
+        }
+        return result
+    }
     func issueToken(account: UUID, label: String) async {
         await operation {
             guard let id = self.householdID else { return }

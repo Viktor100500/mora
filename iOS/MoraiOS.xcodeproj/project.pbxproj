@@ -24,6 +24,7 @@
 		6516965CD47DAF731ACE56E3 /* LedgerRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5681EBC601A1218085F1AC1A /* LedgerRepository.swift */; };
 		657B7726F17D4315E713C6EB /* CurrencyPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B4EB47169E11E5D33A55AF /* CurrencyPicker.swift */; };
 		66937E5EF2D39C492F4E49D9 /* Files.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82E5A0638F195085193DE6F5 /* Files.swift */; };
+		6AA9F4CD6F747F8773393FA8 /* MacPairing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06283B4C7D9BC7737F298289 /* MacPairing.swift */; };
 		7A0FAC2A8A759AA6E0522800 /* OverviewScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6376376D9EC5F6E8AE7DFB56 /* OverviewScreen.swift */; };
 		7E0492BAFA581CDC5F053656 /* AccountsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0A2F4EF48693450012E079 /* AccountsScreen.swift */; };
 		8948AAA8431B51D6BAB4196B /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E05AB6AF2B45D97DA131D38 /* SettingsScreen.swift */; };
@@ -53,6 +54,7 @@
 
 /* Begin PBXFileReference section */
 		05D35A85A2341ED366AA546D /* SupportSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportSection.swift; sourceTree = "<group>"; };
+		06283B4C7D9BC7737F298289 /* MacPairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacPairing.swift; sourceTree = "<group>"; };
 		14EC5F098BA136755B3F0442 /* ReportCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportCache.swift; sourceTree = "<group>"; };
 		263002D25366E09E01B9CF43 /* MobileStrings.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = MobileStrings.json; sourceTree = "<group>"; };
 		2B8D07C72F2ADAD285B72897 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -88,7 +90,7 @@
 		F3E78F6ACDBE2C140769209A /* ChangeDescription.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ChangeDescription.swift; path = ../Sources/Mora/ChangeDescription.swift; sourceTree = "<group>"; };
 		F65900D0DE8EB82F68603C47 /* ImportScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportScreens.swift; sourceTree = "<group>"; };
 		F9AC73B755D7E67297AE96D1 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
-		"TEMP_E60A2727-1DA7-4B3C-A463-B600A0F9A266" /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
+		"TEMP_92644381-1EBD-4B56-9F9D-2B9D4929E4B2" /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -194,6 +196,7 @@
 			children = (
 				85BFEB921FC926A84CB68715 /* CloudScreen.swift */,
 				7F6A6EC2D5631B2FD2C571AD /* CloudSync.swift */,
+				06283B4C7D9BC7737F298289 /* MacPairing.swift */,
 			);
 			path = Cloud;
 			sourceTree = "<group>";
@@ -232,10 +235,10 @@
 			path = MoraTests;
 			sourceTree = "<group>";
 		};
-		"TEMP_B17C7C98-981C-4EC1-A9D3-3C195C3EA562" /* iOS */ = {
+		"TEMP_A36558D7-72BC-47FD-8D69-62543294D41F" /* iOS */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_E60A2727-1DA7-4B3C-A463-B600A0F9A266" /* Signing.xcconfig */,
+				"TEMP_92644381-1EBD-4B56-9F9D-2B9D4929E4B2" /* Signing.xcconfig */,
 			);
 			path = iOS;
 			sourceTree = "<group>";
@@ -359,6 +362,7 @@
 				E2527261C36FAE22159C7811 /* ImportScreens.swift in Sources */,
 				6516965CD47DAF731ACE56E3 /* LedgerRepository.swift in Sources */,
 				098BA3CE366093E8E5331CDB /* Localization.swift in Sources */,
+				6AA9F4CD6F747F8773393FA8 /* MacPairing.swift in Sources */,
 				60096CF674B3199D24AB1AB5 /* MoraApp.swift in Sources */,
 				5FC30B7EB94BBB5B7C508FD5 /* MoreScreen.swift in Sources */,
 				7A0FAC2A8A759AA6E0522800 /* OverviewScreen.swift in Sources */,
@@ -439,7 +443,7 @@
 		};
 		BCE30933C473708F0E64C320 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_E60A2727-1DA7-4B3C-A463-B600A0F9A266" /* Signing.xcconfig */;
+			baseConfigurationReference = "TEMP_92644381-1EBD-4B56-9F9D-2B9D4929E4B2" /* Signing.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -472,7 +476,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -486,7 +490,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.5;
+				MARKETING_VERSION = 1.0.6;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -516,7 +520,7 @@
 		};
 		D00F07EA73DCC7592C635AE0 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_E60A2727-1DA7-4B3C-A463-B600A0F9A266" /* Signing.xcconfig */;
+			baseConfigurationReference = "TEMP_92644381-1EBD-4B56-9F9D-2B9D4929E4B2" /* Signing.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -549,7 +553,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 6;
+				CURRENT_PROJECT_VERSION = 7;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -569,7 +573,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.5;
+				MARKETING_VERSION = 1.0.6;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

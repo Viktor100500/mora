@@ -13,6 +13,7 @@ struct CloudScreen: View {
     @State private var newHousehold = ""
     @State private var confirmOpen: CloudHousehold?
     @State private var confirmDisconnect = false
+    @State private var pairingMac = false
 
     var body: some View {
         Form {
@@ -25,8 +26,10 @@ struct CloudScreen: View {
                     Button(L("Начать свой учет")) { router.open(.welcome) }
                 }
             } else if !cloud.signedIn {
+                pairSection
                 signInSection
             } else if cloud.householdID == nil {
+                pairSection
                 chooseHousehold
             } else {
                 connected
@@ -44,7 +47,10 @@ struct CloudScreen: View {
             if url.isEmpty { url = cloud.projectURL }
             if key.isEmpty { key = cloud.publicKey }
             if email.isEmpty { email = cloud.email }
+            prefill(cloud.pairingPrefill)
         }
+        .onChange(of: cloud.pairingPrefill) { _, value in prefill(value) }
+        .sheet(isPresented: $pairingMac) { MacPairingSheet() }
         .confirmationDialog(L("Открыть общую базу «\(confirmOpen?.name ?? "")»?"), isPresented: Binding(get: { confirmOpen != nil }, set: { if !$0 { confirmOpen = nil } }), titleVisibility: .visible) {
             if let household = confirmOpen {
                 Button(L("Заменить данные iPhone")) { Task { await cloud.openHousehold(household.id); confirmOpen = nil } }
@@ -53,6 +59,20 @@ struct CloudScreen: View {
         .confirmationDialog(L("Отключить общую базу?"), isPresented: $confirmDisconnect, titleVisibility: .visible) {
             Button(L("Отключить"), role: .destructive) { Task { await cloud.disconnect() } }
         } message: { Text(L("Локальная копия на iPhone сохранится. Сессия будет удалена из Связки ключей.")) }
+    }
+
+    private var pairSection: some View {
+        Section {
+            Button { pairingMac = true } label: { Label(L("Подключиться к Mac"), systemImage: "laptopcomputer.and.iphone") }
+        } footer: {
+            Text(L("Mac рядом покажет запрос и код. После подтверждения iPhone подключится к общей базе сам — ничего вводить не нужно."))
+        }
+    }
+
+    /// A Mac's invitation for a project that requires a regular sign-in.
+    private func prefill(_ invitation: PairingInvitation?) {
+        guard let invitation else { return }
+        url = invitation.projectURL.absoluteString; key = invitation.publicKey; joinCode = invitation.invitation
     }
 
     private var signInSection: some View {
@@ -91,7 +111,7 @@ struct CloudScreen: View {
     @ViewBuilder private var connected: some View {
         Section {
             LabeledContent(L("Общая база"), value: cloud.householdName)
-            LabeledContent(L("Пользователь"), value: cloud.email)
+            LabeledContent(L("Пользователь"), value: cloud.email.isEmpty ? L("iPhone, подключенный через Mac") : cloud.email)
             LabeledContent(L("Синхронизация")) {
                 if let date = cloud.lastSync { Text(date.formatted(.relative(presentation: .named).locale(L10n.locale))) } else { Text("—") }
             }

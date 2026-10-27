@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.12 — 2026-10-27
+
+- Connect an iPhone to the shared database like AirDrop: on the iPhone choose Shared database → Connect to Mac, check that the Mac shows the same six-digit code and click Allow. Over an encrypted local channel (Bonjour, X25519 with a key commitment, ChaChaPoly) the Mac sends the project address, publishable key and a one-time invitation; the iPhone signs in anonymously and opens the household with nothing typed. Without anonymous sign-ins the iPhone's sign-in form is prefilled instead.
+
 ## 1.6.11 — 2026-10-27
 
 - Import via AI agent through the shared database: the new `agent_import` migration and the `mora-mcp` Supabase Edge Function give Claude, ChatGPT and other MCP clients a remote MCP server. `get_mora_context` reads accounts, categories and recent transactions; `add_transactions` validates every row and records new ones as one import that can be rolled back. Each connection has its own revocable key.

@@ -185,6 +185,10 @@ struct CloudSettingsView: View {
                     Text("Передайте код участнику лично. Он дает доступ ко всем данным этой базы. Новый код отменяет предыдущий.").font(.caption).foregroundStyle(.secondary)
                 }
                 Text("На втором Mac: войдите отдельным пользователем того же проекта и выберите «Подключиться по коду». Общий Apple Account не требуется.").font(.caption).foregroundStyle(.secondary)
+                Divider()
+                Label(L("iPhone подключается без ввода: в Mora на iPhone откройте «Общая база» → «Подключиться к Mac». Этот Mac покажет запрос с кодом — сверьте его с iPhone и нажмите «Разрешить»."), systemImage: "iphone.radiowaves.left.and.right")
+                    .font(.callout)
+                Text(L("iPhone должен быть рядом или в той же сети Wi‑Fi, а Mora на Mac — открыта. В проекте Supabase включите Authentication → Sign In / Providers → «Allow anonymous sign-ins»; иначе iPhone попросит войти, но адрес, ключ и код подставит сам.")).font(.caption).foregroundStyle(.secondary)
             }
         }
     }

@@ -7,13 +7,15 @@
     <key>CFBundleIdentifier</key><string>com.mora.finance.local</string>
     <key>CFBundleExecutable</key><string>Mora</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>1.6.11</string>
-    <key>CFBundleVersion</key><string>48</string>
+    <key>CFBundleShortVersionString</key><string>1.6.12</string>
+    <key>CFBundleVersion</key><string>49</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSApplicationCategoryType</key><string>public.app-category.finance</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSPrincipalClass</key><string>NSApplication</string>
+    <key>NSLocalNetworkUsageDescription</key><string>Mora показывает iPhone рядом, которые просят подключиться к общей базе этого Mac.</string>
+    <key>NSBonjourServices</key><array><string>_mora-pair._tcp</string></array>
     <key>CFBundleDevelopmentRegion</key><string>ru</string>
     <key>CFBundleLocalizations</key><array><string>ru</string><string>en</string></array>
     <key>CFBundleDocumentTypes</key>

@@ -1,1 +1,2 @@
 "CFBundleDisplayName" = "Mora";
+"NSLocalNetworkUsageDescription" = "Mora finds your Mac nearby to connect to the shared database.";

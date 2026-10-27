@@ -22,6 +22,8 @@ final class CloudSync: ObservableObject {
     @Published private(set) var conflict = false
     @Published var error: String?
     @Published var invitation: String?
+    /// What a Mac sent when the project does not allow signing in without a password.
+    @Published var pairingPrefill: PairingInvitation?
     @Published private(set) var agents: [CloudAgentConnection] = []
     /// Shown once after connecting an agent: only its hash stays in the database.
     @Published var newAgentURL: URL?
@@ -286,6 +288,36 @@ final class CloudSync: ObservableObject {
             try await self.adopt(envelope)
             try await self.loadLists(envelope.household_id)
         }
+    }
+    /// Joins the household a nearby Mac approved, signing in anonymously unless
+    /// this iPhone is already signed in to that project. Returns false when the
+    /// project needs a regular sign-in; the form is then prefilled with `pairingPrefill`.
+    func connect(_ pairing: PairingInvitation) async -> Bool {
+        var joined = false
+        await operation {
+            _ = try await self.diskLedger()
+            let configuration = try pairing.configuration()
+            if self.householdID != nil { throw LedgerError.invalid("Сначала отключите текущую общую базу.") }
+            if !(self.signedIn && self.settings?.configuration == configuration) {
+                let value: CloudSession
+                do { value = try await CloudAPI(configuration: configuration, transport: self.transport).signInAnonymously() }
+                catch CloudAPIError.response(let code, _) where [400, 403, 422].contains(code) {
+                    self.pairingPrefill = pairing
+                    throw LedgerError.invalid("В проекте Supabase выключен анонимный вход. Войдите своим пользователем — адрес, ключ и код приглашения уже подставлены.")
+                }
+                try await self.persistSession(value)
+                self.settings = Settings(configuration: configuration, email: value.user.email ?? "", userID: value.user.id,
+                                         householdID: nil, householdName: "", enabled: false)
+                self.configured = true; self.email = value.user.email ?? ""
+                try await self.persistSettings()
+            }
+            let envelope: CloudEnvelope = try await self.rpc("mora_join_household", ["p_code": pairing.invitation])
+            try await self.adopt(envelope)
+            try await self.loadLists(envelope.household_id)
+            self.pairingPrefill = nil
+            joined = true
+        }
+        return joined
     }
     func openHousehold(_ id: UUID) async {
         await operation {

@@ -8,6 +8,7 @@ struct MoraApp: App {
     @StateObject private var store = FinanceStore()
     @StateObject private var cloud = CloudSync()
     @StateObject private var categorizer = MerchantCategorizer()
+    @StateObject private var pairing = PairingServer()
     @Environment(\.openWindow) private var openWindow
     @FocusedValue(\.exportFilteredTransactions) private var exportFilteredTransactions
     @AppStorage("mora.language") private var language = "ru"
@@ -16,6 +17,7 @@ struct MoraApp: App {
     var body: some Scene {
         Window("Mora", id: "main") {
             ContentView(page: $page, sheet: $sheet).environmentObject(store).environmentObject(cloud).environmentObject(categorizer)
+                .modifier(PairingPrompt(pairing: pairing, cloud: cloud))
                 .tint(.moraGreen)
                 .environment(\.locale, L10n.locale)
                 .preferredColorScheme(store.ledger.preferences.appearance == "light" ? .light : store.ledger.preferences.appearance == "dark" ? .dark : nil)

@@ -1,1 +1,2 @@
 "CFBundleDisplayName" = "Mora";
+"NSLocalNetworkUsageDescription" = "Mora находит Mac рядом, чтобы подключить iPhone к общей базе.";

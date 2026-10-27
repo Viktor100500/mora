@@ -15,8 +15,8 @@ configFiles:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "1.0.5"
-    CURRENT_PROJECT_VERSION: "6"
+    MARKETING_VERSION: "1.0.6"
+    CURRENT_PROJECT_VERSION: "7"
     DEAD_CODE_STRIPPING: YES
 targets:
   MoraiOS:
@@ -43,6 +43,8 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.finance
         ITSAppUsesNonExemptEncryption: false
+        NSLocalNetworkUsageDescription: Mora finds your Mac nearby to connect to the shared database.
+        NSBonjourServices: [_mora-pair._tcp]
         LSSupportsOpeningDocumentsInPlace: false
         UILaunchScreen:
           UIColorName: LaunchBackground
