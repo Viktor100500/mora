@@ -60,12 +60,14 @@ struct AccountsScreen: View {
             HStack(spacing: 12) {
                 IconTile(icon: account.kind.icon, color: account.color, size: 42)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(account.name).font(.body.weight(.medium)).lineLimit(1)
-                    Text(L(account.kind.title) + " · " + account.currency).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    // The balance keeps its width; a long name wraps instead of truncating.
+                    Text(account.name).font(.body.weight(.medium)).lineLimit(2)
+                    // The balance already shows the currency.
+                    Text(L(account.kind.title)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
                 Spacer(minLength: 8)
                 FinancialText(DisplayMoney.string(store.balance(account), currency: account.currency))
-                    .font(.body.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.7)
+                    .font(.body.weight(.semibold)).lineLimit(1).fixedSize()
             }
             .opacity(account.archived ? 0.6 : 1)
         }

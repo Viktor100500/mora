@@ -12,6 +12,23 @@ public struct CategoryTotal: Identifiable, Sendable {
     public var icon: String
     public var amount: Decimal
 }
+public extension CategoryTotal {
+    /// The combined slice of small categories in charts.
+    static let otherID = UUID(uuidString: "6F746865-7200-4000-8000-000000000000")!
+}
+public extension Array where Element == CategoryTotal {
+    /// Chart slices: two or more categories below `share` of the total are
+    /// combined into one gray slice so thin sectors do not clutter the ring.
+    func groupingSmallShares(below share: Decimal = 0.05, name: String = "Другое") -> [CategoryTotal] {
+        let total = reduce(Decimal(0)) { $0 + $1.amount }
+        guard total > 0 else { return self }
+        let small = filter { $0.amount / total < share }
+        guard small.count > 1 else { return self }
+        let other = CategoryTotal(id: CategoryTotal.otherID, name: name, color: "gray", icon: "ellipsis",
+                                  amount: small.reduce(Decimal(0)) { $0 + $1.amount })
+        return filter { $0.amount / total >= share } + [other]
+    }
+}
 public struct MonthTotal: Identifiable, Sendable {
     public var id: Date { date }
     public var date: Date

@@ -35,6 +35,8 @@ struct AnalyticsScreen: View {
                             }.pickerStyle(.segmented)
                         }
                     }
+                    // Days are picked only for the "Dates" period, right below the picker.
+                    if detail == .selectedDates { calendarCard }
                     HStack(spacing: 10) {
                         MetricTile(title: L("Доходы"), value: DisplayMoney.string(report.summary.income, currency: currency), icon: "arrow.down.left", color: "green")
                         MetricTile(title: L("Расходы"), value: DisplayMoney.string(report.summary.expense, currency: currency), icon: "arrow.up.right", color: "orange")
@@ -75,8 +77,7 @@ struct AnalyticsScreen: View {
                             }
                         }
                     }
-                    calendarCard
-                    if !selectedDays.isEmpty { selectedTransactions }
+                    if detail == .selectedDates && !selectedDays.isEmpty { selectedTransactions }
                 }
                 .padding(.horizontal, 16).padding(.bottom, 24)
             }
@@ -84,7 +85,6 @@ struct AnalyticsScreen: View {
             .navigationTitle(L("Аналитика"))
             .onChange(of: router.month) { _, _ in
                 selectedDays = []
-                if detail == .selectedDates { detail = .months }
             }
         }
     }
@@ -102,7 +102,7 @@ struct AnalyticsScreen: View {
                     SectionHeading(title: "Календарь расходов", subtitle: "Нажмите на дни, чтобы выбрать их")
                     Spacer()
                     if !selectedDays.isEmpty {
-                        Button(L("Сбросить")) { withAnimation { selectedDays = []; if detail == .selectedDates { detail = .months } } }.font(.subheadline)
+                        Button(L("Сбросить")) { withAnimation { selectedDays = [] } }.font(.subheadline)
                     }
                 }
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 7), spacing: 6) {
@@ -150,7 +150,6 @@ struct AnalyticsScreen: View {
     private func toggle(_ day: Int) {
         withAnimation(.snappy) {
             if selectedDays.contains(day) { selectedDays.remove(day) } else { selectedDays.insert(day) }
-            detail = selectedDays.isEmpty ? .months : .selectedDates
         }
     }
 

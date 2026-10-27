@@ -1,0 +1,9 @@
+// Signing for installing Mora on your own iPhone. Personal values go in
+// Local.xcconfig next to this file, which Git ignores:
+//
+//   DEVELOPMENT_TEAM = ABCDE12345
+//   MORA_BUNDLE_IDENTIFIER = com.example.mora
+//
+// The second line is needed only when this identifier is unavailable to your team.
+MORA_BUNDLE_IDENTIFIER = com.mora.finance.ios
+#include? "Local.xcconfig"

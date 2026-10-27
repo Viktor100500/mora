@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.8 — 2026-10-27
+
+- Combine two or more categories under 5% of expenses into one "Other" sector in category rings on Mac and iPhone; the lists below keep every category.
+- iPhone: show the spending calendar only for the "Dates" period, right below the period picker; long account names wrap instead of being cut off.
+- iPhone: add `scripts/install-ios.sh` to build, sign and install Mora on a connected iPhone; the development team lives in the untracked `iOS/Local.xcconfig`.
+
 ## 1.6.7 — 2026-10-27
 
 - Add Mora for iPhone (`iOS/`, iOS 17+): overview, transactions with filters and bulk actions, transaction entry with Visa conversion, analytics with a spending calendar, accounts, categories and rules, budgets, goals, recurring payments, CSV import and import history, JSON backups, undo and redo, and the shared Supabase database with the Apple Pay inbox. It reuses `FinanceCore` and the Mac ledger format; the interface language follows the iPhone.

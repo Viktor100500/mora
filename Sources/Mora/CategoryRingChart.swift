@@ -73,9 +73,10 @@ struct CategoryRingChart: View {
     var expense: Decimal
     var currency: String
     @State private var hoveredIndex: Int?
+    private var slices: [CategoryTotal] { totals.groupingSmallShares(name: L("Другое")) }
 
     var body: some View {
-        Chart(totals) { total in
+        Chart(slices) { total in
             SectorMark(angle: .value(L("Сумма"), total.amount.double), innerRadius: .ratio(0.76), angularInset: 2)
                 .cornerRadius(4).foregroundStyle(Color.token(total.color))
                 .accessibilityLabel(total.name)
@@ -109,7 +110,7 @@ struct CategoryRingChart: View {
                         switch phase {
                         case .active(let location):
                             hoveredIndex = proxy.plotFrame.flatMap {
-                                CategoryRingHitTest.index(at: location, in: geometry[$0], amounts: totals.map { $0.amount.double })
+                                CategoryRingHitTest.index(at: location, in: geometry[$0], amounts: slices.map { $0.amount.double })
                             }
                         case .ended: hoveredIndex = nil
                         }
@@ -118,7 +119,7 @@ struct CategoryRingChart: View {
         }
         .anchorPreference(key: CategoryRingHoverKey.self, value: .bounds) { bounds in
             hoveredIndex.flatMap { index in
-                totals.indices.contains(index) ? CategoryRingHover(bounds: bounds, total: totals[index], expense: expense, currency: currency) : nil
+                slices.indices.contains(index) ? CategoryRingHover(bounds: bounds, total: slices[index], expense: expense, currency: currency) : nil
             }
         }
         .smoothUpdates(value: totals.map(\.amount))

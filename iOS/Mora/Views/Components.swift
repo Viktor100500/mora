@@ -219,18 +219,20 @@ struct TrendChart: View {
     }
 }
 
-/// Category share ring. Tapping a sector shows that category in the center.
+/// Category share ring. Tapping a sector shows that category in the center;
+/// categories under 5% share one "Other" sector.
 struct CategoryDonut: View {
     @AppStorage("mora.hideAmounts") private var hidden = false
     let totals: [CategoryTotal]
     let expense: Decimal
     let currency: String
     @State private var angle: Double?
+    private var slices: [CategoryTotal] { totals.groupingSmallShares(name: L("Другое")) }
 
     private var selected: CategoryTotal? {
         guard let angle else { return nil }
         var running = 0.0
-        for total in totals {
+        for total in slices {
             running += total.amount.double
             if angle <= running { return total }
         }
@@ -238,7 +240,7 @@ struct CategoryDonut: View {
     }
 
     var body: some View {
-        Chart(totals) { total in
+        Chart(slices) { total in
             SectorMark(angle: .value(L("Сумма"), total.amount.double), innerRadius: .ratio(0.68), angularInset: 1.5)
                 .cornerRadius(4)
                 .foregroundStyle(Color.token(total.color))

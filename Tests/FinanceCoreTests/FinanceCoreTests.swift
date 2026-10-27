@@ -204,6 +204,13 @@ final class FinanceCoreTests: XCTestCase {
         XCTAssertEqual(l.spent(category: c, in: date("2026-10-01")), 100)
         XCTAssertEqual(l.categoryTotals(in: date("2026-10-01")).first?.amount, 100)
     }
+    func testChartsCombineSmallCategoryShares() {
+        func total(_ name: String, _ amount: Decimal) -> CategoryTotal { CategoryTotal(id: UUID(), name: name, color: "blue", icon: "tag", amount: amount) }
+        let grouped = [total("Rent", 900), total("Food", 60), total("Taxi", 30), total("Books", 10)].groupingSmallShares(name: "Other")
+        XCTAssertEqual(grouped.map(\.name), ["Rent", "Food", "Other"])
+        XCTAssertEqual(grouped.last?.amount, 40); XCTAssertEqual(grouped.last?.id, CategoryTotal.otherID)
+        XCTAssertEqual([total("Rent", 960), total("Taxi", 40)].groupingSmallShares().count, 2, "A single small category keeps its own slice")
+    }
     func testLargeCSVStagesAllRowsWithoutDroppingOperations() throws {
         let rows = (0..<10_000).map { "2026-10-01,Purchase \($0),-0.10,bank-\($0)" }
         let result = try prepare((["date,merchant,amount,id"] + rows).joined(separator: "\n"))
