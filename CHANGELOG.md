@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.9 — 2026-10-27
+
+- iPhone: choose any ISO currency with search by code or name (Russian or English) in onboarding, account editing and CSV import; the region's currency and popular ones come first.
+- iPhone: the separator above the month totals in Transactions spans the whole card again.
+
 ## 1.6.8 — 2026-10-27
 
 - Combine two or more categories under 5% of expenses into one "Other" sector in category rings on Mac and iPhone; the lists below keep every category.

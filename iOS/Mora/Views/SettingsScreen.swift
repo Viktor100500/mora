@@ -37,9 +37,8 @@ struct SettingsScreen: View {
                 Text(L("Язык совпадает с языком iPhone. Изменить его только для Mora можно в Настройках iPhone → Mora → Язык."))
             }
             Section {
-                Picker(L("Базовая валюта"), selection: $selectedBase) {
-                    ForEach(Array(Set(currencyList + Array(ledger.preferences.rates.keys))).sorted(), id: \.self) { Text($0).tag($0) }
-                }
+                CurrencyPicker(title: L("Базовая валюта"), selection: $selectedBase,
+                               codes: Array(Set(currencyList + Array(ledger.preferences.rates.keys) + [ledger.preferences.baseCurrency])))
                 if selectedBase != ledger.preferences.baseCurrency && !selectedBase.isEmpty {
                     Button(L("Применить: \(selectedBase)")) {
                         let base = selectedBase

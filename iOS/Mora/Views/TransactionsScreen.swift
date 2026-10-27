@@ -34,7 +34,8 @@ struct TransactionsScreen: View {
         NavigationStack {
             List(selection: $selection) {
                 Section {
-                    periodHeader
+                    // The separator otherwise starts at the centered title.
+                    periodHeader.alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
                     if let result { totals(result) }
                 }
                 if result == nil {

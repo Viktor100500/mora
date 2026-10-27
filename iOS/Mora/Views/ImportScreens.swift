@@ -44,7 +44,7 @@ struct CSVImportView: View {
                         Text(L("Не выбран")).tag(UUID?.none)
                         ForEach(store.ledger.accounts.filter { !$0.archived }) { Text($0.name).tag(UUID?.some($0.id)) }
                     }
-                    Picker(L("Валюта новых счетов"), selection: $mapping.defaultCurrency) { ForEach(currencyList, id: \.self) { Text($0).tag($0) } }
+                    CurrencyPicker(title: L("Валюта новых счетов"), selection: $mapping.defaultCurrency)
                     Toggle(L("Положительная сумма означает расход"), isOn: $mapping.positiveIsExpense)
                     Toggle(L("Пропускать повторные операции"), isOn: $mapping.skipDuplicates)
                     if let result, result.invalid > 0 {

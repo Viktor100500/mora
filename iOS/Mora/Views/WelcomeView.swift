@@ -28,9 +28,7 @@ struct WelcomeView: View {
                         HStack {
                             Text(L("Валюта отчетов")).font(.headline)
                             Spacer()
-                            Picker(L("Валюта отчетов"), selection: $baseCurrency) {
-                                ForEach(Array(Set(currencyList + [baseCurrency])).filter { Locale.commonISOCurrencyCodes.contains($0) }.sorted(), id: \.self) { Text($0).tag($0) }
-                            }.labelsHidden()
+                            CurrencyPicker(selection: $baseCurrency).font(.headline)
                         }
                         Text(L("Валюта отчетов объединяет итоги. У каждого счета может быть своя валюта.")).font(.footnote).foregroundStyle(.secondary)
                     }

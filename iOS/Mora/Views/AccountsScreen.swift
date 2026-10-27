@@ -184,9 +184,7 @@ struct AccountEditor: View {
                     }
                     if duplicateName { Label(L("Счет с таким названием уже существует."), systemImage: "exclamationmark.circle.fill").font(.caption).foregroundStyle(.red) }
                     Picker(L("Тип"), selection: $kind) { ForEach(AccountKind.allCases) { Label(L($0.title), systemImage: $0.icon).tag($0) } }
-                    Picker(L("Валюта"), selection: $currency) {
-                        ForEach(Array(Set(currencyList + Locale.commonISOCurrencyCodes + [currency])).filter { !$0.isEmpty }.sorted(), id: \.self) { Text($0).tag($0) }
-                    }.pickerStyle(.navigationLink).disabled(used)
+                    CurrencyPicker(title: L("Валюта"), selection: $currency).disabled(used)
                 } footer: {
                     if used { Text(L("Валюта счета с операциями фиксирована. Для другой валюты создайте отдельный счет.")) }
                 }
