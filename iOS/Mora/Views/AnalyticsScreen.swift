@@ -6,6 +6,9 @@ struct AnalyticsScreen: View {
     @EnvironmentObject private var router: AppRouter
     @State private var detail: TrendDetail = .months
     @State private var selectedDays: Set<Int> = []
+    @State private var pickMode: DayPickMode = .period
+    /// First tapped day of a period that still waits for its last day.
+    @State private var periodStart: Int?
     private var ledger: Ledger { store.ledger }
     private var currency: String { store.baseCurrency }
 
@@ -19,7 +22,19 @@ struct AnalyticsScreen: View {
             return selectedDays.isEmpty ? L("Выберите дни в календаре расходов") : dayList + " · " + router.month.monthTitle
         }
     }
-    private var dayList: String { selectedDays.sorted().map(String.init).joined(separator: ", ") }
+    private var dayList: String {
+        var ranges: [ClosedRange<Int>] = []
+        for day in selectedDays.sorted() {
+            if let last = ranges.last, last.upperBound + 1 == day { ranges[ranges.count - 1] = last.lowerBound...day } else { ranges.append(day...day) }
+        }
+        return ranges.map { $0.lowerBound == $0.upperBound ? "\($0.lowerBound)" : "\($0.lowerBound)–\($0.upperBound)" }.joined(separator: ", ")
+    }
+    private var calendarHint: String {
+        switch pickMode {
+        case .days: return "Нажмите на дни, чтобы выбрать их"
+        case .period: return periodStart == nil ? "Нажмите на первый и последний день периода" : "Теперь выберите последний день"
+        }
+    }
 
     var body: some View {
         let report = store.analyticsReport(in: router.month, detail: detail, selectedDays: selectedDays)
@@ -85,6 +100,7 @@ struct AnalyticsScreen: View {
             .navigationTitle(L("Аналитика"))
             .onChange(of: router.month) { _, _ in
                 selectedDays = []
+                periodStart = nil
             }
         }
     }
@@ -99,30 +115,49 @@ struct AnalyticsScreen: View {
         return Card {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .firstTextBaseline) {
-                    SectionHeading(title: "Календарь расходов", subtitle: "Нажмите на дни, чтобы выбрать их")
+                    SectionHeading(title: "Календарь расходов", subtitle: calendarHint)
                     Spacer()
                     if !selectedDays.isEmpty {
-                        Button(L("Сбросить")) { withAnimation { selectedDays = [] } }.font(.subheadline)
+                        Button(L("Сбросить")) { withAnimation { selectedDays = []; periodStart = nil } }.font(.subheadline)
                     }
                 }
+                Picker(L("Выбор дней"), selection: $pickMode) {
+                    Text(L("Период")).tag(DayPickMode.period)
+                    Text(L("Отдельные дни")).tag(DayPickMode.days)
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: pickMode) { _, _ in periodStart = nil }
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 7), spacing: 6) {
                     ForEach([L("ПН"), L("ВТ"), L("СР"), L("ЧТ"), L("ПТ"), L("СБ"), L("ВС")], id: \.self) {
                         Text($0).font(.caption2.weight(.medium)).foregroundStyle(.secondary).frame(maxWidth: .infinity)
                     }
-                    ForEach(-padding..<0, id: \.self) { _ in Color.clear.frame(height: 48) }
+                    ForEach(-padding..<0, id: \.self) { _ in Color.clear.frame(height: 52) }
                     ForEach(1...days, id: \.self) { day in
                         let expense = expenses[day] ?? 0
                         let selected = selectedDays.contains(day)
                         let intensity = maximum > 0 ? (expense / maximum).double : 0
-                        Button { toggle(day) } label: {
+                        // Ends of a selected run are solid, days inside it are tinted.
+                        let edge = selected && !(selectedDays.contains(day - 1) && selectedDays.contains(day + 1))
+                        Button { tap(day) } label: {
+                            // Selection owns the cell fill; spending is a separate bar so a costly day never looks picked.
                             VStack(spacing: 3) {
                                 Text("\(day)").font(.caption.weight(.semibold))
+                                    .foregroundStyle(edge ? Color.white : selected ? Color.moraGreen : Color.primary)
                                 FinancialText(expense > 0 ? compact(expense) : "·").font(.system(size: 9)).lineLimit(1).minimumScaleFactor(0.6)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(edge ? Color.white.opacity(0.85) : Color.secondary)
+                                Capsule()
+                                    .fill(expense > 0 ? (edge ? Color.white.opacity(0.35) : Color.primary.opacity(0.08)) : .clear)
+                                    .overlay(alignment: .leading) {
+                                        GeometryReader { proxy in
+                                            Capsule().fill(edge ? Color.white : Color.token("orange"))
+                                                .frame(width: expense > 0 ? max(3, proxy.size.width * intensity) : 0)
+                                        }
+                                    }
+                                    .frame(height: 3).padding(.horizontal, 8)
                             }
-                            .frame(maxWidth: .infinity).frame(height: 48)
-                            .background(Color.moraGreen.opacity(selected ? 0.32 : 0.04 + 0.22 * intensity), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(selected ? Color.moraGreen : .clear, lineWidth: 1.5))
+                            .frame(maxWidth: .infinity).frame(height: 52)
+                            .background(edge ? Color.moraGreen : selected ? Color.moraGreen.opacity(0.16) : Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).stroke(periodStart == day ? Color.moraGreen.opacity(0.45) : .clear, lineWidth: 3).padding(-2))
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("\(day) · \(DisplayMoney.string(expense, currency: currency))")
@@ -147,9 +182,20 @@ struct AnalyticsScreen: View {
         }
     }
 
-    private func toggle(_ day: Int) {
+    private func tap(_ day: Int) {
         withAnimation(.snappy) {
-            if selectedDays.contains(day) { selectedDays.remove(day) } else { selectedDays.insert(day) }
+            switch pickMode {
+            case .days:
+                if selectedDays.contains(day) { selectedDays.remove(day) } else { selectedDays.insert(day) }
+            case .period:
+                if let start = periodStart {
+                    selectedDays = Set(min(start, day)...max(start, day))
+                    periodStart = nil
+                } else {
+                    selectedDays = [day]
+                    periodStart = day
+                }
+            }
         }
     }
 
@@ -157,3 +203,5 @@ struct AnalyticsScreen: View {
         value.double.formatted(.number.notation(.compactName).precision(.significantDigits(1...3)).locale(L10n.locale))
     }
 }
+
+private enum DayPickMode { case period, days }

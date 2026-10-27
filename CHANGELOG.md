@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.13 — 2026-10-27
+
+- iPhone: the expense calendar in Analytics → Dates selects a period: tap the first and last day and every day in between is picked. "Separate days" keeps the old tap-to-toggle choice.
+- iPhone: spending per day is now a small orange bar under the amount instead of a stronger green fill, so the most expensive day no longer looks selected; selected days are solid green.
+
 ## 1.6.12 — 2026-10-27
 
 - Connect an iPhone to the shared database like AirDrop: on the iPhone choose Shared database → Connect to Mac, check that the Mac shows the same six-digit code and click Allow. Over an encrypted local channel (Bonjour, X25519 with a key commitment, ChaChaPoly) the Mac sends the project address, publishable key and a one-time invitation; the iPhone signs in anonymously and opens the household with nothing typed. Without anonymous sign-ins the iPhone's sign-in form is prefilled instead.
