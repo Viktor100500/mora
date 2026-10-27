@@ -1,6 +1,8 @@
 import XCTest
 import os
 import Combine
+import AppKit
+import SwiftUI
 @testable import FinanceCore
 @testable import Mora
 
@@ -54,6 +56,23 @@ final class CloudSyncTests: XCTestCase {
     private var store: FinanceStore!
     private var cloud: CloudSync!
     private let householdID = UUID()
+
+    func testPairingPromptRendersForConnectedHouseholdWithoutAmbientStore() async throws {
+        defer { try? cleanup() }
+        try await prepare()
+        XCTAssertTrue(cloud.signedIn)
+        XCTAssertNotNil(cloud.householdID)
+        XCTAssertFalse(store.isDemo)
+        _ = NSApplication.shared
+        let pairing = PairingServer()
+        defer { pairing.update(active: false, cloud: cloud) }
+        // The prompt sits outside ContentView's environment modifiers at launch.
+        // A connected household must render even without an ambient FinanceStore.
+        let host = NSHostingView(rootView: Text("Connected Mora")
+            .modifier(PairingPrompt(pairing: pairing, cloud: cloud, store: store)))
+        host.layoutSubtreeIfNeeded()
+        XCTAssertGreaterThan(host.fittingSize.width, 0)
+    }
 
     func testConnectionOutageIsReportedOnceAndRecoveryOnce() async throws {
         defer { try? cleanup() }

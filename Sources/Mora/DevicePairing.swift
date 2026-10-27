@@ -99,7 +99,7 @@ final class PairingServer: ObservableObject {
 struct PairingPrompt: ViewModifier {
     @ObservedObject var pairing: PairingServer
     @ObservedObject var cloud: CloudSync
-    @EnvironmentObject private var store: FinanceStore
+    @ObservedObject var store: FinanceStore
     private var active: Bool { cloud.signedIn && cloud.householdID != nil && !store.isDemo }
     func body(content: Content) -> some View {
         content

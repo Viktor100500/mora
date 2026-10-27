@@ -17,7 +17,7 @@ struct MoraApp: App {
     var body: some Scene {
         Window("Mora", id: "main") {
             ContentView(page: $page, sheet: $sheet).environmentObject(store).environmentObject(cloud).environmentObject(categorizer)
-                .modifier(PairingPrompt(pairing: pairing, cloud: cloud))
+                .modifier(PairingPrompt(pairing: pairing, cloud: cloud, store: store))
                 .tint(.moraGreen)
                 .environment(\.locale, L10n.locale)
                 .preferredColorScheme(store.ledger.preferences.appearance == "light" ? .light : store.ledger.preferences.appearance == "dark" ? .dark : nil)

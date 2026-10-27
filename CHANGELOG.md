@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.14 — 2026-10-27
+
+- Mac: fix a launch crash when restoring a shared database connection. The iPhone pairing prompt now receives its store explicitly instead of looking outside its SwiftUI environment.
+
 ## 1.6.13 — 2026-10-27
 
 - iPhone: the expense calendar in Analytics → Dates selects a period: tap the first and last day and every day in between is picked. "Separate days" keeps the old tap-to-toggle choice.
