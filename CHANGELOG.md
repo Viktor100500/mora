@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.15 — 2026-10-27
+
+- iPhone: connecting to a Mac is animated like AirDrop — a radar with nearby Macs floating around the iPhone, a beam between the devices and a glowing screen edge while you compare the code, then a burst of light and a check mark with a haptic. Reduce Motion keeps it still.
+- iPhone onboarding: "Connect to Mac" next to "Create your first account" joins the shared database right away; a project without anonymous sign-ins opens the prefilled sign-in screen.
+
 ## 1.6.14 — 2026-10-27
 
 - Mac: fix a launch crash when restoring a shared database connection. The iPhone pairing prompt now receives its store explicitly instead of looking outside its SwiftUI environment.

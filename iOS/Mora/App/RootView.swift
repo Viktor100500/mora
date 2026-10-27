@@ -115,7 +115,8 @@ private struct SheetContent: View {
                         router.open(.account(nil))
                     }
                 }
-            }, explore: { didSeeWelcome = true; router.sheet = nil })
+            }, explore: { didSeeWelcome = true; router.sheet = nil },
+               connected: { didSeeWelcome = true; router.tab = .overview; router.sheet = nil })
             .interactiveDismissDisabled()
         case .transaction(let t): TransactionEditor(transaction: t, ledger: store.ledger)
         case .similar(let t): TransactionEditor(template: t, ledger: store.ledger)

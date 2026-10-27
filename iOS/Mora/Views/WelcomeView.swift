@@ -2,9 +2,15 @@ import SwiftUI
 import FinanceCore
 
 struct WelcomeView: View {
+    @EnvironmentObject private var store: FinanceStore
+    @EnvironmentObject private var cloud: CloudSync
     @State private var baseCurrency = Locale.current.currency?.identifier ?? "USD"
+    @State private var pairingMac = false
+    @State private var signingIn = false
     var start: (String) -> Void
     var explore: () -> Void
+    /// The iPhone joined a shared database instead of starting its own ledger.
+    var connected: () -> Void
 
     var body: some View {
         NavigationStack {
@@ -22,7 +28,7 @@ struct WelcomeView: View {
                         step("lock.shield", "Без регистрации", "Счета и операции хранятся на iPhone. Облако подключается отдельно по вашему выбору.")
                         step("wallet.bifold", "Начните с одного счета", "Укажите валюту и остаток перед первой операцией. Затем добавьте расход или импортируйте CSV.")
                         step("chart.pie", "Смотрите общую картину", "Обзор и аналитика покажут расходы по категориям. Демо поможет сначала познакомиться с приложением.")
-                        step("arrow.triangle.2.circlepath", "Вместе с Mac", "Подключите общую базу Mora или перенесите резервную копию JSON с Mac.")
+                        step("laptopcomputer.and.iphone", "Уже ведете учет на Mac?", "Поднесите iPhone к Mac с Mora и подтвердите код — общая база подключится сама, без паролей.")
                     }
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
@@ -42,12 +48,23 @@ struct WelcomeView: View {
                 VStack(spacing: 10) {
                     Button { start(baseCurrency) } label: { Text(L("Создать первый счет")).font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6) }
                         .buttonStyle(.borderedProminent)
+                    Button { pairingMac = true } label: {
+                        Label(L("Подключиться к Mac"), systemImage: "laptopcomputer.and.iphone").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6)
+                    }
+                    .buttonStyle(.bordered)
                     Button(L("Посмотреть демо"), action: explore).font(.headline)
                 }
                 .padding(.horizontal, 24).padding(.vertical, 12)
                 .background(.bar)
             }
             .environment(\.locale, L10n.locale)
+            .navigationDestination(isPresented: $signingIn) { CloudScreen() }
+            .sheet(isPresented: $pairingMac) {
+                MacPairingSheet(prepare: { await store.startClean(baseCurrency: baseCurrency, announce: false) },
+                                needsSignIn: { signingIn = true }, finished: connected)
+            }
+            // Signing in with a password, the household opens from the prefilled cloud screen.
+            .onChange(of: cloud.householdID) { _, id in if signingIn && id != nil { connected() } }
         }
     }
 

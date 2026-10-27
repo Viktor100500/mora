@@ -133,12 +133,12 @@ final class FinanceStore: ObservableObject {
         } catch { self.error = error.localizedDescription }
     }
     @discardableResult
-    func startClean(baseCurrency: String) async -> Bool {
+    func startClean(baseCurrency: String, announce: Bool = true) async -> Bool {
         await load()
         do {
             let (snapshot, existing) = try await repository.initialize(baseCurrency: baseCurrency)
             publish(snapshot)
-            showToast(existing ? L("Открыта ваша существующая база вместо демо") : L("Добавьте счет для учета операций."))
+            if announce { showToast(existing ? L("Открыта ваша существующая база вместо демо") : L("Добавьте счет для учета операций.")) }
             lastRateAttempt = nil
             Task { await refreshExchangeRates() }
             return true

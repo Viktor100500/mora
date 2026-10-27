@@ -1103,5 +1103,15 @@
   "Mac передаст по зашифрованному каналу адрес проекта, публичный ключ и приглашение. Данные этого iPhone будут заменены общей базой; перед заменой приложение сохранит резервную копию.": "The Mac sends the project address, public key and an invitation over an encrypted channel. This iPhone's data will be replaced by the shared database; the app saves a backup first.",
   "iPhone подключен к «{0}»": "iPhone connected to “{0}”",
   "Mac рядом покажет запрос и код. После подтверждения iPhone подключится к общей базе сам — ничего вводить не нужно.": "A Mac nearby shows a request and a code. Once approved, the iPhone connects to the shared database by itself — nothing to type.",
-  "iPhone, подключенный через Mac": "iPhone connected through a Mac"
+  "iPhone, подключенный через Mac": "iPhone connected through a Mac",
+  "Выберите Mac": "Choose a Mac",
+  "Подключиться к «{0}»": "Connect to “{0}”",
+  "Этот iPhone": "This iPhone",
+  "Код подключения": "Connection code",
+  "Подключено": "Connected",
+  "Не удалось подготовить данные iPhone.": "Couldn't prepare the iPhone's data.",
+  "Не удалось подключиться к общей базе.": "Couldn't connect to the shared database.",
+  "Уже ведете учет на Mac?": "Already using Mora on a Mac?",
+  "Поднесите iPhone к Mac с Mora и подтвердите код — общая база подключится сама, без паролей.": "Bring your iPhone near a Mac running Mora and confirm the code — the shared database connects by itself, no passwords.",
+  "Код для сверки": "Verification code"
 }
