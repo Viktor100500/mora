@@ -41,8 +41,12 @@ class WorkflowTests(unittest.TestCase):
                          card['WFWorkflowActionParameters']['UUID'])
         kinds = [a['WFWorkflowActionIdentifier'].rsplit('.', 1)[-1] for a in actions]
         self.assertEqual(kinds.count('replace'), 1)  # only the event UUID; no amount rules for particular merchants
-        wallet = workflow(CONFIG, wallet=True)['WFWorkflowActions'][-1]
-        self.assertNotIn('p_card', str(wallet))  # the direct Transaction variant keeps the six-field call
+        wallet = workflow(CONFIG, wallet=True)['WFWorkflowActions']
+        card_read = next(a for a in wallet if a['WFWorkflowActionParameters'].get('UUID') and 'Card or Pass' in str(a))
+        wallet_items = {i['WFKey']['Value']['string']: i['WFValue']['Value'] for i in
+                        wallet[-1]['WFWorkflowActionParameters']['WFJSONValues']['Value']['WFDictionaryFieldValueItems']}
+        self.assertEqual(next(iter(wallet_items['p_card']['attachmentsByRange'].values()))['OutputUUID'],
+                         card_read['WFWorkflowActionParameters']['UUID'])
 
     def test_preview_has_no_network_or_notifications(self):
         actions = workflow(CONFIG, preview=True, diagnostics=True)['WFWorkflowActions']

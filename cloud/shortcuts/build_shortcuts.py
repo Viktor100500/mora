@@ -48,7 +48,7 @@ def workflow(config, preview=False, wallet=False, diagnostics=False):
         return {"Type": "ActionOutput", "OutputUUID": identifier_uuid, "OutputName": output_name}
 
     action('comment', '', WFCommentActionText=(
-        ('Mora · Apple Pay\nПринимает транзакцию Wallet. Mora считает $ валютой USD и автоматически пересчитывает покупку в валюту счета. ' if wallet else 'Mora · Apple Pay\nПринимает словарь amount, merchant, card, currency. Один ключ на человека: счет выбирается в Mora для каждой карты. ')
+        ('Mora · Apple Pay\nПринимает транзакцию Wallet целиком: автоматизация из одного действия «Запустить команду» с входом «Входные данные команды». Читает сумму, продавца и карту; счет для карты выбирается в Mora. ' if wallet else 'Mora · Apple Pay\nПринимает словарь amount, merchant, card, currency. Один ключ на человека: счет выбирается в Mora для каждой карты. ')
         + 'Если код валюты неизвестен, оставьте поле пустым: сервер определит ее по сумме, если распознает символ или код. '
         'Ключ только записывает в выбранный счёт. '
         'Для первой версии требуется интернет; очередь повторной отправки не включена.'))
@@ -83,6 +83,11 @@ def workflow(config, preview=False, wallet=False, diagnostics=False):
                    WFReplaceTextFind='^(.{8})(.{4}).(.{3}).(.{3})(.{12}).*$',
                    WFReplaceTextReplace='$1-$2-4$3-8$4-$5',
                    WFReplaceTextRegularExpression=True, WFInput=text(digest))
+    if wallet:
+        # Read last so the action indices used by the delay diagnostic stay unchanged.
+        # The property is shown as "Card or Pass" in the Shortcuts variable menu.
+        values['card'] = action('gettext', 'card', WFTextActionText=text({"Type": "ExtensionInput", "Aggrandizements": [
+            {"Type": "WFPropertyVariableAggrandizement", "PropertyName": "Card or Pass"}]}))
     fields = {'p_token': phone, 'p_event_id': event, 'p_amount': values['amount'],
               'p_currency': values['currency'], 'p_merchant': values['merchant'],
               'p_occurred_at': date}
