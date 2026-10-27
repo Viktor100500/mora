@@ -31,7 +31,7 @@ struct TransactionRow: View {
             IconTile(icon: transaction.kind == .transfer ? "arrow.left.arrow.right" : category?.icon ?? "tag",
                      color: category?.color ?? (transaction.kind == .income ? "green" : "gray"), size: 40)
             VStack(alignment: .leading, spacing: 3) {
-                Text(transaction.merchant).font(.body.weight(.medium)).lineLimit(1)
+                Text(transaction.merchant).font(.body.weight(.medium)).lineLimit(2)
                 Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 if let conversion = transaction.conversion {
                     FinancialText("\(DisplayMoney.string(abs(conversion.originalAmount), currency: conversion.originalCurrency)) · Visa \(Money.plain(conversion.rate))\(conversion.feePercent == 0 ? "" : " + " + Money.plain(conversion.feePercent) + "%")")

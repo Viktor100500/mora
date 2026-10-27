@@ -28,6 +28,7 @@
 		8948AAA8431B51D6BAB4196B /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E05AB6AF2B45D97DA131D38 /* SettingsScreen.swift */; };
 		8B6894C18A118F40390C1F08 /* TransactionsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF18FC467A335C0717CE8A3B /* TransactionsScreen.swift */; };
 		93EFDDAE568584166D654CE1 /* FinanceStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0318B2C398473B18013456E /* FinanceStoreTests.swift */; };
+		97B0EDEFDB32F1BD3C34A96F /* SupportSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05D35A85A2341ED366AA546D /* SupportSection.swift */; };
 		A3D9EB13A2AB05BEA95256C1 /* CloudScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85BFEB921FC926A84CB68715 /* CloudScreen.swift */; };
 		AEE49357E8A3A6C9EE9AAE83 /* TransactionEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1CED08EE69D8287C08552F /* TransactionEditor.swift */; };
 		C1ACF4FB85C7D4AC8437A0B0 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7EABC9B8C57126A5C9087F8 /* Components.swift */; };
@@ -50,6 +51,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		05D35A85A2341ED366AA546D /* SupportSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportSection.swift; sourceTree = "<group>"; };
 		14EC5F098BA136755B3F0442 /* ReportCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportCache.swift; sourceTree = "<group>"; };
 		263002D25366E09E01B9CF43 /* MobileStrings.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = MobileStrings.json; sourceTree = "<group>"; };
 		2B8D07C72F2ADAD285B72897 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
@@ -84,7 +86,7 @@
 		F3E78F6ACDBE2C140769209A /* ChangeDescription.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ChangeDescription.swift; path = ../Sources/Mora/ChangeDescription.swift; sourceTree = "<group>"; };
 		F65900D0DE8EB82F68603C47 /* ImportScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportScreens.swift; sourceTree = "<group>"; };
 		F9AC73B755D7E67297AE96D1 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
-		"TEMP_41A12634-9A57-4365-8542-BAB8E5549F97" /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
+		"TEMP_190B2E87-B7FE-48F9-BB82-6DD1C6EDD5A7" /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -176,6 +178,7 @@
 				6376376D9EC5F6E8AE7DFB56 /* OverviewScreen.swift */,
 				4EB3D7140356CF3382C702ED /* PlansScreens.swift */,
 				7E05AB6AF2B45D97DA131D38 /* SettingsScreen.swift */,
+				05D35A85A2341ED366AA546D /* SupportSection.swift */,
 				6A1CED08EE69D8287C08552F /* TransactionEditor.swift */,
 				BF18FC467A335C0717CE8A3B /* TransactionsScreen.swift */,
 				D3D1434CFE66D39D0B602795 /* WelcomeView.swift */,
@@ -226,10 +229,10 @@
 			path = MoraTests;
 			sourceTree = "<group>";
 		};
-		"TEMP_077E05B9-8517-426A-8CA6-2A2230627F80" /* iOS */ = {
+		"TEMP_9BEB305E-7546-4EFE-9EF3-DAA19E303803" /* iOS */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_41A12634-9A57-4365-8542-BAB8E5549F97" /* Signing.xcconfig */,
+				"TEMP_190B2E87-B7FE-48F9-BB82-6DD1C6EDD5A7" /* Signing.xcconfig */,
 			);
 			path = iOS;
 			sourceTree = "<group>";
@@ -360,6 +363,7 @@
 				D83EF4C0E53A8CDF4D3861E9 /* ReportCache.swift in Sources */,
 				5BBED0ADBF01093A70E94AD4 /* RootView.swift in Sources */,
 				8948AAA8431B51D6BAB4196B /* SettingsScreen.swift in Sources */,
+				97B0EDEFDB32F1BD3C34A96F /* SupportSection.swift in Sources */,
 				F5B39C87B5B6C70718F3B778 /* Theme.swift in Sources */,
 				AEE49357E8A3A6C9EE9AAE83 /* TransactionEditor.swift in Sources */,
 				8B6894C18A118F40390C1F08 /* TransactionsScreen.swift in Sources */,
@@ -431,7 +435,7 @@
 		};
 		BCE30933C473708F0E64C320 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_41A12634-9A57-4365-8542-BAB8E5549F97" /* Signing.xcconfig */;
+			baseConfigurationReference = "TEMP_190B2E87-B7FE-48F9-BB82-6DD1C6EDD5A7" /* Signing.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -464,7 +468,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -478,7 +482,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.3;
+				MARKETING_VERSION = 1.0.4;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -508,7 +512,7 @@
 		};
 		D00F07EA73DCC7592C635AE0 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_41A12634-9A57-4365-8542-BAB8E5549F97" /* Signing.xcconfig */;
+			baseConfigurationReference = "TEMP_190B2E87-B7FE-48F9-BB82-6DD1C6EDD5A7" /* Signing.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -541,7 +545,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 4;
+				CURRENT_PROJECT_VERSION = 5;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -561,7 +565,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.3;
+				MARKETING_VERSION = 1.0.4;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

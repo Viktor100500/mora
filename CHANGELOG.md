@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.10 — 2026-10-27
+
+- iPhone: transaction descriptions wrap to two lines instead of being cut off.
+- iPhone: add "Feedback and help" to More: write to support (the subject includes the app and iOS versions) or copy the address.
+
 ## 1.6.9 — 2026-10-27
 
 - iPhone: choose any ISO currency with search by code or name (Russian or English) in onboarding, account editing and CSV import; the region's currency and popular ones come first.

@@ -54,6 +54,7 @@
   "На iPhone хранится копия общей облачной базы.": "This iPhone keeps a copy of the shared cloud database.",
   "На сегодня · активные счета: {0}": "Today · active accounts: {0}",
   "Нажмите на дни, чтобы выбрать их": "Tap days to select them",
+  "Написать в поддержку": "Contact support",
   "Не удалось подключиться к Visa. Проверьте интернет-соединение.": "Could not reach Visa. Check your internet connection.",
   "Не удалось сохранить или прочитать сессию в Связке ключей ({0}). Повторите вход.": "Could not save or read the session in the Keychain ({0}). Sign in again.",
   "Нет операций для импорта.": "No transactions to import.",

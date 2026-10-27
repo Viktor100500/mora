@@ -40,6 +40,7 @@ struct MoreScreen: View {
                     }
                     NavigationLink { SettingsScreen() } label: { Label(L("Настройки"), systemImage: "slider.horizontal.3") }
                 }
+                SupportSection()
                 Section {
                     StorageFooter().listRowBackground(Color.clear)
                 }

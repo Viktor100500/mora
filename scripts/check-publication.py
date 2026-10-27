@@ -91,7 +91,7 @@ def inspect(files, bundle: bool = False) -> list[str]:
             address = match.group().decode().lower()
             if re.fullmatch(r'icon_[0-9]+x[0-9]+@2x\.png', address):
                 continue
-            if address == PUBLIC_SUPPORT_EMAIL and name == ('Contents/MacOS/Mora' if bundle else 'Sources/Mora/Support.swift'):
+            if address == PUBLIC_SUPPORT_EMAIL and name in (('Contents/MacOS/Mora',) if bundle else ('Sources/Mora/Support.swift', 'iOS/Mora/Views/SupportSection.swift')):
                 continue
             if not address.endswith(('@example.test', '@example.com', '@example-project.supabase.co', '@users.noreply.github.com', '@noreply.github.com')) and address != 'git@github.com':
                 issues.append(f'{name}: non-example email address')
