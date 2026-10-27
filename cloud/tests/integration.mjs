@@ -362,18 +362,18 @@ try {
     const rows=[{date:'2026-10-20',description:'Cafe latte',amount:4.5,account:'shared test account'},
       {date:'2026-10-20',description:'Cafe latte',amount:4.5,account:'Shared test account'},
       {date:'2026-10-21',description:'Book',amount:12,account:'Shared test account',external_id:'statement-1'}];
-    const result=await rpc(anon,'mora_agent_add_transactions',[agent.token,rows,'Statement',true]);
+    const result=await rpc(anon,'mora_agent_add_transactions',[agent.token,JSON.stringify(rows),'Statement',true]);
     assert.equal(result.added,3,'Identical rows in one request are separate purchases');
     assert.equal(result.transactions[0].category,'Cafe');
     const ledger=(await rpc(owner,'mora_get_household',[h])).snapshot;
     const batch=ledger.imports.find(b=>b.id===result.import_id.toUpperCase());
     assert.equal(batch.source,'AI agent'); assert.equal(batch.transactions.length,3);
     assert(ledger.transactions.filter(t=>t.importBatchID===batch.id).every(t=>t.date.endsWith('T12:00:00Z')));
-    const again=await rpc(anon,'mora_agent_add_transactions',[agent.token,[rows[0],{...rows[2],date:'2026-10-25'}],null,true]);
+    const again=await rpc(anon,'mora_agent_add_transactions',[agent.token,JSON.stringify([rows[0],{...rows[2],date:'2026-10-25'}]),null,true]);
     assert.equal(again.added,0); assert.equal(again.skipped_duplicates.length,2);
     const version=(await rpc(owner,'mora_get_status',[h])).version;
     await assert.rejects(()=>rpc(anon,'mora_agent_add_transactions',[agent.token,
-      [{date:'2026-10-26',description:'Valid',amount:1,account:'Shared test account'},{date:'2026-10-26',description:'Bad',amount:1.234,account:'Missing'}],null,true]),
+      JSON.stringify([{date:'2026-10-26',description:'Valid',amount:1,account:'Shared test account'},{date:'2026-10-26',description:'Bad',amount:1.234,account:'Missing'}]),null,true]),
       error=>error.message.includes('row 2'));
     assert.equal((await rpc(owner,'mora_get_status',[h])).version,version,'A rejected request records nothing');
     // The MCP function, with PostgREST replaced by the anonymous database role.
