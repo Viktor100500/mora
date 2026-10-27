@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.5 — 2026-10-27
+
+- Report a cloud connection outage once, retry silently, and notify when the connection is restored.
+
 ## 1.6.4 — 2026-10-26
 
 - Keep the center of category charts clear while preserving contrast around light-colored sectors.

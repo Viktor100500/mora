@@ -35,6 +35,7 @@ enum AppNotificationAction: Codable, Equatable, Identifiable, Sendable {
 
 struct AppNotification: Codable, Equatable, Identifiable, Sendable {
     enum Kind: String, Codable, Sendable { case success, information, warning, error, review }
+    enum ConnectionState: String, Codable, Sendable { case lost, restored }
     var id = UUID()
     var date = Date()
     var message: String
@@ -46,6 +47,7 @@ struct AppNotification: Codable, Equatable, Identifiable, Sendable {
     var householdID: UUID? = nil
     var isResolved = false
     var progress: Bool? = nil
+    var connectionState: ConnectionState? = nil
     var isInProgress: Bool { progress == true }
 }
 
@@ -93,6 +95,20 @@ final class AppNotifications: ObservableObject {
     func flush() async { await pendingSave?.value }
 
     var unreadCount: Int { events.filter { !$0.isRead }.count }
+
+    func connectionLost() {
+        guard events.first(where: { $0.connectionState != nil })?.connectionState != .lost else { return }
+        var event = AppNotification(message: L("Связь с облаком потеряна"), detail: L("Повторим подключение автоматически."), kind: .error, actions: [.inbox])
+        event.connectionState = .lost
+        events.insert(event, at: 0); persist()
+    }
+
+    func connectionRestored() {
+        guard events.first(where: { $0.connectionState != nil })?.connectionState == .lost else { return }
+        var event = AppNotification(message: L("Связь с облаком восстановлена"), kind: .success)
+        event.connectionState = .restored
+        events.insert(event, at: 0); persist()
+    }
 
     @discardableResult
     func record(_ message: String, detail: String? = nil, kind: AppNotification.Kind = .success,

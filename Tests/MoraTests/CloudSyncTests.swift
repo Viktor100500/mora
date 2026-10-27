@@ -55,6 +55,28 @@ final class CloudSyncTests: XCTestCase {
     private var cloud: CloudSync!
     private let householdID = UUID()
 
+    func testConnectionOutageIsReportedOnceAndRecoveryOnce() async throws {
+        defer { try? cleanup() }
+        try await prepare()
+        SyncStubProtocol.handler = { _ in throw URLError(.networkConnectionLost) }
+        await cloud.synchronize(inBackground: true)
+        await cloud.synchronize(inBackground: true)
+        XCTAssertEqual(store.notifications.events.filter { $0.connectionState == .lost }.count, 1)
+        XCTAssertEqual(store.notifications.events.count, 1)
+        await cloud.pause(false)
+        XCTAssertEqual(store.notifications.events.count, 1)
+        SyncStubProtocol.handler = { request in
+            (200, Data((request.url!.lastPathComponent == "mora_get_status" ? "{\"version\":1,\"pending_count\":0}" : "[]").utf8))
+        }
+        await cloud.synchronize(inBackground: true)
+        await cloud.synchronize(inBackground: true)
+        XCTAssertEqual(store.notifications.events.filter { $0.connectionState == .restored }.count, 1)
+        XCTAssertEqual(store.notifications.events.count, 2)
+        SyncStubProtocol.handler = { _ in throw URLError(.notConnectedToInternet) }
+        await cloud.synchronize(inBackground: true)
+        XCTAssertEqual(store.notifications.events.filter { $0.connectionState == .lost }.count, 2)
+    }
+
     private func prepare(ledger: Ledger = .empty,
         walletRate: @escaping @MainActor @Sendable (Decimal, String, String, Date) async throws -> CardConversion = {
             _, _, _, _ in throw LedgerError.invalid("Test rate unavailable")

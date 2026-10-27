@@ -22,9 +22,10 @@ final class CloudSync: ObservableObject {
     private var stagedSyncDate: Date?
     private var importedBatchIDs: [UUID] = []
     var preparePresentation: (@MainActor (FinanceStore) async -> Void)?
+    private var suppressErrorNotification = false
     @Published var error: String? {
         didSet {
-            if let error, error != oldValue { store?.notifications.record(error, kind: .error, actions: [.inbox]) }
+            if !suppressErrorNotification, let error, error != oldValue { store?.notifications.record(error, kind: .error, actions: [.inbox]) }
         }
     }
     @Published var invitation: String?
@@ -34,6 +35,8 @@ final class CloudSync: ObservableObject {
     private let transport: URLSession
     private let sessionWriter: @Sendable (Data, String) throws -> Void
     private var operationInProgress = false
+    private var operationContactedCloud = false
+    private var lastOperationConnectionFailure = false
     private var stopping = false
     private var operationWaiters: [CheckedContinuation<Void, Never>] = []
     private var session: CloudSession?
@@ -147,6 +150,8 @@ final class CloudSync: ObservableObject {
         }
         guard !Task.isCancelled, !stopping else { return }
         operationInProgress = true
+        operationContactedCloud = false
+        lastOperationConnectionFailure = false
         if !inBackground { busy = true }
         defer {
             operationInProgress = false
@@ -157,12 +162,30 @@ final class CloudSync: ObservableObject {
         }
         do {
             try await action()
+            if operationContactedCloud { store?.notifications.connectionRestored() }
             if error != nil { error = nil }
         }
         catch is CancellationError { }
         catch {
+            if Self.isConnectionError(error) {
+                lastOperationConnectionFailure = true
+                store?.notifications.connectionLost()
+                suppressErrorNotification = true
+                self.error = error.localizedDescription
+                suppressErrorNotification = false
+                return
+            }
             if self.error != error.localizedDescription { self.error = error.localizedDescription }
         }
+    }
+    private static func isConnectionError(_ error: Error) -> Bool {
+        let value = error as NSError
+        if value.domain == NSURLErrorDomain {
+            return [NSURLErrorNetworkConnectionLost, NSURLErrorNotConnectedToInternet, NSURLErrorTimedOut,
+                    NSURLErrorCannotConnectToHost, NSURLErrorCannotFindHost, NSURLErrorDNSLookupFailed].contains(value.code)
+        }
+        if let underlying = value.userInfo[NSUnderlyingErrorKey] as? Error { return isConnectionError(underlying) }
+        return false
     }
     private func rpc<B: Encodable & Sendable, R: Decodable & Sendable>(_ function: String, _ body: B) async throws -> R {
         guard let settings, var session else { throw CloudAPIError.unauthorized }
@@ -170,10 +193,16 @@ final class CloudSync: ObservableObject {
         if session.expires_at < Date().timeIntervalSince1970 + 60 {
             session = try await refreshedSession(api, token: session.refresh_token); try await persistSession(session)
         }
-        do { return try await api.rpc(function, body, accessToken: session.access_token) }
+        do {
+            let result: R = try await api.rpc(function, body, accessToken: session.access_token)
+            operationContactedCloud = true
+            return result
+        }
         catch CloudAPIError.unauthorized {
             let refreshed = try await refreshedSession(api, token: session.refresh_token); try await persistSession(refreshed)
-            return try await api.rpc(function, body, accessToken: refreshed.access_token)
+            let result: R = try await api.rpc(function, body, accessToken: refreshed.access_token)
+            operationContactedCloud = true
+            return result
         }
     }
     private func refreshedSession(_ api: CloudAPI, token: String) async throws -> CloudSession {
@@ -345,7 +374,7 @@ final class CloudSync: ObservableObject {
             self.walletProgressID = nil
             if let failure {
                 if let progressID {
-                    if failure is CancellationError { store.finishProgressNotice(progressID) }
+                    if failure is CancellationError || Self.isConnectionError(failure) { store.finishProgressNotice(progressID) }
                     else {
                         store.finishProgressNotice(progressID, message: L("Не удалось загрузить покупки из Wallet"),
                             detail: failure.localizedDescription, kind: .error, actions: [.inbox])
@@ -543,7 +572,7 @@ final class CloudSync: ObservableObject {
             saved = true
             try await self.collectWalletImport()
         }
-        if reportError, !saved, let error { store?.error = error }
+        if reportError, !saved, let error, !lastOperationConnectionFailure { store?.error = error }
         return saved
     }
     func pause(_ paused: Bool) async {
