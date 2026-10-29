@@ -29,7 +29,7 @@ extension Ledger {
         let vocabulary: [(merchants: [String], categories: [String])] = [
             (["raising canes", "raising cane s", "starbucks", "mcdonalds", "mcdonald s", "kfc", "burger king", "restaurant", "cafe", "coffee", "joe coffee", "devine r", "pizza", "ресторан", "кафе", "кофе"],
              ["кафе и рестораны", "рестораны", "кафе", "restaurants", "dining", "food and drinks"]),
-            (["lidl", "aldi", "walmart", "whole foods", "trader joe s", "grocery", "supermarket", "пятерочка", "перекресток", "магнит"],
+            (["lidl", "aldi", "walmart", "whole foods", "wholefds", "trader joe s", "grocery", "supermarket", "пятерочка", "перекресток", "магнит"],
              ["продукты", "groceries"]),
             (["uber", "lyft", "taxi", "такси", "транспорт"], ["транспорт", "transport", "transportation"]),
             (["netflix", "spotify", "youtube premium", "icloud"], ["подписки", "subscriptions"]),

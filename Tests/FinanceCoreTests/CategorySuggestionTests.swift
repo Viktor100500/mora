@@ -21,6 +21,30 @@ final class CategorySuggestionTests: XCTestCase {
         XCTAssertEqual(ledger.suggestedCategory(merchant: "Raising Canes 0981", kind: .expense), second)
     }
 
+    func testWholeFoodsBankDescriptorsUseGroceriesAndRespectUserChoices() {
+        var ledger = Ledger.empty
+        let groceries = ledger.categories.first { $0.name == "Продукты" }!.id
+        for merchant in ["Whole Foods Market", "Wholefds", "Wholefds Hkn 12345", "WHOLEFDS MKT #12345", "CARD PURCHASE POS*WHOLEFDS MKT #12345"] {
+            XCTAssertEqual(ledger.suggestedCategory(merchant: merchant, kind: .expense), groceries, merchant)
+        }
+        for merchant in ["Wholefdsology", "Notwholefds", "Wholefds12345"] {
+            XCTAssertNil(ledger.suggestedCategory(merchant: merchant, kind: .expense), merchant)
+        }
+        XCTAssertNil(ledger.suggestedCategory(merchant: "Wholefds MKT #12345", kind: .income))
+        XCTAssertNil(ledger.suggestedCategory(merchant: "Wholefds MKT #12345", kind: .transfer))
+
+        let account = Account(name: "Test"); ledger.accounts = [account]
+        let dining = ledger.categories.first { $0.name == "Кафе и рестораны" }!.id
+        ledger.transactions = [Transaction(date: Date(), merchant: "Wholefds MKT #12345", amount: -10,
+            accountID: account.id, categoryID: dining)]
+        XCTAssertEqual(ledger.suggestedCategory(merchant: "WHOLEFDS MKT #12345", kind: .expense), dining)
+        ledger.rules = [CategoryRule(keyword: "wholefds", categoryID: groceries)]
+        XCTAssertEqual(ledger.suggestedCategory(merchant: "WHOLEFDS MKT #12345", kind: .expense), groceries)
+        ledger.categories.removeAll { $0.id == groceries }
+        ledger.rules = []; ledger.transactions = []
+        XCTAssertNil(ledger.suggestedCategory(merchant: "Wholefds MKT #12345", kind: .expense))
+    }
+
     func testHistoryReusesStoreDescriptorsButNotUnrelatedNames() {
         var ledger = Ledger.empty
         let account = Account(name: "Test"); ledger.accounts = [account]

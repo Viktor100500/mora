@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.16 — 2026-10-29
+
+- Mac and iPhone: recognize the Whole Foods bank abbreviation `WHOLEFDS` with branch codes and store numbers as groceries, including automatic Apple Wallet booking. The Mac also fills existing uncategorized purchases; manual categories, rules and Undo choices retain priority.
+
 ## 1.6.15 — 2026-10-27
 
 - iPhone: connecting to a Mac is animated like AirDrop — a radar with nearby Macs floating around the iPhone, a beam between the devices and a glowing screen edge while you compare the code, then a burst of light and a check mark with a haptic. Reduce Motion keeps it still.

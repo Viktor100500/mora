@@ -2,6 +2,8 @@
 
 Mora uses explicit rules and the user's previous category choices first. With automatic categories enabled, it also matches names locally against public reference data. It does not send purchase descriptions to a search or AI service.
 
+The built-in brand vocabulary also recognizes `WHOLEFDS` as a Whole Foods grocery descriptor, followed by a branch code or store number. This abbreviation is documented in [Caltech's Data Logic Guide – Providers](https://www.imss.caltech.edu/documents/6555/Data_Logic_Guide-Providers.pdf), page 11. It matches a complete word rather than arbitrary substrings and is available immediately in Wallet booking and category suggestions on both Mac and iPhone. Existing uncategorized purchases on Mac are handled by the background categorizer; manual categories, rules and Undo choices retain priority.
+
 ## Regional places directory
 
 Version 1.6.0 bundles 187,072 name/type records: 163,423 from the Overture Places release `2026-10-21.0`, 8,226 from the New York State Retail Food Stores open dataset downloaded on 2026-10-24, and 15,423 additional names from the complete NYC restaurant DBA feed downloaded on 2026-10-25 (24,588 names before cross-source deduplication). Repeated names/types are deduplicated; contact addresses accidentally used as business names are omitted. These are reference records, not a count of unique recognized merchants or a coverage guarantee.

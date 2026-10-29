@@ -39,6 +39,27 @@ final class MerchantCategorizerTests: XCTestCase {
         await worker.process(store: store)
         XCTAssertEqual(store.ledger.transactions[0].categoryID, category)
     }
+    func testExistingWholeFoodsBankPurchaseIsCategorizedOfflineAndUndoIsPreserved() async throws {
+        let (store, preferences, directory) = try await fixture(); defer { try? FileManager.default.removeItem(at: directory) }
+        let groceries = store.ledger.categories.first { $0.name == "Продукты" }!.id
+        let dining = store.ledger.categories.first { $0.name == "Кафе и рестораны" }!.id
+        await store.update { ledger in
+            ledger.transactions = [
+                Transaction(date: Date(), merchant: "Wholefds Hkn 12345", amount: -10, accountID: ledger.accounts[0].id),
+                Transaction(date: Date(), merchant: "Wholefds MKT #67890", amount: -5,
+                    accountID: ledger.accounts[0].id, categoryID: dining)
+            ]
+        }
+        let worker = MerchantCategorizer(preferences: preferences) { _ in XCTFail("A built-in brand must avoid network lookups"); return nil }
+        worker.onlineEnabled = false
+        await worker.process(store: store)
+        XCTAssertEqual(store.ledger.transactions[0].categoryID, groceries)
+        XCTAssertEqual(store.ledger.transactions[1].categoryID, dining)
+        await store.undo()
+        await worker.process(store: store)
+        XCTAssertNil(store.ledger.transactions[0].categoryID)
+        XCTAssertEqual(store.ledger.transactions[1].categoryID, dining)
+    }
     func testRegionalDatasetCategorizesExistingPurchasesOfflineAndHistoryWins() async throws {
         let (store, preferences, directory) = try await fixture(); defer { try? FileManager.default.removeItem(at: directory) }
         let cases: [(String, String)] = [("Chapel Deli", "Продукты"), ("Wildberry", "Кафе и рестораны"),

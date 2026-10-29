@@ -56,6 +56,16 @@ final class WalletReviewTests: XCTestCase {
         XCTAssertEqual(WalletReviewDraft(capture: try capture(account: account, currency: "CAD"), ledger: ledger).currency, "CAD")
     }
 
+    func testWholeFoodsBankDescriptorIsCategorizedWhenWalletPurchaseIsBooked() async throws {
+        var ledger = Ledger.empty
+        ledger.accounts = [Account(name: "USD", currency: "USD")]
+        let item = try capture(account: ledger.accounts[0].id, merchant: "Wholefds Hkn 12345")
+        let transaction = try await WalletReviewDraft.automaticTransaction(for: item, in: ledger) { _, _, _, _ in
+            XCTFail("A same-currency purchase must not request a rate"); throw CancellationError()
+        }
+        XCTAssertEqual(try XCTUnwrap(transaction).categoryID, ledger.categories.first { $0.name == "Продукты" }?.id)
+    }
+
     func testExplicitCurrencyAndUnambiguousEuroSymbolArePrefilled() throws {
         var ledger = Ledger.empty; ledger.accounts = [Account(name: "Test", currency: "EUR")]
         let account = ledger.accounts[0].id
