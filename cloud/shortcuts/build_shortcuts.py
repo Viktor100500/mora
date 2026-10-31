@@ -160,7 +160,12 @@ def workflow(config, preview=False, wallet=False, diagnostics=False):
                  'DefaultValue': ''}]}
 
 
-def wallet_delay_diagnostic(config, delay_seconds=5, preview=False):
+def wallet_delay(config, delay_seconds=5, preview=False):
+    """Quiet delayed sender; one network attempt without an offline queue."""
+    return wallet_delay_diagnostic(config, delay_seconds, preview, diagnostics=False)
+
+
+def wallet_delay_diagnostic(config, delay_seconds=5, preview=False, diagnostics=True):
     """Read Wallet twice; submit at most one payment, only with both fields present.
 
     This probes whether Wallet properties change during a run. It does not fetch
@@ -175,8 +180,8 @@ def wallet_delay_diagnostic(config, delay_seconds=5, preview=False):
     actions = copy.deepcopy(original[:2] + original[5:10])
     result['WFWorkflowActions'] = actions
     actions[0]['WFWorkflowActionParameters']['WFCommentActionText'] = (
-        f'Mora · Wallet · проверка {delay_seconds} с\n'
-        'Сравнивает Amount и Merchant исходной транзакции сразу и после паузы. '
+        f'Mora · Wallet · {delay_seconds} с' + (' · диагностика' if diagnostics else ' · без уведомлений') + '\n'
+        'Читает Amount и Merchant исходной транзакции сразу и после паузы. '
         'Отправляет только один запрос. Если повторное поле пустое, сохраняет первое значение. '
         'Если суммы или продавца всё ещё нет, ничего не отправляет. '
         'Дата покупки фиксируется до паузы. Это эксперимент, не чтение истории Wallet. '
@@ -209,7 +214,7 @@ def wallet_delay_diagnostic(config, delay_seconds=5, preview=False):
                                                     '»\nmerchant=«', values['merchant'], '»'))
 
     before, before_text = snapshot('сразу')
-    if not preview:
+    if diagnostics and not preview:
         action('notification', WFNotificationActionTitle='Mora · Wallet сразу',
                WFNotificationActionBody=text('Событие: ', event, '\n', before_text),
                WFNotificationActionSound=False)
@@ -237,7 +242,7 @@ def wallet_delay_diagnostic(config, delay_seconds=5, preview=False):
         'Событие: ', event, '\n', comparison, '\nСразу:\n', before_text,
         f'\nЧерез {delay_seconds} с:\n', after_text,
         '\nК отправке: «', selected['amount'], '» · «', selected['merchant'], '»'))
-    if not preview:
+    if diagnostics and not preview:
         action('notification', WFNotificationActionTitle=f'Mora · Wallet через {delay_seconds} с',
                WFNotificationActionBody=text(report), WFNotificationActionSound=False)
     fields = {'p_token': phone, 'p_event_id': event, 'p_amount': selected['amount'],
@@ -255,11 +260,12 @@ def wallet_delay_diagnostic(config, delay_seconds=5, preview=False):
                           WFHTTPHeaders=dictionary({'apikey': config['publicKey'],
                                                     'Content-Type': 'application/json'}),
                           WFJSONValues=dictionary(fields))
-        action('notification', WFNotificationActionTitle='Mora · ответ сервера',
-               WFNotificationActionBody=text('Событие: ', event, '\n', response,
-                   '\nrecorded — расход записан; pending — доставлено во входящие.'),
-               WFNotificationActionSound=False)
-    guard_payment_delivery(actions, delivery_start, selected, diagnostics=not preview)
+        if diagnostics:
+            action('notification', WFNotificationActionTitle='Mora · ответ сервера',
+                   WFNotificationActionBody=text('Событие: ', event, '\n', response,
+                       '\nrecorded — расход записан; pending — доставлено во входящие.'),
+                   WFNotificationActionSound=False)
+    guard_payment_delivery(actions, delivery_start, selected, diagnostics=diagnostics and not preview)
     return result
 
 
@@ -269,7 +275,10 @@ if __name__ == '__main__':
     parser.add_argument('--output-dir', type=Path, required=True)
     parser.add_argument('--diagnostics', action='store_true',
                         help='Notify before reading Wallet fields to distinguish trigger and delivery failures')
-    parser.add_argument('--wallet-delay-diagnostic', action='store_true',
+    delayed = parser.add_mutually_exclusive_group()
+    delayed.add_argument('--wallet-delay', action='store_true',
+                        help='Quiet delayed Wallet sender without diagnostic notifications or an offline queue')
+    delayed.add_argument('--wallet-delay-diagnostic', action='store_true',
                         help='Read Wallet before and after a delay; POST once only if amount and merchant are present')
     parser.add_argument('--delay-seconds', type=int, default=5,
                         help='Delay for the repeated Wallet read (1–10 seconds, default 5)')
@@ -279,9 +288,11 @@ if __name__ == '__main__':
     assert config['projectURL'].startswith('https://') and config['projectURL'].endswith('.supabase.co')
     assert config['publicKey'].startswith('sb_publishable_')
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    if args.wallet_delay_diagnostic:
-        target = args.output_dir / f'Mora-Wallet-{args.delay_seconds}s-Diagnostic.unsigned.shortcut'
-        target.write_bytes(plistlib.dumps(wallet_delay_diagnostic(config, args.delay_seconds),
+    if args.wallet_delay or args.wallet_delay_diagnostic:
+        suffix = 'Diagnostic' if args.wallet_delay_diagnostic else 'Quiet'
+        target = args.output_dir / f'Mora-Wallet-{args.delay_seconds}s-{suffix}.unsigned.shortcut'
+        builder = wallet_delay_diagnostic if args.wallet_delay_diagnostic else wallet_delay
+        target.write_bytes(plistlib.dumps(builder(config, args.delay_seconds),
                                          fmt=plistlib.FMT_BINARY))
         print(target)
         raise SystemExit(0)

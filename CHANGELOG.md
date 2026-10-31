@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.19 — 2026-10-30
+
+- Apple Wallet: add a quiet five-second sender (`--wallet-delay`) with no diagnostic notifications, keeping the amount/merchant checks. Delivery still requires internet; the five-second delay is not an offline queue or retry scheduler.
+
 ## 1.6.18 — 2026-10-30
 
 - iPhone 1.0.10: send a saved change to the shared database right away instead of waiting for the next poll, and give it background time to finish when the app is closed right after saving. Lost connections retry within 30 seconds instead of backing off for minutes, and returning to the app retries at once.

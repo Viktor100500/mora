@@ -2,7 +2,7 @@ import unittest
 import hashlib
 import plistlib
 import re
-from build_shortcuts import workflow, wallet_delay_diagnostic
+from build_shortcuts import workflow, wallet_delay, wallet_delay_diagnostic
 
 CONFIG = {'projectURL': 'https://example.supabase.co', 'publicKey': 'sb_publishable_example'}
 
@@ -257,6 +257,26 @@ class WalletDelayDiagnosticTests(unittest.TestCase):
 
 
 class PaymentDeliveryTests(unittest.TestCase):
+    def test_quiet_delayed_sender_has_no_notifications_for_complete_or_missing_fields(self):
+        for before, after, count in [(('', ''), ('', ''), 0),
+                                     (('', ''), ('$2.99', ''), 0),
+                                     (('', ''), ('$2.99', 'Walgreens'), 1),
+                                     (('$2.99', 'Walgreens'), ('', ''), 1)]:
+            with self.subTest(before=before, after=after):
+                w = plistlib.loads(plistlib.dumps(wallet_delay(CONFIG), fmt=plistlib.FMT_BINARY))
+                kinds = [a['WFWorkflowActionIdentifier'].rsplit('.', 1)[-1] for a in w['WFWorkflowActions']]
+                self.assertNotIn('notification', kinds)
+                self.assertNotIn('showresult', kinds)
+                runner = DiagnosticRunner(dict(zip(('Amount', 'Merchant'), before)),
+                                          dict(zip(('Amount', 'Merchant'), after)))
+                runner.run(w['WFWorkflowActions'])
+                self.assertEqual(runner.notifications, [])
+                self.assertEqual(len(runner.requests), count)
+                self.assertEqual(runner.delays, [5])
+                if count:
+                    self.assertEqual((runner.requests[0]['p_amount'], runner.requests[0]['p_merchant']),
+                                     ('$2.99', 'Walgreens'))
+
     def test_standard_senders_also_require_both_fields_without_collapsing_real_purchases(self):
         for wallet in (True, False):
             for amount, merchant, count in [('$2.99', 'Walgreens', 1), ('', '', 0),
