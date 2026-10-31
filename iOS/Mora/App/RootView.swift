@@ -48,6 +48,8 @@ struct RootView: View {
             #endif
             await cloud.prepare(store: store)
         }
+        .onChange(of: store.revision) { cloud.localChanged() }
+        .onChange(of: scenePhase) { _, phase in if phase == .background { cloud.finishInBackground() } }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
             await store.reloadFromDisk()

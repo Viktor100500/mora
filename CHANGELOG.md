@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.18 — 2026-10-30
+
+- iPhone 1.0.10: send a saved change to the shared database right away instead of waiting for the next poll, and give it background time to finish when the app is closed right after saving. Lost connections retry within 30 seconds instead of backing off for minutes, and returning to the app retries at once.
+
 ## 1.6.17 — 2026-10-30
 
 - Apple Wallet shortcuts: send a purchase only when both amount and merchant contain text. The five-second diagnostic still reads the original input twice and preserves available values, but skips delivery when either field remains empty. Independent complete purchases retain separate event IDs.

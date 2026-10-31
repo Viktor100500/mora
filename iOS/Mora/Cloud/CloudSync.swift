@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import FinanceCore
 import Security
 import CryptoKit
@@ -94,9 +95,28 @@ final class CloudSync: ObservableObject {
     }
     /// Polls while the scene is active; the caller cancels it in the background.
     func run() async {
+        // Returning to the app retries at once instead of waiting out an old backoff.
+        nextAttempt = .distantPast
         while !Task.isCancelled {
             if let store, enabled && signedIn && !store.isDemo && Date() >= nextAttempt { await synchronize(inBackground: true) }
             do { try await Task.sleep(for: .seconds(8)) } catch { return }
+        }
+    }
+    /// A local edit goes out right away instead of waiting for the next poll or a network backoff.
+    func localChanged() {
+        guard let store, enabled && signedIn && !store.isDemo else { return }
+        failureCount = 0; nextAttempt = .distantPast
+        Task { await synchronize(inBackground: true) }
+    }
+    /// Leaving the app cancels the polling loop, so an edit saved just before
+    /// closing the app gets background time to reach the household.
+    func finishInBackground() {
+        guard let store, enabled && signedIn && !store.isDemo else { return }
+        let work = Task { await synchronize(inBackground: true, waitForCurrent: true) }
+        let id = UIApplication.shared.beginBackgroundTask(withName: "Mora cloud sync") { work.cancel() }
+        Task {
+            await work.value
+            if id != .invalid { UIApplication.shared.endBackgroundTask(id) }
         }
     }
     private func load() async {
@@ -135,8 +155,8 @@ final class CloudSync: ObservableObject {
         if !signedIn { signedIn = true }
     }
 
-    private func operation(inBackground: Bool = false, _ action: () async throws -> Void) async {
-        if inBackground && operationInProgress { return }
+    private func operation(inBackground: Bool = false, waitForCurrent: Bool = false, _ action: () async throws -> Void) async {
+        if inBackground && !waitForCurrent && operationInProgress { return }
         // A tap during a background request waits instead of being dropped.
         while operationInProgress {
             await withCheckedContinuation { operationWaiters.append($0) }
@@ -337,9 +357,9 @@ final class CloudSync: ObservableObject {
 
     // MARK: Synchronization
 
-    func synchronize(inBackground: Bool = false) async {
+    func synchronize(inBackground: Bool = false, waitForCurrent: Bool = false) async {
         guard enabled, householdID != nil else { return }
-        await operation(inBackground: inBackground) {
+        await operation(inBackground: inBackground, waitForCurrent: waitForCurrent) {
             guard let store = self.store, let id = self.householdID else { return }
             let originalIDs = Set(store.ledger.transactions.map(\.id))
             do {
@@ -349,7 +369,9 @@ final class CloudSync: ObservableObject {
                 self.failureCount = 0; self.nextAttempt = Date().addingTimeInterval(8)
             } catch {
                 self.failureCount += 1
-                self.nextAttempt = Date().addingTimeInterval(min(300, 8 * pow(2, Double(min(self.failureCount, 5)))))
+                // Without a network the next try stays close: the subway rarely lasts five minutes.
+                let limit: Double = Self.isConnectionError(error) ? 30 : 300
+                self.nextAttempt = Date().addingTimeInterval(min(limit, 8 * pow(2, Double(min(self.failureCount, 5)))))
                 throw error
             }
             let added = store.ledger.transactions.filter { !originalIDs.contains($0.id) && $0.externalID?.hasPrefix("wallet:") == true }
