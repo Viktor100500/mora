@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.22 — 2026-10-31
+
+- Mac: show an animated Reset filters button in Transactions when search, type, account, category or dates differ from the defaults. Match the other toolbar buttons and reset to all transactions in the current month.
+
 ## 1.6.21 — 2026-10-31
 
 - Mac: show a success or error notification after Reload finishes, including unchanged data and repeated connection failures. Keep routine background checks quiet.

@@ -36,6 +36,7 @@ struct TransactionsView: View {
     private var searchRequest: SearchRequest {
         SearchRequest(query: filters, revision: store.revision)
     }
+    private var hasCustomFilters: Bool { filters != TransactionSearch() }
     var body: some View {
         VStack(spacing: CardLayout.spacing) {
             filterBar
@@ -139,12 +140,19 @@ struct TransactionsView: View {
                         Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                         TextField(L("Поиск по описанию, заметкам и тегам"), text: $filters.text).textFieldStyle(.plain)
                     }.font(.body).padding(.horizontal, 12).frame(height: 40).modifier(TransactionFilterSurface())
+                    if hasCustomFilters {
+                        Button { AppMotion.update { filters = TransactionSearch() } } label: {
+                            Label(L("Сбросить фильтры"), systemImage: "xmark.circle")
+                        }
+                        .buttonStyle(TransactionToolbarButtonStyle()).fixedSize()
+                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    }
                     Button { sheet = .transaction(nil) } label: { Label(L("Добавить"), systemImage: "plus") }
                         .buttonStyle(TransactionToolbarButtonStyle(prominent: true))
                     Button { let visibleRows = rows; Task { @MainActor in await store.exportCSV(visibleRows) } } label: {
                         Label(L("Экспорт CSV"), systemImage: "square.and.arrow.up")
                     }.buttonStyle(TransactionToolbarButtonStyle()).help(L("Экспортировать операции по текущему фильтру"))
-                }
+                }.smoothUpdates(value: hasCustomFilters)
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 10) { filterMenus; dateFilters }.fixedSize()
                     VStack(alignment: .leading, spacing: 10) { filterMenus; dateFilters }
