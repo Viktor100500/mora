@@ -23,7 +23,7 @@ class WorkflowTests(unittest.TestCase):
         kinds = [a['WFWorkflowActionIdentifier'].rsplit('.', 1)[-1] for a in actions]
         self.assertNotIn('showresult', kinds)
         notes = [i for i, kind in enumerate(kinds) if kind == 'notification']
-        self.assertEqual(len(notes), 2)
+        self.assertEqual(len(notes), 4)  # start, response, and two mutually exclusive skip branches
         self.assertLess(notes[0], 3)  # before Amount / Merchant can throw
         self.assertLess(kinds.index('downloadurl'), notes[1])
         body = actions[notes[1]]['WFWorkflowActionParameters']['WFNotificationActionBody']
@@ -40,11 +40,12 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(next(iter(items['p_card']['attachmentsByRange'].values()))['OutputUUID'],
                          card['WFWorkflowActionParameters']['UUID'])
         kinds = [a['WFWorkflowActionIdentifier'].rsplit('.', 1)[-1] for a in actions]
-        self.assertEqual(kinds.count('replace'), 1)  # only the event UUID; no amount rules for particular merchants
+        self.assertEqual(kinds.count('replace'), 3)  # event UUID and two whitespace guards
         wallet = workflow(CONFIG, wallet=True)['WFWorkflowActions']
         card_read = next(a for a in wallet if a['WFWorkflowActionParameters'].get('UUID') and 'Card or Pass' in str(a))
+        wallet_post = next(a for a in wallet if a['WFWorkflowActionIdentifier'].endswith('.downloadurl'))
         wallet_items = {i['WFKey']['Value']['string']: i['WFValue']['Value'] for i in
-                        wallet[-1]['WFWorkflowActionParameters']['WFJSONValues']['Value']['WFDictionaryFieldValueItems']}
+                        wallet_post['WFWorkflowActionParameters']['WFJSONValues']['Value']['WFDictionaryFieldValueItems']}
         self.assertEqual(next(iter(wallet_items['p_card']['attachmentsByRange'].values()))['OutputUUID'],
                          card_read['WFWorkflowActionParameters']['UUID'])
 
@@ -53,7 +54,7 @@ class WorkflowTests(unittest.TestCase):
         kinds = [a['WFWorkflowActionIdentifier'].rsplit('.', 1)[-1] for a in actions]
         self.assertNotIn('downloadurl', kinds)
         self.assertNotIn('notification', kinds)
-        self.assertEqual(kinds[-1], 'dictionary')
+        self.assertEqual(kinds.count('dictionary'), 1)
 
     def test_templates_do_not_infer_wallet_currency_or_embed_phone_credentials(self):
         for wallet in (False, True):
@@ -106,8 +107,10 @@ class DiagnosticRunner:
         if value.get('Type') == 'CurrentDate':
             return '2026-10-24T12:00:00Z'
         if value.get('Type') == 'ExtensionInput':
+            if not value.get('Aggrandizements'):
+                return self.snapshots[self.phase]
             property_name = value['Aggrandizements'][0]['PropertyName']
-            return self.snapshots[self.phase][property_name]
+            return self.snapshots[self.phase].get(property_name, '')
         raise AssertionError(f'Unsupported binding: {value}')
 
     def fields(self, value):
@@ -141,6 +144,7 @@ class DiagnosticRunner:
                 i = end + 1
                 continue
             if kind == 'gettext': last = self.resolve(p['WFTextActionText'])
+            elif kind == 'getvalueforkey': last = self.resolve(p['WFInput']).get(p['WFDictionaryKey'], '')
             elif kind == 'format.date':
                 self.date_reads += 1
                 last = self.resolve(p['WFDate'])
@@ -174,7 +178,6 @@ class WalletDelayDiagnosticTests(unittest.TestCase):
             (('', ''), ('$3.25', 'PATH'), ('$3.25', 'PATH'), 'Поля изменились'),
             (('$3.25', 'PATH'), ('', ''), ('$3.25', 'PATH'), 'Поля изменились'),
             (('$3.25', ''), ('', 'PATH'), ('$3.25', 'PATH'), 'Поля изменились'),
-            (('', ''), ('', ''), ('', ''), 'Без изменений'),
             (('$3.25', 'PATH'), ('$3.25', 'PATH'), ('$3.25', 'PATH'), 'Без изменений'),
             (('$1', 'PATH'), ('$3.25', 'PATH'), ('$3.25', 'PATH'), 'Поля изменились'),
         ]
@@ -194,6 +197,31 @@ class WalletDelayDiagnosticTests(unittest.TestCase):
                 self.assertEqual(len(runner.notifications), 3)
                 self.assertTrue(all(request['p_event_id'] in note for note in runner.notifications))
                 self.assertIn(comparison, runner.notifications[1])
+
+    def test_missing_fields_after_wait_never_send_a_request_or_claim_delivery(self):
+        for before, after in [(('', ''), ('', '')), (('', ''), ('$2.99', '')),
+                              (('', ''), ('', 'Walgreens')), (('$2.99', ''), ('', '')),
+                              (('', ''), (' \n\t', 'Walgreens')),
+                              (('', ''), ('$2.99', '\u00a0\u202f'))]:
+            with self.subTest(before=before, after=after):
+                w = plistlib.loads(plistlib.dumps(wallet_delay_diagnostic(CONFIG), fmt=plistlib.FMT_BINARY))
+                runner = DiagnosticRunner(dict(zip(('Amount', 'Merchant'), before)),
+                                          dict(zip(('Amount', 'Merchant'), after)))
+                runner.run(w['WFWorkflowActions'])
+                self.assertEqual(runner.requests, [])
+                self.assertEqual(runner.delays, [5])
+                self.assertIn('Запрос в Mora не отправлен', runner.notifications[-1])
+                self.assertFalse(any('recorded' in n for n in runner.notifications))
+
+    def test_separate_empty_then_complete_runs_only_deliver_the_complete_purchase(self):
+        requests = []
+        for fields in [('', ''), ('$2.99', 'Walgreens #19963')]:
+            snapshot = dict(zip(('Amount', 'Merchant'), fields))
+            runner = DiagnosticRunner(snapshot, snapshot)
+            runner.run(wallet_delay_diagnostic(CONFIG)['WFWorkflowActions'])
+            requests.extend(runner.requests)
+        self.assertEqual(len(requests), 1)
+        self.assertEqual((requests[0]['p_amount'], requests[0]['p_merchant']), ('$2.99', 'Walgreens #19963'))
 
     def test_reads_reference_original_wallet_input_on_both_sides_of_wait(self):
         actions = wallet_delay_diagnostic(CONFIG)['WFWorkflowActions']
@@ -226,6 +254,24 @@ class WalletDelayDiagnosticTests(unittest.TestCase):
         for value in (0, 11, 5.0, True):
             with self.subTest(delay=value), self.assertRaises(ValueError):
                 wallet_delay_diagnostic(CONFIG, delay_seconds=value)
+
+
+class PaymentDeliveryTests(unittest.TestCase):
+    def test_standard_senders_also_require_both_fields_without_collapsing_real_purchases(self):
+        for wallet in (True, False):
+            for amount, merchant, count in [('$2.99', 'Walgreens', 1), ('', '', 0),
+                                          ('$2.99', '', 0), ('', 'Walgreens', 0),
+                                          ('\n\t', 'Walgreens', 0), ('$2.99', '\u00a0', 0)]:
+                with self.subTest(wallet=wallet, amount=amount, merchant=merchant):
+                    fields = {'Amount' if wallet else 'amount': amount,
+                              'Merchant' if wallet else 'merchant': merchant}
+                    requests = []
+                    # Two complete invocations remain two purchases, even with identical fields.
+                    for _ in range(2):
+                        runner = DiagnosticRunner(fields, fields)
+                        runner.run(workflow(CONFIG, wallet=wallet)['WFWorkflowActions'])
+                        requests.extend(runner.requests)
+                    self.assertEqual(len(requests), 2 * count)
 
 if __name__ == '__main__':
     unittest.main()

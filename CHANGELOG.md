@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.17 — 2026-10-30
+
+- Apple Wallet shortcuts: send a purchase only when both amount and merchant contain text. The five-second diagnostic still reads the original input twice and preserves available values, but skips delivery when either field remains empty. Independent complete purchases retain separate event IDs.
+
 ## 1.6.16 — 2026-10-29
 
 - Mac and iPhone: recognize the Whole Foods bank abbreviation `WHOLEFDS` with branch codes and store numbers as groceries, including automatic Apple Wallet booking. The Mac also fills existing uncategorized purchases; manual categories, rules and Undo choices retain priority.

@@ -39,6 +39,41 @@ def dictionary(fields):
     ]}, "WFSerializationType": "WFDictionaryFieldValue"}
 
 
+def guard_payment_delivery(actions, start, values, diagnostics=False):
+    """Send only when both fields contain text, including after a delayed read.
+
+    Keep the request and its response notification in the same guarded branch.
+    Separate Wallet runs still have separate event IDs; do not guess payment
+    identity from merchant, amount or a time bucket.
+    """
+    delivery = actions[start:]
+    del actions[start:]
+
+    def action(identifier, **parameters):
+        identifier_uuid = str(uuid.uuid4()).upper()
+        actions.append({'WFWorkflowActionIdentifier': 'is.workflow.actions.' + identifier,
+                        'WFWorkflowActionParameters': {'UUID': identifier_uuid, **parameters}})
+        return {'Type': 'ActionOutput', 'OutputUUID': identifier_uuid}
+
+    groups = []
+    for key in ('amount', 'merchant'):
+        trimmed = action('text.replace', WFInput=text(values[key]),
+                         WFReplaceTextFind=r'^\s+|\s+$', WFReplaceTextReplace='',
+                         WFReplaceTextRegularExpression=True)
+        group = str(uuid.uuid4()).upper()
+        groups.append(group)
+        action('conditional', GroupingIdentifier=group, WFControlFlowMode=0,
+               WFCondition=100, WFInput={'Type': 'Variable', 'Variable': token(trimmed)})
+    actions.extend(delivery)
+    for group in reversed(groups):
+        action('conditional', GroupingIdentifier=group, WFControlFlowMode=1)
+        if diagnostics:
+            action('notification', WFNotificationActionTitle='Mora · покупка не отправлена',
+                   WFNotificationActionBody='Wallet не передал сумму или продавца. Запрос в Mora не отправлен.',
+                   WFNotificationActionSound=False)
+        action('conditional', GroupingIdentifier=group, WFControlFlowMode=2)
+
+
 def workflow(config, preview=False, wallet=False, diagnostics=False):
     actions = []
     def action(identifier, output_name, **parameters):
@@ -94,6 +129,7 @@ def workflow(config, preview=False, wallet=False, diagnostics=False):
     if 'card' in values:
         # Requires the wallet_cards migration; an unknown card waits for an account in Mora.
         fields['p_card'] = values['card']
+    delivery_start = len(actions)
     if preview:
         action('dictionary', 'Тестовый запрос', WFItems=dictionary(fields))
     else:
@@ -110,6 +146,7 @@ def workflow(config, preview=False, wallet=False, diagnostics=False):
                    WFNotificationActionBody=text(response,
                        '\nrecorded — расход записан; pending — доставлено, ожидает обработки в Mora.'),
                    WFNotificationActionSound=False)
+    guard_payment_delivery(actions, delivery_start, values, diagnostics=diagnostics and not preview)
     return {'WFWorkflowClientVersion': '4711', 'WFWorkflowMinimumClientVersion': 900,
             'WFWorkflowMinimumClientVersionString': '900',
             'WFWorkflowActions': actions, 'WFWorkflowTypes': ['WFWorkflowTypeShowInSearch'],
@@ -124,7 +161,7 @@ def workflow(config, preview=False, wallet=False, diagnostics=False):
 
 
 def wallet_delay_diagnostic(config, delay_seconds=5, preview=False):
-    """Read the original Wallet input twice; submit one payment with both snapshots visible.
+    """Read Wallet twice; submit at most one payment, only with both fields present.
 
     This probes whether Wallet properties change during a run. It does not fetch
     a new transaction from Wallet or guarantee that iOS updates the input object.
@@ -141,6 +178,7 @@ def wallet_delay_diagnostic(config, delay_seconds=5, preview=False):
         f'Mora · Wallet · проверка {delay_seconds} с\n'
         'Сравнивает Amount и Merchant исходной транзакции сразу и после паузы. '
         'Отправляет только один запрос. Если повторное поле пустое, сохраняет первое значение. '
+        'Если суммы или продавца всё ещё нет, ничего не отправляет. '
         'Дата покупки фиксируется до паузы. Это эксперимент, не чтение истории Wallet. '
         'Нужен интернет; офлайн-очереди нет. Не запускайте вручную без транзакции.')
 
@@ -204,6 +242,7 @@ def wallet_delay_diagnostic(config, delay_seconds=5, preview=False):
                WFNotificationActionBody=text(report), WFNotificationActionSound=False)
     fields = {'p_token': phone, 'p_event_id': event, 'p_amount': selected['amount'],
               'p_currency': '', 'p_merchant': selected['merchant'], 'p_occurred_at': date}
+    delivery_start = len(actions)
     if preview:
         # No credentials, network, or notifications in the validation variant.
         action('dictionary', 'Проверка диагностики', WFItems=dictionary({
@@ -220,6 +259,7 @@ def wallet_delay_diagnostic(config, delay_seconds=5, preview=False):
                WFNotificationActionBody=text('Событие: ', event, '\n', response,
                    '\nrecorded — расход записан; pending — доставлено во входящие.'),
                WFNotificationActionSound=False)
+    guard_payment_delivery(actions, delivery_start, selected, diagnostics=not preview)
     return result
 
 
@@ -230,7 +270,7 @@ if __name__ == '__main__':
     parser.add_argument('--diagnostics', action='store_true',
                         help='Notify before reading Wallet fields to distinguish trigger and delivery failures')
     parser.add_argument('--wallet-delay-diagnostic', action='store_true',
-                        help='Read the original Wallet input before and after a short delay, then POST once')
+                        help='Read Wallet before and after a delay; POST once only if amount and merchant are present')
     parser.add_argument('--delay-seconds', type=int, default=5,
                         help='Delay for the repeated Wallet read (1–10 seconds, default 5)')
     args = parser.parse_args()

@@ -84,7 +84,15 @@ Apply `wallet_import_batches` after the Wallet review migration. `mora_collect_w
 
 Batch records use the existing import-history format, with `source: Apple Shortcuts`; the existing batch preview and rollback apply. Swift histories remain computer-local.
 
-### Wallet cards
+### Wallet sender validation (30 October 2026)
+
+Both generated senders require a nonblank amount and merchant before sending a request. The five-second diagnostic reads the same Wallet input immediately and after five seconds, chooses the later nonempty value for each field (falling back to the first), then applies the same check. If either field is still empty, it sends no request and reports that the purchase was not sent. Whitespace-only fields count as empty.
+
+The delay does not fetch Wallet history or guarantee that the input object updates. A later independent Wallet invocation can deliver complete data, but this is not guaranteed; a purchase whose fields never arrive must be entered manually. Each invocation creates its own event ID once before the delay. That ID protects retries of that request, not separate automation invocations. Identical complete purchases are deliberately preserved.
+
+Rebuild with `--wallet-delay-diagnostic --delay-seconds 5` for the delayed sender. Existing shortcuts on an iPhone must be replaced to receive this change. The schema and server capture endpoint are unchanged.
+
+### Wallet card routing
 
 Apply `wallet_cards` after the currency inference migration and before installing a sender that passes `card`. `mora_capture_payment` gains an optional seventh argument `p_card`; the six-argument call is unchanged. Each new card is remembered per phone key and holds its purchases with the reason «Новая карта: выберите для неё счёт» until a member links it with `mora_link_wallet_card` (Mora does this from the review form or the Apple Pay cards list). Linking moves the card's waiting purchases to that account and recomputes their reasons; Mora then books complete ones as usual. `mora_list_pending` adds `card_id`, `card` and `card_linked`; `mora_list_wallet_cards` lists cards of active keys in the household.
 
