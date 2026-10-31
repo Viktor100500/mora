@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.21 — 2026-10-31
+
+- Mac: show a success or error notification after Reload finishes, including unchanged data and repeated connection failures. Keep routine background checks quiet.
+- Mac: use Mora green for the Wallet loading notification border.
+
 ## 1.6.20 — 2026-10-30
 
 - Mac: add a circular Reload button to the right of Import for immediate cloud synchronization, with a loading indicator and a tooltip explaining its purpose.

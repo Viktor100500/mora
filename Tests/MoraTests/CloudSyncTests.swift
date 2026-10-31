@@ -412,6 +412,57 @@ final class CloudSyncTests: XCTestCase {
         XCTAssertFalse(store.notifications.events.contains { $0.message == "Синхронизация завершена" })
     }
 
+    func testReloadReportsSuccessEvenWhenDataIsUnchanged() async throws {
+        defer { try? cleanup() }
+        try await prepare()
+        SyncStubProtocol.handler = { request in
+            let response = request.url!.lastPathComponent == "mora_get_status" ? "{\"version\":1,\"pending_count\":0}" : "[]"
+            return (200, Data(response.utf8))
+        }
+        await cloud.synchronize(notifyResult: true)
+        XCTAssertEqual(store.activeNotice?.message, "Синхронизация с облаком завершена")
+        XCTAssertEqual(store.activeNotice?.kind, .success)
+        XCTAssertEqual(store.notifications.events.count, 1)
+        XCTAssertFalse(cloud.busy)
+    }
+
+    func testReloadReportsEachServerFailureWithoutDuplicateErrors() async throws {
+        defer { try? cleanup() }
+        try await prepare()
+        SyncStubProtocol.handler = { _ in (503, Data("{\"message\":\"Test offline\"}".utf8)) }
+        for _ in 0..<2 {
+            await cloud.synchronize(notifyResult: true)
+            XCTAssertEqual(store.activeNotice?.message, "Не удалось синхронизироваться с облаком")
+            XCTAssertEqual(store.activeNotice?.kind, .error)
+            XCTAssertEqual(store.activeNotice?.detail, cloud.error)
+            XCTAssertFalse(store.isDeferringUpdates)
+        }
+        XCTAssertEqual(store.notifications.events.count, 2)
+        XCTAssertTrue(store.notifications.events.allSatisfy { $0.kind == .error })
+    }
+
+    func testReloadReportsRepeatedConnectionFailuresAndThenRecovery() async throws {
+        defer { try? cleanup() }
+        try await prepare()
+        SyncStubProtocol.handler = { _ in throw URLError(.notConnectedToInternet) }
+        for _ in 0..<2 {
+            await cloud.synchronize(notifyResult: true)
+            XCTAssertEqual(store.activeNotice?.message, "Не удалось синхронизироваться с облаком")
+            XCTAssertEqual(store.activeNotice?.kind, .error)
+        }
+        XCTAssertEqual(store.notifications.events.filter { $0.connectionState == .lost }.count, 1)
+        XCTAssertEqual(store.notifications.events.filter { $0.message == "Не удалось синхронизироваться с облаком" }.count, 2)
+        SyncStubProtocol.handler = { request in
+            let response = request.url!.lastPathComponent == "mora_get_status" ? "{\"version\":1,\"pending_count\":0}" : "[]"
+            return (200, Data(response.utf8))
+        }
+        await cloud.synchronize(notifyResult: true)
+        XCTAssertEqual(store.activeNotice?.message, "Синхронизация с облаком завершена")
+        XCTAssertEqual(store.activeNotice?.kind, .success)
+        XCTAssertNil(cloud.error)
+        XCTAssertEqual(store.notifications.events.filter { $0.connectionState == .restored }.count, 1)
+    }
+
     func testEmptyManualAndBackgroundChecksDoNotCreateNotices() async throws {
         defer { try? cleanup() }
         try await prepare()

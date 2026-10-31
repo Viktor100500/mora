@@ -151,7 +151,7 @@ final class CloudSync: ObservableObject {
         stopping = true
         while operationInProgress { await withCheckedContinuation { operationWaiters.append($0) } }
     }
-    private func operation(inBackground: Bool = false, _ action: () async throws -> Void) async {
+    private func operation(inBackground: Bool = false, reportSyncResult: Bool = false, _ action: () async throws -> Void) async {
         guard !stopping else { return }
         if inBackground && operationInProgress { return }
         // A click during a background request waits instead of being dropped.
@@ -175,8 +175,15 @@ final class CloudSync: ObservableObject {
             try await action()
             if operationContactedCloud { store?.notifications.connectionRestored() }
             if error != nil { error = nil }
+            if reportSyncResult {
+                store?.showNotice(L("Синхронизация с облаком завершена"),
+                    detail: pending.isEmpty ? nil : L("Покупок на проверке: \(pending.count)"),
+                    actions: pending.isEmpty ? [] : [.inbox])
+            }
         }
-        catch is CancellationError { }
+        catch is CancellationError {
+            if reportSyncResult { store?.showNotice(L("Синхронизация с облаком отменена"), kind: .warning) }
+        }
         catch {
             if Self.isConnectionError(error) {
                 lastOperationConnectionFailure = true
@@ -184,9 +191,15 @@ final class CloudSync: ObservableObject {
                 suppressErrorNotification = true
                 self.error = error.localizedDescription
                 suppressErrorNotification = false
-                return
+            } else {
+                suppressErrorNotification = reportSyncResult
+                if self.error != error.localizedDescription { self.error = error.localizedDescription }
+                suppressErrorNotification = false
             }
-            if self.error != error.localizedDescription { self.error = error.localizedDescription }
+            if reportSyncResult {
+                store?.showNotice(L("Не удалось синхронизироваться с облаком"),
+                    detail: error.localizedDescription, kind: .error, actions: [.inbox])
+            }
         }
     }
     private static func isConnectionError(_ error: Error) -> Bool {
@@ -354,9 +367,9 @@ final class CloudSync: ObservableObject {
         if stagedPending != nil { stagedSyncDate = Date() }
         else { lastSync = Date() }
     }
-    func synchronize(inBackground: Bool = false) async {
+    func synchronize(inBackground: Bool = false, notifyResult: Bool = false) async {
         guard enabled, householdID != nil else { return }
-        await operation(inBackground: inBackground) {
+        await operation(inBackground: inBackground, reportSyncResult: notifyResult) {
             guard let store = self.store, let id = self.householdID else { return }
             let originalIDs = Set(store.ledger.transactions.map(\.id))
             store.beginDeferredUpdates()

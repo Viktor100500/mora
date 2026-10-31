@@ -1117,5 +1117,8 @@
   "Принудительно синхронизировать с облаком": "Force sync with the cloud",
   "Синхронизация с облаком…": "Syncing with the cloud…",
   "Подключите облако в настройках для синхронизации": "Connect to the cloud in Settings to sync",
-  "Возобновите синхронизацию в настройках облака": "Resume sync in cloud settings"
+  "Возобновите синхронизацию в настройках облака": "Resume sync in cloud settings",
+  "Синхронизация с облаком завершена": "Cloud sync completed",
+  "Синхронизация с облаком отменена": "Cloud sync canceled",
+  "Не удалось синхронизироваться с облаком": "Couldn't sync with the cloud"
 }

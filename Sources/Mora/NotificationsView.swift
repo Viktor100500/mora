@@ -141,7 +141,7 @@ private struct NotificationRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             Group {
-                if event.isInProgress { ProgressView().controlSize(.small) }
+                if event.isInProgress { ProgressView().controlSize(.small).tint(.moraGreen) }
                 else { Image(systemName: icon).foregroundStyle(color) }
             }.frame(width: 20).padding(.top, 2)
             VStack(alignment: .leading, spacing: 8) {
@@ -248,14 +248,14 @@ private struct AppNoticeBanner: View {
         switch event.kind {
         case .warning: Color(red: 0.72, green: 0.49, blue: 0.05)
         case .error: Color.token("red")
-        case .information: Color.accentColor
+        case .information: Color.moraGreen
         default: Color.moraGreen
         }
     }
     var body: some View {
         HStack(spacing: 12) {
             ZStack {
-                if event.isInProgress { ProgressView().controlSize(.small).transition(.opacity) }
+                if event.isInProgress { ProgressView().controlSize(.small).tint(.moraGreen).transition(.opacity) }
                 else {
                     Image(systemName: event.kind == .error || event.kind == .warning
                           ? "exclamationmark.circle.fill" : "checkmark.circle.fill")

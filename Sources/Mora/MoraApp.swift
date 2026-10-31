@@ -337,7 +337,7 @@ struct ContentView: View {
             reloadingCloud = true
             Task { @MainActor in
                 defer { reloadingCloud = false }
-                await cloud.synchronize()
+                await cloud.synchronize(notifyResult: true)
             }
         } label: {
             ZStack {
