@@ -82,8 +82,13 @@ final class CloudSync: ObservableObject {
     private var directory: URL? { store?.fileURL.deletingLastPathComponent() }
     private var configURL: URL? { directory?.appendingPathComponent("cloud-settings.json") }
     private var checkpointURL: URL? { directory?.appendingPathComponent("cloud-checkpoint.json") }
+    /// iOS moves the data container on every app update, so the account uses the
+    /// path inside the container; an absolute path lost the session after updates.
     private var keychainAccount: String {
-        "session-" + SHA256.hash(data: Data((directory?.path ?? "").utf8)).map { String(format: "%02x", $0) }.joined()
+        var path = directory?.standardizedFileURL.path ?? ""
+        let home = URL(fileURLWithPath: NSHomeDirectory()).standardizedFileURL.path
+        if path.hasPrefix(home + "/") { path = "~" + path.dropFirst(home.count) }
+        return "session-" + SHA256.hash(data: Data(path.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
     // MARK: Lifecycle
@@ -127,7 +132,13 @@ final class CloudSync: ObservableObject {
                 guard FileManager.default.fileExists(atPath: configURL.path) else { return nil }
                 let stored = try JSONDecoder().decode(Settings.self, from: Data(contentsOf: configURL))
                 _ = try CloudConfiguration(projectURL: stored.configuration.projectURL, publicKey: stored.configuration.publicKey)
-                let session = try CloudKeychain.read(account: account).map { try JSONDecoder().decode(CloudSession.self, from: $0) }
+                var session = try CloudKeychain.read(account: account).map { try JSONDecoder().decode(CloudSession.self, from: $0) }
+                if session == nil, let moved = CloudKeychain.session(of: stored.userID) {
+                    // Saved under an earlier container path: keep the user signed in.
+                    try CloudKeychain.write(JSONEncoder().encode(moved.session), account: account)
+                    for old in moved.accounts where old != account { try? CloudKeychain.delete(account: old) }
+                    session = moved.session
+                }
                 if let session, session.user.id != stored.userID { throw LedgerError.invalid("Облачная сессия относится к другому пользователю. Войдите повторно.") }
                 return (stored, session)
             }
@@ -602,6 +613,20 @@ private enum CloudKeychain {
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess else { throw keychainError(status) }
         return result as? Data
+    }
+    /// The newest session of a user saved under any account of this service.
+    static func session(of userID: UUID) -> (session: CloudSession, accounts: [String])? {
+        var q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: "com.mora.finance.cloud"]
+        q[kSecReturnData as String] = true; q[kSecReturnAttributes as String] = true; q[kSecMatchLimit as String] = kSecMatchLimitAll
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(q as CFDictionary, &result) == errSecSuccess, let items = result as? [[String: Any]] else { return nil }
+        let found = items.compactMap { item -> (CloudSession, String)? in
+            guard let account = item[kSecAttrAccount as String] as? String, let data = item[kSecValueData as String] as? Data,
+                  let session = try? JSONDecoder().decode(CloudSession.self, from: data), session.user.id == userID else { return nil }
+            return (session, account)
+        }
+        guard let newest = found.max(by: { $0.0.expires_at < $1.0.expires_at }) else { return nil }
+        return (newest.0, found.map(\.1))
     }
     static func write(_ data: Data, account: String) throws {
         let q = query(account: account)

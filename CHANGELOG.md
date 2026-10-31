@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.23 — 2026-10-31
+
+- iPhone 1.0.11: stay signed in to the shared database after app updates. The Keychain session was stored under the absolute data path, which iOS changes on every update, so the iPhone silently stopped syncing and showed the sign-in screen. The session now uses the path inside the app container, and a session saved under an earlier path is moved over automatically.
+
 ## 1.6.22 — 2026-10-31
 
 - Mac: show an animated Reset filters button in Transactions when search, type, account, category or dates differ from the defaults. Match the other toolbar buttons and reset to all transactions in the current month.
