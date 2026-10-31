@@ -1113,5 +1113,9 @@
   "Не удалось подключиться к общей базе.": "Couldn't connect to the shared database.",
   "Уже ведете учет на Mac?": "Already using Mora on a Mac?",
   "Поднесите iPhone к Mac с Mora и подтвердите код — общая база подключится сама, без паролей.": "Bring your iPhone near a Mac running Mora and confirm the code — the shared database connects by itself, no passwords.",
-  "Код для сверки": "Verification code"
+  "Код для сверки": "Verification code",
+  "Принудительно синхронизировать с облаком": "Force sync with the cloud",
+  "Синхронизация с облаком…": "Syncing with the cloud…",
+  "Подключите облако в настройках для синхронизации": "Connect to the cloud in Settings to sync",
+  "Возобновите синхронизацию в настройках облака": "Resume sync in cloud settings"
 }

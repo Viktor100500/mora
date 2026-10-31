@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.20 — 2026-10-30
+
+- Mac: add a circular Reload button to the right of Import for immediate cloud synchronization, with a loading indicator and a tooltip explaining its purpose.
+
 ## 1.6.19 — 2026-10-30
 
 - Apple Wallet: add a quiet five-second sender (`--wallet-delay`) with no diagnostic notifications, keeping the amount/merchant checks. Delivery still requires internet; the five-second delay is not an offline queue or retry scheduler.

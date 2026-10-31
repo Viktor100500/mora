@@ -117,6 +117,7 @@ struct ContentView: View {
     @AppStorage("mora.didSeeWelcome") private var didSeeWelcome = false
     @State private var confirmStart = false
     @State private var rollbackRequest: UUID?
+    @State private var reloadingCloud = false
     @AppStorage("mora.hideAmounts") private var hideAmounts = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var currency: String { store.ledger.preferences.baseCurrency }
@@ -220,12 +221,12 @@ struct ContentView: View {
             if #available(macOS 26.0, *) {
                 ToolbarSpacer(.flexible, placement: .primaryAction)
                 ToolbarItem(placement: .primaryAction) {
-                    HStack(spacing: 10) { importControl; transactionControls }
+                    HStack(spacing: 10) { importControl; reloadControl; transactionControls }
                 }
                     .sharedBackgroundVisibility(.hidden)
             } else {
                 ToolbarItemGroup(placement: .primaryAction) {
-                    HStack(spacing: 10) { importControl; transactionControls }
+                    HStack(spacing: 10) { importControl; reloadControl; transactionControls }
                 }
             }
         }
@@ -329,6 +330,32 @@ struct ContentView: View {
         .padding(.horizontal, 18).frame(height: 36)
         .modifier(ToolbarGlassStyle(shape: Capsule()))
         .help(L("Импорт из CSV или через AI-агента"))
+    }
+    private var reloadControl: some View {
+        Button {
+            guard !reloadingCloud else { return }
+            reloadingCloud = true
+            Task { @MainActor in
+                defer { reloadingCloud = false }
+                await cloud.synchronize()
+            }
+        } label: {
+            ZStack {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 16, weight: .medium))
+                    .opacity(reloadingCloud ? 0 : 1)
+                if reloadingCloud { ProgressView().controlSize(.small) }
+            }
+            .frame(width: 36, height: 36).contentShape(Circle())
+        }
+        .modifier(ToolbarGlassStyle(shape: Circle()))
+        .disabled(reloadingCloud || cloud.busy || store.isDemo || !cloud.enabled || cloud.householdID == nil)
+        .accessibilityLabel("Reload")
+        .accessibilityHint(L("Принудительно синхронизировать с облаком"))
+        .help(reloadingCloud ? L("Синхронизация с облаком…") :
+            store.isDemo || cloud.householdID == nil ? L("Подключите облако в настройках для синхронизации") :
+            !cloud.enabled ? L("Возобновите синхронизацию в настройках облака") :
+            "Reload · " + L("Принудительно синхронизировать с облаком"))
     }
     private var transactionControls: some View {
         HStack(spacing: 10) {
