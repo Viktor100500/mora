@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.29 — 2026-11-01
+
+- iPhone 1.0.15: new Shortcuts action Log Wallet Payment. Placed first in the Wallet Transaction automation, it saves the amount, merchant and card on the iPhone without opening Mora, also on a locked iPhone, and never fails the automation. Shared database → Wallet runs lists every run, so a failed payment shows whether the automation reached Mora at all. Nothing is sent to the server yet.
+
 ## 1.6.28 — 2026-11-01
 
 - Mac: notification text uses the available width and wraps onto multiple lines, so transaction details and multiple operations are readable without premature truncation.

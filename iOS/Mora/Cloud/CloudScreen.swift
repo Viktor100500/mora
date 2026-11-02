@@ -34,6 +34,11 @@ struct CloudScreen: View {
             } else {
                 connected
             }
+            if !store.isDemo {
+                Section {
+                    NavigationLink { WalletRunsScreen() } label: { Label(L("Запуски Wallet"), systemImage: "list.bullet.rectangle") }
+                } footer: { Text(L("Журнал на этом iPhone показывает, дошла ли автоматизация Wallet до Mora.")) }
+            }
             Section {
                 Text(L("Общая база работает с вашим собственным проектом Supabase: разработчик не предоставляет сервер и не получает доступ к данным. Покупки Apple Pay приходят через «Быстрые команды» — экспериментальная интеграция, не банковская синхронизация."))
                     .font(.footnote).foregroundStyle(.secondary)
