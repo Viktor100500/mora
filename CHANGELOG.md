@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.31 — 2026-11-01
+
+- iPhone 1.0.17: Accounts tab rows put the account name on its own line across the full row width, with the type and balance below, so names fit on small iPhones and with large text.
+
 ## 1.6.30 — 2026-11-01
 
 - iPhone 1.0.16: Mora registers an App Shortcut for Log Wallet Payment, so iOS lists the action under Mora in Shortcuts right after installation.

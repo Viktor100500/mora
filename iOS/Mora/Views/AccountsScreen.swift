@@ -57,18 +57,24 @@ struct AccountsScreen: View {
         NavigationLink {
             AccountDetailScreen(accountID: account.id)
         } label: {
-            HStack(spacing: 12) {
+            HStack(alignment: .center, spacing: 12) {
                 IconTile(icon: account.kind.icon, color: account.color, size: 42)
-                VStack(alignment: .leading, spacing: 3) {
-                    // The balance keeps its width; a long name wraps instead of truncating.
+                // The name gets the whole row width instead of sharing it with the balance,
+                // so it fits on small iPhones and with large text; the balance sits under it.
+                VStack(alignment: .leading, spacing: 4) {
                     Text(account.name).font(.body.weight(.medium)).lineLimit(2)
-                    // The balance already shows the currency.
-                    Text(L(account.kind.title)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        .fixedSize(horizontal: false, vertical: true)
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        // The balance already shows the currency.
+                        Text(L(account.kind.title)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                        Spacer(minLength: 0)
+                        FinancialText(DisplayMoney.string(store.balance(account), currency: account.currency))
+                            .font(.callout.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.7)
+                            .layoutPriority(1)
+                    }
                 }
-                Spacer(minLength: 8)
-                FinancialText(DisplayMoney.string(store.balance(account), currency: account.currency))
-                    .font(.body.weight(.semibold)).lineLimit(1).fixedSize()
             }
+            .padding(.vertical, 2)
             .opacity(account.archived ? 0.6 : 1)
         }
         .swipeActions(edge: .trailing) {
