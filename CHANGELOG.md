@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.32 — 2026-11-01
+
+- iPhone 1.0.18 (build 19).
+- Archiving an account preserves its recorded income, expenses, transfers, history totals, category reports, budgets, charts, and spending calendar on Mac and iPhone. New entries and Wallet booking still require an active account.
+
 ## 1.6.31 — 2026-11-01
 
 - iPhone 1.0.17: Accounts tab rows put the account name on its own line across the full row width, with the type and balance below, so names fit on small iPhones and with large text.

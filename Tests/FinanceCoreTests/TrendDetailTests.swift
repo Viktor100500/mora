@@ -38,7 +38,7 @@ final class TrendDetailTests: XCTestCase {
         XCTAssertEqual(trend.reduce(0) { $0 + $1.expense }, ledger.summary(in: month).expense)
     }
 
-    func testDetailsUseBaseCurrencyAndExcludeArchivedAccountsAndTransfers() {
+    func testDetailsUseBaseCurrencyIncludeArchivedAccountsAndExcludeTransfers() {
         var ledger = ledger()
         let foreign = Account(name: "Synthetic EUR", currency: "EUR")
         var archived = Account(name: "Archived"); archived.archived = true
@@ -54,6 +54,7 @@ final class TrendDetailTests: XCTestCase {
         for detail in [TrendDetail.weeks, .days] {
             let trend = ledger.trend(ending: date, detail: detail)
             XCTAssertEqual(trend.reduce(0) { $0 + $1.expense }, ledger.summary(in: date).expense)
+            XCTAssertEqual(trend.reduce(0) { $0 + $1.expense }, 1080)
             XCTAssertEqual(trend.reduce(0) { $0 + $1.income }, 100)
         }
     }
@@ -111,7 +112,7 @@ final class TrendDetailTests: XCTestCase {
         XCTAssertEqual(empty.summary.income, 0)
     }
 
-    func testSelectedCategoryReportKeepsAppearanceAndExcludesTransfersAndArchivedAccounts() {
+    func testSelectedCategoryReportKeepsAppearanceAndArchivedHistoryButExcludesTransfers() {
         var ledger = ledger()
         let category = Category(name: "Synthetic category", icon: "basket", color: "orange")
         ledger.categories = [category]
@@ -126,10 +127,10 @@ final class TrendDetailTests: XCTestCase {
             Transaction(date: date, merchant: "Transfer", amount: -200, accountID: ledger.accounts[0].id, categoryID: category.id, kind: .transfer, destinationAccountID: foreign.id, destinationAmount: 100)
         ]
         let report = ledger.analyticsReport(ending: date, detail: .selectedDates, selectedDays: [5])
-        XCTAssertEqual(report.summary.expense, 40)
-        XCTAssertEqual(report.summary.count, 2)
+        XCTAssertEqual(report.summary.expense, 1040)
+        XCTAssertEqual(report.summary.count, 3)
         let total = report.categories.first { $0.id == category.id }
-        XCTAssertEqual(total?.amount, 20)
+        XCTAssertEqual(total?.amount, 1020)
         XCTAssertEqual(total?.icon, "basket")
         XCTAssertEqual(total?.color, "orange")
         XCTAssertEqual(report.categories.reduce(0) { $0 + $1.amount }, report.summary.expense)

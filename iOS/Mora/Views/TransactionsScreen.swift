@@ -207,7 +207,7 @@ struct TransactionsScreen: View {
     }
 
     private func dayExpense(_ rows: [Transaction]) -> Decimal {
-        rows.filter { $0.kind == .expense && store.ledger.isActive($0) }.reduce(0) { $0 - (store.ledger.value($1) ?? 0) }
+        rows.filter { $0.kind == .expense }.reduce(0) { $0 - (store.ledger.value($1) ?? 0) }
     }
 
     private func shiftMonth(_ offset: Int) {

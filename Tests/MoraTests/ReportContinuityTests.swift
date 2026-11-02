@@ -95,6 +95,36 @@ final class ReportContinuityTests: XCTestCase {
         XCTAssertEqual(store.reportNetWorth, 40)
         XCTAssertEqual(store.reportSummary(in: Date()).expense, 10)
     }
+
+    func testArchivedOctoberHistorySurvivesReportRefreshAndRestartWhileNewEntriesAreBlocked() async throws {
+        let (store, directory) = try await fixture()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let october = Dates.parse("2026-10-10")!, account = store.ledger.accounts[0]
+        let value = Transaction(date: october, merchant: "October purchase", amount: -7, accountID: account.id,
+            categoryID: store.ledger.categories[0].id)
+        expectTrue(await store.saveTransaction(value))
+        await store.prepareReportsForPresentation(in: october, includingAllScopes: true)
+        let rows = store.reportTransactions(in: october)
+        let before = store.reportSummary(in: october)
+        await store.setAccountArchived(account.id, archived: true)
+        await store.prepareReportsForPresentation(in: october, includingAllScopes: true)
+        XCTAssertEqual(store.reportTransactions(in: october), rows)
+        XCTAssertEqual(store.reportSummary(in: october).expense, before.expense)
+        XCTAssertEqual(store.reportRecentTransactions(in: october).count, rows.count)
+        XCTAssertTrue(store.reportRecentTransactions(in: october).contains { $0.id == value.id })
+        XCTAssertEqual(store.reportCategories(in: october).reduce(Decimal(0)) { $0 + $1.amount }, before.expense)
+        XCTAssertEqual(store.reportAnalytics(in: october, detail: .days, selectedDays: []).summary.expense, before.expense)
+        XCTAssertEqual(store.reportTrend(ending: october, detail: .weeks).reduce(Decimal(0)) { $0 + $1.expense }, before.expense)
+        let added = await store.saveTransaction(Transaction(date: Date(), merchant: "Blocked purchase", amount: -1, accountID: account.id))
+        XCTAssertFalse(added)
+        XCTAssertEqual(store.reportTransactions(in: october), rows)
+        let reopened = FinanceStore(directory: directory)
+        await reopened.load()
+        await reopened.prepareReportsForPresentation(in: october)
+        XCTAssertTrue(try XCTUnwrap(reopened.ledger.account(account.id)).archived)
+        XCTAssertEqual(reopened.reportSummary(in: october).expense, before.expense)
+        XCTAssertEqual(reopened.reportTransactions(in: october), rows)
+    }
     func testNewMonthAndAnalysisScopesAreReadyBeforePresentationChanges() async throws {
         let (store, directory) = try await fixture()
         defer { try? FileManager.default.removeItem(at: directory) }

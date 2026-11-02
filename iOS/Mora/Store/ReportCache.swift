@@ -77,7 +77,7 @@ extension FinanceStore {
         return value
     }
     func recentTransactions(in month: Date, limit: Int = 5) -> [Transaction] {
-        Array(transactions(in: month).lazy.filter(ledger.isActive).prefix(limit))
+        Array(transactions(in: month).prefix(limit))
     }
     func balance(_ account: Account) -> Decimal {
         if reports.balances == nil {
@@ -107,7 +107,7 @@ extension FinanceStore {
     /// Expense per day of month, in the base currency, for the spending calendar.
     func dailyExpenses(in month: Date) -> [Int: Decimal] {
         var result: [Int: Decimal] = [:]
-        for transaction in transactions(in: month) where transaction.kind == .expense && ledger.isActive(transaction) {
+        for transaction in transactions(in: month) where transaction.kind == .expense {
             result[Calendar.current.component(.day, from: transaction.date), default: 0] -= ledger.value(transaction) ?? 0
         }
         return result

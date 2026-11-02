@@ -261,14 +261,18 @@ struct CloudSettingsView: View {
                             if card.account_id == nil {
                                 Text(card.pending_count > 0 ? L("Выберите счет · покупок ждут: \(card.pending_count)") : L("Выберите счет"))
                                     .font(.caption).foregroundStyle(.orange)
+                            } else if let id = card.account_id, store.ledger.account(id)?.archived == true {
+                                Text(L("Счет архивирован. Выберите другой счет.")).font(.caption).foregroundStyle(.orange)
                             }
                         }
                         Spacer()
-                        Picker(L("Счет"), selection: Binding(get: { card.account_id }, set: { value in
+                        Picker(L("Счет"), selection: Binding(get: {
+                            card.account_id.flatMap { store.ledger.account($0)?.archived == false ? $0 : nil }
+                        }, set: { value in
                             Task { await cloud.linkCard(card.id, account: value) }
                         })) {
                             Text(L("Не выбран")).tag(Optional<UUID>.none)
-                            ForEach(store.ledger.accounts.filter { !$0.archived || $0.id == card.account_id }) {
+                            ForEach(accounts) {
                                 Text("\($0.name) · \($0.currency)").tag(Optional($0.id))
                             }
                         }.labelsHidden().frame(maxWidth: 260).disabled(cloud.busy)

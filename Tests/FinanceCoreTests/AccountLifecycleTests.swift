@@ -20,7 +20,7 @@ final class AccountLifecycleTests: XCTestCase {
                     kind: .transfer, destinationAccountID: ledger.accounts[1 - from].id, destinationAmount: received)
     }
 
-    func testArchiveExcludesOpeningBalanceIncomeExpensesBudgetsTrendAndRecurring() throws {
+    func testArchivePreservesIncomeExpensesBudgetsAndTrendButExcludesCurrentBalanceAndRecurring() throws {
         var ledger = ledger()
         let removedID = ledger.accounts[1].id
         ledger.transactions = [expense(ledger, account: 0, amount: 10), expense(ledger, account: 1, amount: 20),
@@ -31,12 +31,12 @@ final class AccountLifecycleTests: XCTestCase {
         XCTAssertEqual(ledger.summary(in: date).expense, 50)
         try ledger.setAccountArchived(removedID, archived: true)
         XCTAssertEqual(ledger.netWorth, 90)
-        XCTAssertEqual(ledger.summary(in: date).income, 0)
-        XCTAssertEqual(ledger.summary(in: date).expense, 10)
-        XCTAssertEqual(ledger.summary(in: date).count, 1)
-        XCTAssertEqual(ledger.categoryTotals(in: date).first?.amount, 10)
-        XCTAssertEqual(ledger.spent(category: ledger.categories[0].id, in: date), 10)
-        XCTAssertEqual(ledger.trend(ending: date, count: 1).first?.expense, 10)
+        XCTAssertEqual(ledger.summary(in: date).income, 60)
+        XCTAssertEqual(ledger.summary(in: date).expense, 50)
+        XCTAssertEqual(ledger.summary(in: date).count, 3)
+        XCTAssertEqual(ledger.categoryTotals(in: date).first?.amount, 50)
+        XCTAssertEqual(ledger.spent(category: ledger.categories[0].id, in: date), 50)
+        XCTAssertEqual(ledger.trend(ending: date, count: 1).first?.expense, 50)
         XCTAssertEqual(ledger.monthlyRecurring, 0)
         XCTAssertEqual(ledger.transactions.count, 3)
         XCTAssertTrue(ledger.recurring[0].active)
@@ -56,6 +56,47 @@ final class AccountLifecycleTests: XCTestCase {
         XCTAssertEqual(ledger.netWorth, 100)
         ledger.preferences.rates.removeValue(forKey: "JPY")
         XCTAssertTrue(ledger.missingCurrencies.isEmpty)
+        ledger.transactions = [expense(ledger, account: 1, amount: 10)]
+        XCTAssertEqual(ledger.missingCurrencies, ["JPY"], "Archived history still needs its currency rate")
+    }
+
+    func testArchivingBothTransferAccountsKeepsOctoberHistorySearchAndEveryAnalyticsScope() throws {
+        var ledger = ledger()
+        let october = Dates.parse("2026-10-10")!
+        ledger.transactions = [expense(ledger, account: 0, amount: 10), expense(ledger, account: 1, amount: 20),
+            transfer(ledger, from: 0, amount: 10, received: 5), transfer(ledger, from: 1, amount: 5, received: 10),
+            Transaction(date: october, merchant: "Salary", amount: 30, accountID: ledger.accounts[1].id, kind: .income)]
+        for index in ledger.transactions.indices { ledger.transactions[index].date = october }
+        let original = ledger
+        let query = TransactionSearch(startDate: Dates.month(october))
+        let before = try query.prepare(in: original)
+        for id in ledger.accounts.map(\.id) { try ledger.setAccountArchived(id, archived: true) }
+        XCTAssertEqual(ledger.transactions, original.transactions)
+        XCTAssertEqual(ledger.reportingTransactions(in: october), original.reportingTransactions(in: october))
+        XCTAssertEqual(ledger.summary(in: october).expense, 50)
+        XCTAssertEqual(ledger.summary(in: october).income, 60)
+        let after = try query.prepare(in: ledger)
+        XCTAssertEqual(after.rows, before.rows)
+        XCTAssertEqual(after.expense, before.expense)
+        XCTAssertEqual(after.income, before.income)
+        XCTAssertEqual(CSVImporter.export(ledger), CSVImporter.export(original))
+        for id in ledger.accounts.map(\.id) {
+            let filtered = TransactionSearch(startDate: Dates.month(october), accountIDs: [id])
+            XCTAssertEqual(try filtered.prepare(in: ledger).rows, try filtered.prepare(in: original).rows)
+        }
+        for detail in TrendDetail.allCases {
+            let before = original.analyticsReport(ending: october, detail: detail, selectedDays: [10])
+            let after = ledger.analyticsReport(ending: october, detail: detail, selectedDays: [10])
+            XCTAssertEqual(after.summary.income, before.summary.income)
+            XCTAssertEqual(after.summary.expense, before.summary.expense)
+            XCTAssertEqual(after.summary.count, before.summary.count)
+            XCTAssertEqual(after.categories.map(\.amount), before.categories.map(\.amount))
+            XCTAssertEqual(after.trend.map(\.income), before.trend.map(\.income))
+            XCTAssertEqual(after.trend.map(\.expense), before.trend.map(\.expense))
+        }
+        let reopened = try LedgerFile.decode(LedgerFile.encode(ledger))
+        XCTAssertEqual(reopened.summary(in: october).expense, 50)
+        XCTAssertEqual(reopened.transactions, original.transactions)
     }
 
     func testDeleteRetainsDatedTransferLegsAndNeverChangesOtherAccountsReports() throws {

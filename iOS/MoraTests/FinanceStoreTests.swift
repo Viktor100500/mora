@@ -98,6 +98,33 @@ final class FinanceStoreTests: XCTestCase {
         XCTAssertEqual(store.ledger.accounts.map(\.id), [main.id])
     }
 
+    func testArchivePreservesOctoberTotalsCalendarAndRecentTransactions() async throws {
+        let store = await personalStore()
+        let account = Account(name: "Old card", currency: "USD")
+        let october = Dates.parse("2026-10-10")!
+        await store.update { $0.accounts = [account] }
+        let purchase = Transaction(date: october, merchant: "October purchase", amount: -40, accountID: account.id,
+            categoryID: store.ledger.categories[0].id)
+        let income = Transaction(date: october, merchant: "October income", amount: 100, accountID: account.id, kind: .income)
+        await store.saveTransaction(purchase)
+        await store.saveTransaction(income)
+        XCTAssertEqual(store.summary(in: october).expense, 40)
+        XCTAssertEqual(store.dailyExpenses(in: october)[10], 40)
+        await store.setAccountArchived(account.id, archived: true)
+        XCTAssertEqual(store.summary(in: october).expense, 40)
+        XCTAssertEqual(store.summary(in: october).income, 100)
+        XCTAssertEqual(store.dailyExpenses(in: october)[10], 40)
+        XCTAssertEqual(Set(store.recentTransactions(in: october).map(\.id)), [purchase.id, income.id])
+        XCTAssertEqual(store.categoryTotals(in: october).first?.amount, 40)
+        XCTAssertEqual(store.analyticsReport(in: october, detail: .selectedDates, selectedDays: [10]).summary.expense, 40)
+        let added = await store.saveTransaction(Transaction(date: Date(), merchant: "Blocked", amount: -1, accountID: account.id))
+        XCTAssertFalse(added)
+        let reopened = FinanceStore(directory: directory, forcedDemo: false)
+        await reopened.load()
+        XCTAssertEqual(reopened.summary(in: october).expense, 40)
+        XCTAssertEqual(reopened.dailyExpenses(in: october)[10], 40)
+    }
+
     func testCSVImportRecordsBatchAndRollsBack() async throws {
         let store = await personalStore()
         let account = Account(name: "Card", currency: "USD")

@@ -80,6 +80,24 @@ final class WalletReviewTests: XCTestCase {
         XCTAssertNil(draft.accountID)
         XCTAssertEqual(draft.amount, "")
     }
+
+    func testArchivingLinkedAccountBlocksAutomaticAndManualWalletBooking() async throws {
+        var ledger = Ledger.empty
+        let account = Account(name: "Wallet card", currency: "USD")
+        ledger.accounts = [account]
+        let item = try capture(account: account.id)
+        XCTAssertTrue(WalletReviewDraft.canBookAutomatically(item, in: ledger))
+        try ledger.setAccountArchived(account.id, archived: true)
+        XCTAssertNil(WalletReviewDraft(capture: item, ledger: ledger).accountID)
+        XCTAssertFalse(WalletReviewDraft.canBookAutomatically(item, in: ledger))
+        let result = try await WalletReviewDraft.automaticTransaction(for: item, in: ledger) { _, _, _, _ in
+            XCTFail("An archived account must not request a quote"); throw CancellationError()
+        }
+        XCTAssertNil(result)
+        let value = Transaction(date: item.date, merchant: item.merchant, amount: -10, accountID: account.id)
+        XCTAssertThrowsError(try WalletReviewDraft.transaction(value, for: item, in: ledger))
+        XCTAssertTrue(ledger.transactions.isEmpty)
+    }
     func testReviewedTransactionPreservesEditedFieldsAndConversionWithStableIdentity() throws {
         var ledger = Ledger.empty; ledger.accounts = [Account(name: "EUR", currency: "EUR")]
         let capture = try capture(account: ledger.accounts[0].id)

@@ -52,7 +52,7 @@ public struct TransactionSearch: Equatable, Sendable {
             guard matchesAccount, kinds?.contains(transaction.kind) ?? true, matchesCategory,
                   text.isEmpty || (transaction.merchant + " " + transaction.note + " " + transaction.tags.joined(separator: " ")).localizedCaseInsensitiveContains(text) else { continue }
             matches.append((index, transaction))
-            if ledger.isActive(transaction), let value = ledger.value(transaction) {
+            if let value = ledger.value(transaction) {
                 if transaction.kind == .income { income += value }
                 else if transaction.kind == .expense { expense -= value }
             }

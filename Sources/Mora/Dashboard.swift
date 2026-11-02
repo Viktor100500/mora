@@ -361,7 +361,7 @@ struct AnalyticsView: View {
                     if daySelection.days.isEmpty {
                         Text(L("Выберите дни в календаре расходов")).foregroundStyle(.secondary)
                     } else {
-                        let rows = store.reportTransactions(in: month).filter { ledger.isActive($0) && daySelection.days.contains(Calendar.current.component(.day, from: $0.date)) }.sorted { $0.date > $1.date }
+                        let rows = store.reportTransactions(in: month).filter { daySelection.days.contains(Calendar.current.component(.day, from: $0.date)) }.sorted { $0.date > $1.date }
                         if rows.isEmpty { Text(L("Операций нет")).foregroundStyle(.secondary) }
                         ForEach(rows) { row in
                             TransactionRow(transaction: row, ledger: ledger)
@@ -394,7 +394,7 @@ struct AnalyticsView: View {
                     ForEach([L("ПН"), L("ВТ"), L("СР"), L("ЧТ"), L("ПТ"), L("СБ"), L("ВС")], id: \.self) { Text($0).font(.caption2).foregroundStyle(.secondary).frame(maxWidth: .infinity) }
                     ForEach(-padding..<0, id: \.self) { _ in Color.clear.frame(height: 62) }
                     ForEach(1...days, id: \.self) { day in
-                        let rows = store.reportTransactions(in: month).filter { ledger.isActive($0) && Calendar.current.component(.day, from: $0.date) == day }
+                        let rows = store.reportTransactions(in: month).filter { Calendar.current.component(.day, from: $0.date) == day }
                         let expense = rows.filter { $0.kind == .expense }.reduce(Decimal(0)) { $0 - (ledger.value($1) ?? 0) }
                         let selected = daySelection.days.contains(day)
                         VStack(alignment: .leading, spacing: 7) { Text("\(day)").font(.system(size: 11, weight: .medium)); FinancialText(expense > 0 ? DisplayMoney.string(expense, currency: ledger.preferences.baseCurrency) : "—").font(.system(size: 10)).lineLimit(1).minimumScaleFactor(0.5).foregroundStyle(.secondary) }

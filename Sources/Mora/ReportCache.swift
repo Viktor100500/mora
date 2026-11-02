@@ -86,7 +86,7 @@ extension FinanceStore {
                 PreparedReport(summary: snapshot.summary(in: key), categories: snapshot.categoryTotals(in: key),
                     trend: snapshot.trend(ending: key, count: count), insights: snapshot.insights(in: key),
                     transactions: snapshot.transactions(in: key).sorted { $0.date > $1.date },
-                    recent: Array(snapshot.transactions(in: key).filter(snapshot.isActive).sorted { $0.date > $1.date }.prefix(5)),
+                    recent: Array(snapshot.transactions(in: key).sorted { $0.date > $1.date }.prefix(5)),
                     balances: Dictionary(uniqueKeysWithValues: snapshot.accounts.map { ($0.id, snapshot.balance($0)) }),
                     spending: Dictionary(uniqueKeysWithValues: snapshot.budgets.map { ($0.categoryID, snapshot.spent(category: $0.categoryID, in: key)) }),
                     netWorth: snapshot.netWorth, monthlyRecurring: snapshot.monthlyRecurring)

@@ -208,7 +208,9 @@ public struct Ledger: Codable, Equatable, Sendable {
         }
     }
     public var missingCurrencies: [String] {
-        Array(Set(accounts.filter { !$0.archived }.map(\.currency).filter { convert(1, currency: $0) == nil })).sorted()
+        let historicalAccounts = Set(transactions.filter { $0.kind != .transfer }.map(\.accountID))
+        return Array(Set(accounts.filter { !$0.archived || historicalAccounts.contains($0.id) }
+            .map(\.currency).filter { convert(1, currency: $0) == nil })).sorted()
     }
     public func matchingCategory(merchant: String, kind: TransactionKind) -> UUID? {
         rules.first { rule in

@@ -1,13 +1,9 @@
 import Foundation
 
 public extension Ledger {
-    func isActive(_ transaction: Transaction) -> Bool {
-        account(transaction.accountID)?.archived == false ||
-        (transaction.kind == .transfer && transaction.destinationAccountID.flatMap(account)?.archived == false)
-    }
-
+    /// Archiving limits future use of an account; recorded history stays in reports.
     func reportingTransactions(in month: Date) -> [Transaction] {
-        transactions(in: month).filter(isActive)
+        transactions(in: month)
     }
 
     mutating func setAccountArchived(_ id: UUID, archived: Bool) throws {

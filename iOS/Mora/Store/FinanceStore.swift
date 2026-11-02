@@ -226,7 +226,7 @@ final class FinanceStore: ObservableObject {
 
     func setAccountArchived(_ id: UUID, archived: Bool) async {
         if await update({ try $0.setAccountArchived(id, archived: archived) }) {
-            showToast(archived ? L("Счет архивирован и исключен из расчетов") : L("Счет возвращен из архива"), undoable: true)
+            showToast(archived ? L("Счет архивирован. История операций сохранена.") : L("Счет возвращен из архива"), undoable: true)
         }
     }
     func deleteArchivedAccount(_ id: UUID) async {

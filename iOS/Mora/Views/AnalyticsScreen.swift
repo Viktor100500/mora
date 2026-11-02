@@ -169,7 +169,7 @@ struct AnalyticsScreen: View {
     }
 
     private var selectedTransactions: some View {
-        let rows = store.transactions(in: router.month).filter { ledger.isActive($0) && selectedDays.contains(Calendar.current.component(.day, from: $0.date)) }
+        let rows = store.transactions(in: router.month).filter { selectedDays.contains(Calendar.current.component(.day, from: $0.date)) }
         return Card {
             VStack(alignment: .leading, spacing: 12) {
                 SectionHeading(title: "Операции за выбранные даты", subtitle: dayList + " · " + router.month.monthTitle)

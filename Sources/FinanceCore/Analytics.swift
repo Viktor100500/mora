@@ -87,7 +87,7 @@ public extension Ledger {
         let calendar = Calendar.current
         let end = calendar.date(byAdding: .month, value: 1, to: Dates.month(month))!
         let rows = transactions.filter {
-            $0.date >= start && $0.date < end && isActive($0) &&
+            $0.date >= start && $0.date < end &&
             (detail != .selectedDates || selectedDays.contains(calendar.component(.day, from: $0.date)))
         }
         report.categories = categoryTotals(for: rows)
@@ -120,7 +120,7 @@ public extension Ledger {
             detail == .weeks ? max(start, calendar.dateInterval(of: .weekOfYear, for: date)!.start) : calendar.startOfDay(for: date)
         }
         var totals: [Date: Summary] = [:]
-        for transaction in transactions where transaction.date >= start && transaction.date < end && isActive(transaction) && transaction.kind != .transfer {
+        for transaction in transactions where transaction.date >= start && transaction.date < end && transaction.kind != .transfer {
             guard let amount = value(transaction) else { continue }
             let key = bucket(for: transaction.date)
             if transaction.kind == .income { totals[key, default: Summary()].income += amount }
