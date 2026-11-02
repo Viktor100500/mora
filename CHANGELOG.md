@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.26 — 2026-11-01
+
+- Mac: configure Wallet card names and their accounts before creating a quiet, locally signed iPhone shortcut in Shared database and Apple Pay. New configured keys hold unidentified cards for explicit account choice; new cards wait for linking. Existing purchases are unchanged.
+- Fix the five-second sender omitting the payment card. It now reads and sends Card or Pass with the same delayed fallback as amount and merchant; transaction notes include the card.
+
 ## 1.6.25 — 2026-11-01
 
 - Mac and iPhone 1.0.13: optionally edit a transaction’s hour and minute under Transaction time to put purchases in their actual order within a day. Lists and Mac transaction details show the time. Changing only the calendar date or another field preserves the original timestamp, including Wallet and imported seconds.

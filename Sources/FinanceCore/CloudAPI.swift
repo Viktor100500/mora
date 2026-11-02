@@ -88,8 +88,19 @@ public struct CloudCapture: Codable, Identifiable, Equatable, Sendable {
     public var card: String? = nil
     public var card_id: UUID? = nil
     public var card_linked: Bool? = nil
+    /// New configured senders must identify a card before automatic booking.
+    public var card_required: Bool? = nil
     /// A purchase from a card that has no account yet waits for the user's choice.
-    public var awaitsCardLink: Bool { card_id != nil && card_linked != true }
+    public var awaitsCardLink: Bool { (card_id != nil && card_linked != true) || (card_required == true && card_id == nil) }
+}
+
+public struct WalletCardAssignment: Codable, Identifiable, Sendable {
+    public var id: UUID
+    public var card: String
+    public var account_id: UUID
+    public init(id: UUID = UUID(), card: String = "", accountID: UUID) {
+        self.id = id; self.card = card; self.account_id = accountID
+    }
 }
 /// A Wallet card seen by one phone key. `account_id == nil` means it is not linked yet.
 public struct CloudWalletCard: Codable, Identifiable, Equatable, Sendable {

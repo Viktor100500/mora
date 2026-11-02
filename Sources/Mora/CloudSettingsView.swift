@@ -38,6 +38,7 @@ struct CloudSettingsView: View {
     @State private var confirmDisconnect = false
     @State private var selectedCapture: CloudCapture?
     @State private var handledNotification: UUID?
+    @State private var showWalletSetup = false
     private var accounts: [Account] { store.ledger.accounts.filter { !$0.archived } }
     var body: some View {
         ScrollViewReader { scrollProxy in
@@ -94,6 +95,7 @@ struct CloudSettingsView: View {
             Button("Отключить") { password = ""; Task { await cloud.disconnect() } }
         } message: { Text("Локальные данные останутся на Mac. Ключи телефонов продолжат работать до отзыва в общей базе. Другие участники сохранят доступ.") }
         .sheet(item: $selectedCapture) { capture in WalletReviewForm(capture: capture).modifier(FeedbackFooter()).modifier(FinanceErrorAlert()).environmentObject(cloud).environmentObject(store) }
+        .sheet(isPresented: $showWalletSetup) { WalletShortcutSetupView().environmentObject(cloud).environmentObject(store) }
         }
     }
     private func navigate(_ request: NotificationNavigation?, scrollProxy: ScrollViewProxy) {
@@ -195,7 +197,11 @@ struct CloudSettingsView: View {
     private var phoneCard: some View {
         Card {
             VStack(alignment: .leading, spacing: 14) {
-                SectionHeading(title: "Apple Pay → расход", subtitle: "Один ключ на человека и его iPhone — для всех его карт. Счет для каждой карты выбирается после первой покупки ею.")
+                SectionHeading(title: "Apple Pay → расход", subtitle: "Свяжите карты Wallet со счетами перед созданием команды для iPhone.")
+                Button("Создать команду для iPhone…") { showWalletSetup = true }
+                    .buttonStyle(.borderedProminent).disabled(cloud.busy || !cloud.enabled || accounts.isEmpty)
+                Text("Готовая команда работает без диагностических уведомлений и передаёт карту оплаты. Неопределённые и новые карты ждут проверки.").font(.caption).foregroundStyle(.secondary)
+                DisclosureGroup("Ручная настройка ключа") {
                 TextField("Название телефона или карты", text: $phoneLabel).textFieldStyle(.roundedBorder)
                 Picker("Основной счет", selection: $account) {
                     Text("Выберите счет").tag(Optional<UUID>.none)
@@ -228,15 +234,16 @@ struct CloudSettingsView: View {
                     }.font(.callout)
                 }
                 Text("Ключ может только добавлять расходы: в основной счет или в счета, выбранные для его карт. Он не позволяет читать операции. При потере телефона отзовите ключ.").font(.caption).foregroundStyle(.secondary)
+                }
             }
         }
     }
     private var cardsCard: some View {
         Card {
             VStack(alignment: .leading, spacing: 14) {
-                SectionHeading(title: "Карты Apple Pay", subtitle: "Новая карта появляется после первой покупки ею. Покупки новой карты ждут, пока вы не выберете счет.")
+                SectionHeading(title: "Карты Apple Pay", subtitle: "Карты можно связать со счетами при создании команды. Покупки новых карт ждут выбора счёта.")
                 if cloud.walletCards.isEmpty {
-                    Text("Карт пока нет. Оплатите любой картой из автоматизации — она появится здесь.").foregroundStyle(.secondary)
+                    Text("Карт пока нет. Создайте команду выше и выберите счета для своих карт Wallet.").foregroundStyle(.secondary)
                 }
                 ForEach(cloud.walletCards) { card in
                     HStack(alignment: .firstTextBaseline) {

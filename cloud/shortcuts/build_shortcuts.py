@@ -181,7 +181,7 @@ def wallet_delay_diagnostic(config, delay_seconds=5, preview=False, diagnostics=
     result['WFWorkflowActions'] = actions
     actions[0]['WFWorkflowActionParameters']['WFCommentActionText'] = (
         f'Mora · Wallet · {delay_seconds} с' + (' · диагностика' if diagnostics else ' · без уведомлений') + '\n'
-        'Читает Amount и Merchant исходной транзакции сразу и после паузы. '
+        'Читает сумму, продавца и карту исходной транзакции сразу и после паузы. '
         'Отправляет только один запрос. Если повторное поле пустое, сохраняет первое значение. '
         'Если суммы или продавца всё ещё нет, ничего не отправляет. '
         'Дата покупки фиксируется до паузы. Это эксперимент, не чтение истории Wallet. '
@@ -203,7 +203,7 @@ def wallet_delay_diagnostic(config, delay_seconds=5, preview=False, diagnostics=
 
     def snapshot(label):
         values = {}
-        for key, property_name in [('amount', 'Amount'), ('merchant', 'Merchant')]:
+        for key, property_name in [('amount', 'Amount'), ('merchant', 'Merchant'), ('card', 'Card or Pass')]:
             # Each read addresses ExtensionInput again, never a converted Text
             # result or the output of Wait/notification.
             value = {'Type': 'ExtensionInput', 'Aggrandizements': [
@@ -237,7 +237,7 @@ def wallet_delay_diagnostic(config, delay_seconds=5, preview=False, diagnostics=
     comparison = choose(before_text, 4, 'Без изменений', 'Поля изменились',
                         'Сравнение полей', other=after_text)  # native "is"
     selected = {key: choose(after[key], 100, after[key], before[key], f'{key} · к отправке')
-                for key in ('amount', 'merchant')}  # native "has any value"
+                for key in ('amount', 'merchant', 'card')}  # native "has any value"
     report = action('gettext', 'Результат диагностики', WFTextActionText=text(
         'Событие: ', event, '\n', comparison, '\nСразу:\n', before_text,
         f'\nЧерез {delay_seconds} с:\n', after_text,
@@ -246,7 +246,8 @@ def wallet_delay_diagnostic(config, delay_seconds=5, preview=False, diagnostics=
         action('notification', WFNotificationActionTitle=f'Mora · Wallet через {delay_seconds} с',
                WFNotificationActionBody=text(report), WFNotificationActionSound=False)
     fields = {'p_token': phone, 'p_event_id': event, 'p_amount': selected['amount'],
-              'p_currency': '', 'p_merchant': selected['merchant'], 'p_occurred_at': date}
+              'p_currency': '', 'p_merchant': selected['merchant'], 'p_occurred_at': date,
+              'p_card': selected['card']}
     delivery_start = len(actions)
     if preview:
         # No credentials, network, or notifications in the validation variant.

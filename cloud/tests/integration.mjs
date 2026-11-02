@@ -352,6 +352,40 @@ try {
     const legacy=await capture(anon,phone2.token,uuid(),'1.00','USD','Legacy sender');
     assert.equal(withoutCard.state,'recorded'); assert.equal(withoutCard.card,null); assert.equal(legacy.state,'recorded');
   });
+  await check('configured Wallet setup routes each card before the first purchase and holds unknown cards',async()=>{
+    const cards=[{card:'Chase Visa 1234',account_id:accountID},{card:'Raiffeisen Visa',account_id:eurAccount}];
+    await denied(()=>rpc(anon,'mora_create_wallet_setup',[h,'Configured iPhone',JSON.stringify(cards)]));
+    await denied(()=>rpc(outsider,'mora_create_wallet_setup',[h,'Configured iPhone',JSON.stringify(cards)]));
+    const before=(await admin.query('select count(*)::int n from public.mora_phone_tokens')).rows[0].n;
+    for (const invalid of [[],[{card:'',account_id:accountID}],
+      [{card:'Chase',account_id:uuid()}],
+      [{card:' Chase ',account_id:accountID},{card:'CHASE',account_id:eurAccount}]]) {
+      await assert.rejects(()=>rpc(owner,'mora_create_wallet_setup',[h,'Configured iPhone',JSON.stringify(invalid)]));
+    }
+    assert.equal((await admin.query('select count(*)::int n from public.mora_phone_tokens')).rows[0].n,before);
+    const setup=await rpc(owner,'mora_create_wallet_setup',[h,'Configured iPhone',JSON.stringify(cards)]);
+    assert.equal((await rpc(owner,'mora_list_wallet_cards',[h])).filter(c=>c.token_id===setup.id).length,2);
+    const chase=await cardCapture(setup.token,'$3.00','MTA','chase visa 1234');
+    const raif=await cardCapture(setup.token,'€4.00','Cafe','Raiffeisen Visa');
+    assert.equal(chase.state,'recorded'); assert.equal(raif.state,'recorded');
+    const ledger=(await rpc(owner,'mora_get_household',[h])).snapshot;
+    assert.equal(ledger.transactions.find(t=>t.externalID==='wallet:'+chase.id).accountID,accountID);
+    assert.equal(ledger.transactions.find(t=>t.externalID==='wallet:'+raif.id).accountID,eurAccount);
+    assert(ledger.transactions.find(t=>t.externalID==='wallet:'+chase.id).note.toLowerCase().includes('chase visa 1234'));
+    const unknown=await cardCapture(setup.token,'$3.00','MTA','Another Visa');
+    const missingID=uuid();
+    const missing=await cardCapture(setup.token,'$3.00','MTA','',missingID);
+    assert.equal(unknown.state,'pending'); assert.equal(missing.state,'pending');
+    assert(missing.reason.includes('карта оплаты'));
+    const pending=await rpc(owner,'mora_list_pending',[h]);
+    assert.equal(pending.find(c=>c.id===missing.id).card_required,true);
+    assert.equal(pending.find(c=>c.id===missing.id).card_id,null);
+    assert.equal(pending.find(c=>c.id===missing.id).account_id,'00000000-0000-0000-0000-000000000000');
+    assert.equal((await cardCapture(setup.token,'$3.00','MTA','',missingID)).duplicate,true);
+    assert.equal((await rpc(owner,'mora_get_household',[h])).snapshot.transactions.length,ledger.transactions.length);
+    await rpc(owner,'mora_revoke_phone_token',[setup.id]);
+    await denied(()=>cardCapture(setup.token,'$3.00','MTA','Chase Visa 1234'));
+  });
   await check('AI agent keys read context and record one rollbackable import',async()=>{
     const agent=await rpc(owner,'mora_create_agent_token',[h,'Claude']);
     await denied(()=>rpc(outsider,'mora_create_agent_token',[h,'Other']));

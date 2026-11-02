@@ -598,6 +598,21 @@ final class CloudSync: ObservableObject {
         }
         return result
     }
+    func createWalletSetup(label: String, cards: [WalletCardAssignment]) async -> CloudIssuedToken? {
+        struct Body: Encodable, Sendable {
+            let p_household_id: UUID
+            let p_label: String
+            let p_cards: [WalletCardAssignment]
+        }
+        var result: CloudIssuedToken?
+        await operation {
+            guard let id = self.householdID else { return }
+            try await self.syncNow()
+            result = try await self.rpc("mora_create_wallet_setup", Body(p_household_id: id, p_label: label, p_cards: cards))
+            try await self.loadLists(id)
+        }
+        return result
+    }
     func issueToken(account: UUID, label: String) async {
         await operation {
             guard let id = self.householdID else { return }

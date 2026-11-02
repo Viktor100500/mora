@@ -232,8 +232,8 @@ class WalletDelayDiagnosticTests(unittest.TestCase):
             if isinstance(value, dict):
                 for v in value.get('Value', {}).get('attachmentsByRange', {}).values():
                     if v.get('Type') == 'ExtensionInput': reads.append((i, v['Aggrandizements'][0]['PropertyName']))
-        self.assertEqual([name for i, name in reads if i < delay], ['Amount', 'Merchant'])
-        self.assertEqual([name for i, name in reads if i > delay], ['Amount', 'Merchant'])
+        self.assertEqual([name for i, name in reads if i < delay], ['Amount', 'Merchant', 'Card or Pass'])
+        self.assertEqual([name for i, name in reads if i > delay], ['Amount', 'Merchant', 'Card or Pass'])
 
     def test_preview_is_offline_and_contains_both_frozen_snapshots(self):
         w = wallet_delay_diagnostic(CONFIG, preview=True)
@@ -257,6 +257,18 @@ class WalletDelayDiagnosticTests(unittest.TestCase):
 
 
 class PaymentDeliveryTests(unittest.TestCase):
+    def test_delayed_sender_preserves_card_identity_across_reads(self):
+        for card_before, card_after, expected in [('Chase Visa', '', 'Chase Visa'),
+                                                   ('', 'Chase Visa', 'Chase Visa'),
+                                                   ('Raiffeisen', 'Chase Visa', 'Chase Visa'),
+                                                   ('', '', '')]:
+            with self.subTest(before=card_before, after=card_after):
+                runner = DiagnosticRunner({'Amount': '$3.00', 'Merchant': 'MTA', 'Card or Pass': card_before},
+                                          {'Amount': '$3.00', 'Merchant': 'MTA', 'Card or Pass': card_after})
+                runner.run(wallet_delay(CONFIG)['WFWorkflowActions'])
+                self.assertEqual(len(runner.requests), 1)
+                self.assertEqual(runner.requests[0]['p_card'], expected)
+
     def test_quiet_delayed_sender_has_no_notifications_for_complete_or_missing_fields(self):
         for before, after, count in [(('', ''), ('', ''), 0),
                                      (('', ''), ('$2.99', ''), 0),

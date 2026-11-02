@@ -14,6 +14,7 @@ cp .build/release/MoraBridge "$MORA_BUILD_ROOT/Mora.app/Contents/MacOS/MoraBridg
 cp mcp/server.py mcp/requirements.txt mcp/README.md "$MORA_BUILD_ROOT/Mora.app/Contents/Resources/MCP/"
 cp Prompts/mora-csv.md Prompts/mora-mcp.md "$MORA_BUILD_ROOT/Mora.app/Contents/Resources/Prompts/"
 cp Resources/Info.plist "$MORA_BUILD_ROOT/Mora.app/Contents/Info.plist"
+cp Resources/WalletSender.plist "$MORA_BUILD_ROOT/Mora.app/Contents/Resources/WalletSender.plist"
 if [[ -f LICENSE ]]; then cp LICENSE "$MORA_BUILD_ROOT/Mora.app/Contents/Resources/License.txt"; fi
 ditto .build/release/Mora_FinanceCore.bundle "$MORA_BUILD_ROOT/Mora.app/Contents/Resources/Mora_FinanceCore.bundle"
 ditto Resources/en.lproj "$MORA_BUILD_ROOT/Mora.app/Contents/Resources/en.lproj"
