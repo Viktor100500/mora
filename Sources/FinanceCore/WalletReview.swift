@@ -87,6 +87,16 @@ public struct WalletReviewDraft: Sendable {
         return amount
     }
 
+    /// A complete purchase is booked without review; until that attempt it is still processing,
+    /// not waiting for the user.
+    public static func canBookAutomatically(_ capture: CloudCapture, in ledger: Ledger) -> Bool {
+        // A new card waits for the user's account choice; it is never guessed.
+        guard !capture.awaitsCardLink else { return false }
+        let draft = WalletReviewDraft(capture: capture, ledger: ledger)
+        return draft.accountID.flatMap(ledger.account) != nil && !draft.merchant.isEmpty
+            && automaticAmount(capture.amount) != nil && draft.currency != unknownCurrency
+    }
+
     public static func automaticTransaction(for capture: CloudCapture, in ledger: Ledger,
         fetch: @Sendable (Decimal, String, String, Date) async throws -> CardConversion) async throws -> Transaction? {
         let externalID = "wallet:" + capture.id.uuidString.lowercased()
@@ -94,12 +104,10 @@ public struct WalletReviewDraft: Sendable {
         if let existing = ledger.transactions.first(where: { $0.id == capture.id && $0.externalID == externalID }) {
             return existing
         }
-        // A new card waits for the user's account choice; it is never guessed.
-        guard !capture.awaitsCardLink else { return nil }
+        guard canBookAutomatically(capture, in: ledger) else { return nil }
         let draft = WalletReviewDraft(capture: capture, ledger: ledger)
         guard let accountID = draft.accountID, let account = ledger.account(accountID),
-              !draft.merchant.isEmpty, let amount = automaticAmount(capture.amount),
-              draft.currency != unknownCurrency else { return nil }
+              let amount = automaticAmount(capture.amount) else { return nil }
         var value = Transaction(date: capture.date, merchant: draft.merchant, amount: -amount,
             accountID: accountID, categoryID: ledger.suggestedCategory(merchant: draft.merchant, kind: .expense),
             note: draft.note, tags: draft.tags)

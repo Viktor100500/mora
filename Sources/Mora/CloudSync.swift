@@ -20,6 +20,10 @@ final class CloudSync: ObservableObject {
     @Published private(set) var conflict = false
     private var walletProgressID: UUID?
     private var stagedPending: [CloudCapture]?
+    /// The whole server inbox; `pending` shows only the purchases that need the user.
+    private var inbox: [CloudCapture] = []
+    private var attemptedCaptures: Set<UUID> = []
+    private var syncRequested = false
     private var stagedSyncDate: Date?
     private var importedBatchIDs: [UUID] = []
     var preparePresentation: (@MainActor (FinanceStore) async -> Void)?
@@ -170,6 +174,10 @@ final class CloudSync: ObservableObject {
             let waiters = operationWaiters
             operationWaiters.removeAll()
             for waiter in waiters { waiter.resume() }
+            if syncRequested && !stopping {
+                syncRequested = false; nextAttempt = .distantPast
+                Task { await self.synchronize(inBackground: true) }
+            }
         }
         do {
             try await action()
@@ -290,11 +298,22 @@ final class CloudSync: ObservableObject {
             if captures.contains(where: { !previous.contains($0) && !known.contains($0.id) }) { showSyncProgress() }
             return previous != captures
         }
+        let changed = inbox != captures
+        inbox = captures
+        let shown = reviewable(captures)
+        // A complete purchase seen outside synchronization is booked right after it.
+        if shown.count < captures.count { showSyncProgress(); syncRequested = true }
         // Also reconcile an empty first response against history from a previous launch.
-        store?.reconcileWallet(captures, householdID: id)
-        guard pending != captures else { return false }
-        pending = captures
+        store?.reconcileWallet(shown, householdID: id)
+        guard pending != shown else { return changed }
+        pending = shown
         return true
+    }
+    /// Complete purchases stay out of the review inbox until automatic booking has tried them,
+    /// so a purchase that is about to be booked never asks the user to check it.
+    private func reviewable(_ captures: [CloudCapture]) -> [CloudCapture] {
+        guard enabled, let ledger = store?.ledger else { return captures }
+        return captures.filter { attemptedCaptures.contains($0.id) || !WalletReviewDraft.canBookAutomatically($0, in: ledger) }
     }
     private func diskLedger() async throws -> Ledger {
         guard let store, !store.isDemo else { throw LedgerError.invalid("Сначала начните свой учет и создайте счет. Демо в облако не загружается.") }
@@ -373,7 +392,7 @@ final class CloudSync: ObservableObject {
             guard let store = self.store, let id = self.householdID else { return }
             let originalIDs = Set(store.ledger.transactions.map(\.id))
             store.beginDeferredUpdates()
-            self.stagedPending = self.pending
+            self.stagedPending = self.inbox
             self.importedBatchIDs = []
             self.stagedSyncDate = nil
             var failure: Error?
@@ -401,8 +420,11 @@ final class CloudSync: ObservableObject {
             }
             // Disk writes stay durable throughout; only their presentation waits.
             await store.endDeferredUpdates()
-            let captures = self.stagedPending ?? self.pending
+            let all = self.stagedPending ?? self.inbox
             self.stagedPending = nil
+            self.inbox = all
+            self.attemptedCaptures.formIntersection(all.map(\.id))
+            let captures = self.reviewable(all)
             if self.pending != captures { self.pending = captures }
             store.reconcileWallet(captures, householdID: id)
             if failure == nil, let date = self.stagedSyncDate { self.lastSync = date }
@@ -434,7 +456,7 @@ final class CloudSync: ObservableObject {
     private func bookWalletPurchases() async throws {
         guard let id = householdID, let store else { return }
         var firstError: Error?
-        for capture in (stagedPending ?? pending).sorted(by: { $0.date < $1.date }) {
+        for capture in (stagedPending ?? inbox).sorted(by: { $0.date < $1.date }) {
             try Task.checkCancellation()
             do {
                 let local = try await diskLedger()
@@ -459,7 +481,11 @@ final class CloudSync: ObservableObject {
                 stagedPending?.removeAll { $0.id == capture.id }
                 markSynced()
             } catch is CancellationError { throw CancellationError() }
-            catch { if firstError == nil { firstError = error } }
+            catch {
+                // Only a real failure needs review; offline purchases wait for the next attempt.
+                if !Self.isConnectionError(error) { attemptedCaptures.insert(capture.id) }
+                if firstError == nil { firstError = error }
+            }
         }
         // Keep failed captures in the server inbox and use the normal sync backoff.
         // Other valid purchases in the batch are still allowed to finish.
@@ -621,7 +647,7 @@ final class CloudSync: ObservableObject {
             }
             // The first reviewed purchase of a new card also chooses that card's account.
             // Use the latest inbox state: the card may have been linked while the form was open.
-            let current = self.pending.first { $0.id == capture.id } ?? capture
+            let current = self.inbox.first { $0.id == capture.id } ?? capture
             // The server links a new card and commits this review atomically.
             // Another Mac must not auto-book the purchase between those steps.
             let envelope: CloudEnvelope = try await self.rpc("mora_review_capture",
@@ -655,7 +681,7 @@ final class CloudSync: ObservableObject {
             settings?.enabled = false; settings?.householdID = nil; settings?.householdName = ""
             try await persistSettings()
             session = nil; signedIn = false; enabled = false; householdID = nil; householdName = ""
-            households = []; pending = []; phoneTokens = []; walletCards = []; invitation = nil; issuedToken = nil; conflict = false; error = nil
+            households = []; pending = []; inbox = []; attemptedCaptures = []; phoneTokens = []; walletCards = []; invitation = nil; issuedToken = nil; conflict = false; error = nil
         }
     }
 }

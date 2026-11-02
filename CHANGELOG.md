@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.24 — 2026-11-01
+
+- Mac and iPhone 1.0.12: a complete Apple Wallet purchase no longer flashes as “waiting for review” while it is being booked. Purchases that can be booked automatically stay out of the review inbox, badges and notifications until booking has been tried; meanwhile a “Loading Wallet purchases…” banner is shown. Only a purchase that really needs the user, or whose booking failed, appears for review.
+
 ## 1.6.23 — 2026-10-31
 
 - iPhone 1.0.11: stay signed in to the shared database after app updates. The Keychain session was stored under the absolute data path, which iOS changes on every update, so the iPhone silently stopped syncing and showed the sign-in screen. The session now uses the path inside the app container, and a session saved under an earlier path is moved over automatically.

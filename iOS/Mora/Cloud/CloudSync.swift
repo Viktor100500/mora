@@ -18,6 +18,8 @@ final class CloudSync: ObservableObject {
     @Published private(set) var householdID: UUID?
     @Published private(set) var households: [CloudHousehold] = []
     @Published private(set) var pending: [CloudCapture] = []
+    /// Complete Wallet purchases are being booked; they are not shown for review meanwhile.
+    @Published private(set) var processingWallet = false
     @Published private(set) var walletCards: [CloudWalletCard] = []
     @Published private(set) var lastSync: Date?
     @Published private(set) var conflict = false
@@ -36,6 +38,10 @@ final class CloudSync: ObservableObject {
     private var operationWaiters: [CheckedContinuation<Void, Never>] = []
     private var failureCount = 0
     private var nextAttempt = Date.distantPast
+    /// The whole server inbox; `pending` shows only the purchases that need the user.
+    private var inbox: [CloudCapture] = []
+    private var attemptedCaptures: Set<UUID> = []
+    private var synchronizing = false
 
     init(transport: URLSession = .shared) { self.transport = transport }
 
@@ -182,6 +188,11 @@ final class CloudSync: ObservableObject {
             let waiters = operationWaiters
             operationWaiters.removeAll()
             for waiter in waiters { waiter.resume() }
+            // A complete purchase seen outside synchronization is booked right after it.
+            if processingWallet && !synchronizing {
+                nextAttempt = .distantPast
+                Task { await self.synchronize(inBackground: true) }
+            }
         }
         do {
             try await action()
@@ -269,9 +280,21 @@ final class CloudSync: ObservableObject {
         let captures: [CloudCapture] = try await rpc("mora_list_pending", HouseholdBody(p_household_id: id))
         let knownCards = Set(walletCards.map(\.id))
         if captures.contains(where: { $0.card_id.map { !knownCards.contains($0) } ?? false }) { try await loadWalletCards(id) }
-        guard pending != captures else { return false }
-        pending = captures
-        return true
+        let changed = inbox != captures
+        inbox = captures
+        attemptedCaptures.formIntersection(captures.map(\.id))
+        publishPending()
+        return changed
+    }
+    /// Complete purchases stay out of the review inbox until automatic booking has tried them,
+    /// so a purchase that is about to be booked never asks the user to check it.
+    private func publishPending() {
+        let shown = enabled ? inbox.filter { capture in
+            attemptedCaptures.contains(capture.id) || store.map { !WalletReviewDraft.canBookAutomatically(capture, in: $0.ledger) } ?? true
+        } : inbox
+        if pending != shown { pending = shown }
+        let processing = shown.count < inbox.count
+        if processingWallet != processing { withAnimation(.spring(duration: 0.35)) { processingWallet = processing } }
     }
     private func diskLedger() async throws -> Ledger {
         guard let store, !store.isDemo else { throw LedgerError.invalid("Сначала начните свой учет и создайте счет. Демо в облако не загружается.") }
@@ -373,6 +396,8 @@ final class CloudSync: ObservableObject {
         await operation(inBackground: inBackground, waitForCurrent: waitForCurrent) {
             guard let store = self.store, let id = self.householdID else { return }
             let originalIDs = Set(store.ledger.transactions.map(\.id))
+            self.synchronizing = true
+            defer { self.synchronizing = false }
             do {
                 try await self.syncNow()
                 try await self.bookWalletPurchases()
@@ -380,6 +405,8 @@ final class CloudSync: ObservableObject {
                 self.failureCount = 0; self.nextAttempt = Date().addingTimeInterval(8)
             } catch {
                 self.failureCount += 1
+                // Unbooked purchases wait for the retry without a banner that never ends.
+                if self.processingWallet { withAnimation { self.processingWallet = false } }
                 // Without a network the next try stays close: the subway rarely lasts five minutes.
                 let limit: Double = Self.isConnectionError(error) ? 30 : 300
                 self.nextAttempt = Date().addingTimeInterval(min(limit, 8 * pow(2, Double(min(self.failureCount, 5)))))
@@ -436,7 +463,7 @@ final class CloudSync: ObservableObject {
     private func bookWalletPurchases() async throws {
         guard let id = householdID, let store else { return }
         var firstError: Error?
-        for capture in pending.sorted(by: { $0.date < $1.date }) {
+        for capture in inbox.sorted(by: { $0.date < $1.date }) {
             try Task.checkCancellation()
             do {
                 let local = try await diskLedger()
@@ -453,10 +480,15 @@ final class CloudSync: ObservableObject {
                 _ = try await BackgroundWork.shared.perform { try LedgerFile.applyCloud(envelope.snapshot, at: url, mergeAgainst: current) }
                 try await saveCheckpoint(envelope)
                 await store.reloadFromDisk()
-                pending.removeAll { $0.id == capture.id }
+                inbox.removeAll { $0.id == capture.id }
+                publishPending()
                 lastSync = Date()
             } catch is CancellationError { throw CancellationError() }
-            catch { if firstError == nil { firstError = error } }
+            catch {
+                // Only a real failure needs review; offline purchases wait for the next attempt.
+                if !Self.isConnectionError(error) { attemptedCaptures.insert(capture.id) }
+                if firstError == nil { firstError = error }
+            }
         }
         // Failed captures stay in the server inbox and use the normal sync backoff.
         try await collectWalletImport()
@@ -561,7 +593,7 @@ final class CloudSync: ObservableObject {
                 if reviewed.categoryID == nil && reviewed.kind != .transfer { reviewed.categoryID = local.suggestedCategory(merchant: reviewed.merchant, kind: reviewed.kind) }
                 return try WalletReviewDraft.transaction(reviewed, for: capture, in: local)
             }
-            let current = self.pending.first { $0.id == capture.id } ?? capture
+            let current = self.inbox.first { $0.id == capture.id } ?? capture
             // The server links a new card and commits this review atomically.
             let envelope: CloudEnvelope = try await self.rpc("mora_review_capture",
                 ReviewBody(p_household_id: id, p_capture_id: capture.id, p_transaction: value))
@@ -597,7 +629,7 @@ final class CloudSync: ObservableObject {
             settings?.enabled = false; settings?.householdID = nil; settings?.householdName = ""
             try await persistSettings()
             session = nil; signedIn = false; enabled = false; householdID = nil; householdName = ""
-            households = []; pending = []; walletCards = []; agents = []; newAgentURL = nil; invitation = nil; conflict = false; error = nil
+            households = []; pending = []; inbox = []; attemptedCaptures = []; processingWallet = false; walletCards = []; agents = []; newAgentURL = nil; invitation = nil; conflict = false; error = nil
         }
     }
 }

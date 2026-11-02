@@ -152,8 +152,21 @@ struct ErrorAlert: ViewModifier {
 
 private struct ToastBanner: View {
     @EnvironmentObject private var store: FinanceStore
+    @EnvironmentObject private var cloud: CloudSync
     var body: some View {
-        if let toast = store.toast {
+        if store.toast == nil && cloud.processingWallet {
+            // Complete purchases are being booked: nothing waits for the user yet.
+            HStack(spacing: 10) {
+                ProgressView().controlSize(.small).tint(.moraGreen)
+                Text(L("Загружаем покупки из Wallet…")).font(.subheadline.weight(.medium))
+            }
+            .padding(.horizontal, 16).padding(.vertical, 10)
+            .background(.regularMaterial, in: Capsule())
+            .shadow(color: .black.opacity(0.1), radius: 10, y: 4)
+            .transition(.move(edge: .top).combined(with: .opacity))
+            .allowsHitTesting(false)
+            .accessibilityElement(children: .combine)
+        } else if let toast = store.toast {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: toast.kind == .success ? "checkmark.circle.fill" : toast.kind == .warning ? "exclamationmark.triangle.fill" : "xmark.octagon.fill")
                     .foregroundStyle(toast.kind == .success ? Color.moraGreen : toast.kind == .warning ? .orange : .red)
