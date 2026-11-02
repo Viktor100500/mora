@@ -1,6 +1,16 @@
 import Foundation
 
 public enum TransactionDateEditing {
+    /// Set the local hour and minute without changing the event's calendar day.
+    /// Merely opening the picker must not discard seconds from imported events.
+    public static func changingTime(of timestamp: Date, to time: Date, calendar: Calendar = .current) -> Date {
+        let before = calendar.dateComponents([.hour, .minute], from: timestamp)
+        let selected = calendar.dateComponents([.hour, .minute], from: time)
+        guard before != selected else { return timestamp }
+        return calendar.date(bySettingHour: selected.hour!, minute: selected.minute!, second: 0, of: timestamp,
+            matchingPolicy: .nextTimePreservingSmallerComponents, repeatedTimePolicy: .first) ?? timestamp
+    }
+
     /// A date-only editor changes the calendar day, retaining the event's clock
     /// time. Returning the original value also preserves subsecond precision.
     public static func changingDay(of timestamp: Date, to day: Date, calendar: Calendar = .current) -> Date {

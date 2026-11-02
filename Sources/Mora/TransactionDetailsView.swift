@@ -14,6 +14,7 @@ struct TransactionDetailsView: View {
                     Text(transaction.merchant).font(.title3.weight(.medium)).textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                     LabeledContent(L("Дата"), value: transaction.date.formatted(.dateTime.day().month(.wide).year().locale(L10n.locale)))
+                    LabeledContent(L("Время"), value: transaction.date.formatted(.dateTime.hour().minute().locale(L10n.locale)))
                     LabeledContent(L("Тип"), value: L(transaction.kind.title))
                     LabeledContent(L("Счет"), value: ledger.account(transaction.accountID)?.name ?? "—")
                     if transaction.kind == .transfer {

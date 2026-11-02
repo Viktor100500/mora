@@ -10,11 +10,11 @@ struct TransactionEditor: View {
     private let walletCapture: CloudCapture?
     private let amountSuggestion: WalletReviewDraft.AmountSuggestion?
     private let newWalletCard: String?
-    private let dateReference: Date
     @State private var merchant: String
     @State private var amount: String
     @State private var kind: TransactionKind
     @State private var date: Date
+    @State private var showsTime = false
     @State private var accountID: UUID?
     @State private var categoryID: UUID?
     @State private var destinationID: UUID?
@@ -40,7 +40,7 @@ struct TransactionEditor: View {
         let draft = walletCapture.map { WalletReviewDraft(capture: $0, ledger: ledger, locale: L10n.locale) }
         amountSuggestion = draft?.amount.isEmpty == true ? draft?.suggestion : nil
         newWalletCard = walletCapture.flatMap { $0.awaitsCardLink ? ($0.card ?? "") : nil }
-        dateReference = source?.date ?? draft?.date ?? Date()
+        let dateReference = source?.date ?? draft?.date ?? Date()
         _merchant = State(initialValue: source?.merchant ?? draft?.merchant ?? "")
         _amount = State(initialValue: source.map { Money.plain(abs($0.conversion?.originalAmount ?? $0.amount)) } ?? draft?.prefillAmount ?? "")
         _kind = State(initialValue: source?.kind ?? .expense)
@@ -58,6 +58,12 @@ struct TransactionEditor: View {
     private var ledger: Ledger { store.ledger }
     private var account: Account? { accountID.flatMap { ledger.account($0) } }
     private var destination: Account? { destinationID.flatMap { ledger.account($0) } }
+    private var daySelection: Binding<Date> {
+        Binding(get: { date }, set: { date = TransactionDateEditing.changingDay(of: date, to: $0) })
+    }
+    private var timeSelection: Binding<Date> {
+        Binding(get: { date }, set: { date = TransactionDateEditing.changingTime(of: date, to: $0) })
+    }
     private var sameCurrency: Bool { account?.currency == destination?.currency }
     private var standaloneTransfer: Bool { transaction?.isStandaloneTransfer == true && kind == .transfer }
     private var purchaseCurrency: String { currency.isEmpty ? (account?.currency ?? "") : currency }
@@ -145,7 +151,12 @@ struct TransactionEditor: View {
                         }
                     }
                     validation(.merchant)
-                    DatePicker(L("Дата"), selection: $date, displayedComponents: .date)
+                    DatePicker(L("Дата"), selection: daySelection, displayedComponents: .date)
+                    DisclosureGroup(L("Время операции"), isExpanded: $showsTime) {
+                        DatePicker(L("Время"), selection: timeSelection, displayedComponents: .hourAndMinute)
+                        Text(L("Необязательно. Укажите время, чтобы расположить операции по порядку в течение дня."))
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     if kind != .transfer {
                         Picker(L("Категория"), selection: $categoryID) {
                             Text(suggestedCategory.flatMap { ledger.category($0) }.map { L("Автоматически: \($0.name)") } ?? L("Автоматически / без категории")).tag(UUID?.none)
@@ -348,7 +359,7 @@ struct TransactionEditor: View {
         guard !needsConversion || converted != nil else { return nil }
         var signed = kind == .income ? value : -value
         if standaloneTransfer { signed = (transaction?.amount ?? 0) > 0 ? value : -value }
-        return Transaction(id: transaction?.id ?? newTransactionID, date: TransactionDateEditing.changingDay(of: dateReference, to: date),
+        return Transaction(id: transaction?.id ?? newTransactionID, date: date,
                            merchant: "", amount: converted ?? signed, accountID: accountID, kind: kind,
                            destinationAccountID: kind == .transfer && !standaloneTransfer ? destinationID : nil,
                            destinationAmount: kind == .transfer && !standaloneTransfer ? (sameCurrency ? value : AmountInput.parse(destinationAmount)) : nil)
@@ -374,7 +385,7 @@ struct TransactionEditor: View {
     private func makeDraft() -> Transaction? {
         guard let value = AmountInput.parse(amount), value > 0, let accountID else { return nil }
         var result = transaction ?? Transaction(id: newTransactionID, date: date, merchant: merchant, amount: -value, accountID: accountID)
-        result.date = TransactionDateEditing.changingDay(of: dateReference, to: date)
+        result.date = date
         result.merchant = merchant.trimmingCharacters(in: .whitespacesAndNewlines)
         result.amount = kind == .income ? value : -value
         result.kind = kind; result.accountID = accountID

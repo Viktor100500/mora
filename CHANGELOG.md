@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.25 — 2026-11-01
+
+- Mac and iPhone 1.0.13: optionally edit a transaction’s hour and minute under Transaction time to put purchases in their actual order within a day. Lists and Mac transaction details show the time. Changing only the calendar date or another field preserves the original timestamp, including Wallet and imported seconds.
+
 ## 1.6.24 — 2026-11-01
 
 - Mac and iPhone 1.0.12: a complete Apple Wallet purchase no longer flashes as “waiting for review” while it is being booked. Purchases that can be booked automatically stay out of the review inbox, badges and notifications until booking has been tried; meanwhile a “Loading Wallet purchases…” banner is shown. Only a purchase that really needs the user, or whose booking failed, appears for review.

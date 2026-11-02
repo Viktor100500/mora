@@ -45,7 +45,10 @@ struct TransactionRow: View {
                     .foregroundStyle(transaction.kind == .income ? Color.moraGreen : .primary)
                     .lineLimit(1)
                 if showsDate {
-                    Text(transaction.date.shortDay).font(.caption2).foregroundStyle(.secondary)
+                    Text(transaction.date.formatted(.dateTime.day().month(.abbreviated).hour().minute().locale(L10n.locale))).font(.caption2).foregroundStyle(.secondary)
+                } else {
+                    Text(transaction.date.formatted(.dateTime.hour().minute().locale(L10n.locale)))
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
             }.fixedSize(horizontal: true, vertical: false)
         }

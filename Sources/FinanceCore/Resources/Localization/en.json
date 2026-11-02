@@ -1121,5 +1121,8 @@
   "Возобновите синхронизацию в настройках облака": "Resume sync in cloud settings",
   "Синхронизация с облаком завершена": "Cloud sync completed",
   "Синхронизация с облаком отменена": "Cloud sync canceled",
-  "Не удалось синхронизироваться с облаком": "Couldn't sync with the cloud"
+  "Не удалось синхронизироваться с облаком": "Couldn't sync with the cloud",
+  "Время операции": "Transaction time",
+  "Время": "Time",
+  "Необязательно. Укажите время, чтобы расположить операции по порядку в течение дня.": "Optional. Set the time to put transactions in order within the day."
 }

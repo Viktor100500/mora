@@ -281,7 +281,7 @@ struct TransactionRow: View {
             Spacer(minLength: 12)
             VStack(alignment: .trailing, spacing: 4) {
                 FinancialText((transaction.kind == .income ? "+" : "") + DisplayMoney.string(transaction.amount, currency: account?.currency ?? "RUB")).font(.system(size: 13, weight: .semibold, design: .rounded)).foregroundStyle(transaction.kind == .income ? Color.moraGreen : .primary).monospacedDigit()
-                Text(transaction.date.formatted(.dateTime.day().month(.abbreviated).locale(L10n.locale))).font(.system(size: 10)).foregroundStyle(.secondary)
+                Text(transaction.date.formatted(.dateTime.day().month(.abbreviated).hour().minute().locale(L10n.locale))).font(.system(size: 10)).foregroundStyle(.secondary)
             }
             .fixedSize(horizontal: true, vertical: false)
         }.padding(.vertical, 3).smoothUpdates(value: transaction)
