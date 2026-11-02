@@ -68,7 +68,8 @@ public struct WalletReviewDraft: Sendable {
     private static func automaticAmount(_ input: String) -> Decimal? {
         guard input.count <= 64 else { return nil }
         var value = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        let affix = "([$€£¥₽]|USD|EUR|GBP|RUB|JPY|CAD|AUD|CHF|CNY)"
+        // Any ISO code: a multi-currency card also pays in RSD, HUF and others.
+        let affix = "([$€£¥₽]|[A-Z]{3})"
         let prefixRemoved = value.replacingOccurrences(of: "^" + affix, with: "", options: [.regularExpression, .caseInsensitive])
         if prefixRemoved != value { value = prefixRemoved }
         else { value = value.replacingOccurrences(of: affix + "$", with: "", options: [.regularExpression, .caseInsensitive]) }

@@ -386,6 +386,45 @@ try {
     await rpc(owner,'mora_revoke_phone_token',[setup.id]);
     await denied(()=>cardCapture(setup.token,'$3.00','MTA','Chase Visa 1234'));
   });
+  await check('a multi-currency card books each currency to its account and the rest to the main account',async()=>{
+    const rsdAccount=uuid().toUpperCase(), usdExtra=uuid().toUpperCase();
+    const latest=await rpc(owner,'mora_get_household',[h]);
+    const added=[{id:rsdAccount,name:'Raif RSD',currency:'RSD',kind:'checking',openingBalance:0,color:'green',archived:false},
+                 {id:usdExtra,name:'Raif USD',currency:'USD',kind:'checking',openingBalance:0,color:'green',archived:false}];
+    const withAccounts=(await admin.query("select jsonb_set(snapshot,'{accounts}',(snapshot->'accounts') || $2::jsonb)::text value from public.mora_households where id=$1",[h,JSON.stringify(added)])).rows[0].value;
+    assert.equal(await rpc(owner,'mora_save_household',[h,latest.version,withAccounts]),true);
+    for (const [input,currency,amount] of [['RSD 1,234.00','RSD','1234.00'],['1.234,50 RSD','RSD','1234.50'],['HUF 990','HUF','990'],['$3.00','USD','3.00'],['3.00','','3.00']]) {
+      assert.equal((await admin.query('select public.mora_parse_payment_currency($1) c',[input])).rows[0].c,currency||null);
+      assert.equal((await admin.query('select public.mora_parse_payment_amount($1)::text a',[input])).rows[0].a,amount);
+    }
+    const setup=await rpc(owner,'mora_create_wallet_setup',[h,'Multi-currency iPhone',JSON.stringify([{card:'Visa Debit for Priv Individuals',account_id:eurAccount}])]);
+    const card=(await rpc(owner,'mora_list_wallet_cards',[h])).find(c=>c.token_id===setup.id);
+    assert.deepEqual(card.account_ids,[]);
+    const early=await cardCapture(setup.token,'','Waiting dinars','Visa Debit for Priv Individuals');
+    await denied(()=>rpc(anon,'mora_set_wallet_card_accounts',[h,card.id,[rsdAccount]]));
+    await denied(()=>rpc(outsider,'mora_set_wallet_card_accounts',[h,card.id,[rsdAccount]]));
+    await assert.rejects(()=>rpc(owner,'mora_set_wallet_card_accounts',[h,card.id,[uuid()]]));
+    await assert.rejects(()=>rpc(owner,'mora_set_wallet_card_accounts',[h,card.id,[usdExtra,accountID]]),/one account per currency/);
+    assert.equal(await rpc(owner,'mora_set_wallet_card_accounts',[h,card.id,[rsdAccount,eurAccount,usdExtra]]),1,'the main account is ignored among other currencies');
+    assert.equal(await rpc(owner,'mora_set_wallet_card_accounts',[h,card.id,[rsdAccount,usdExtra]]),1);
+    assert.deepEqual((await rpc(owner,'mora_list_wallet_cards',[h])).find(c=>c.id===card.id).account_ids.sort(),[rsdAccount,usdExtra].map(x=>x.toLowerCase()).sort());
+    const dinars=await cardCapture(setup.token,'RSD 1,234.00','Maxi','Visa Debit for Priv Individuals');
+    const dollars=await cardCapture(setup.token,'$3.00','Amazon','visa debit for priv individuals');
+    const euros=await cardCapture(setup.token,'€4.00','Cafe','Visa Debit for Priv Individuals');
+    const forints=await cardCapture(setup.token,'HUF 990','Budapest','Visa Debit for Priv Individuals');
+    assert.equal(dinars.state,'recorded'); assert.equal(dollars.state,'recorded'); assert.equal(euros.state,'recorded');
+    assert.equal(forints.state,'pending'); assert.equal(forints.reason,null,'another currency goes to the main account for conversion');
+    const ledger=(await rpc(owner,'mora_get_household',[h])).snapshot;
+    const accountOf=id=>ledger.transactions.find(t=>t.externalID==='wallet:'+id).accountID;
+    assert.equal(accountOf(dinars.id),rsdAccount); assert.equal(accountOf(dollars.id),usdExtra); assert.equal(accountOf(euros.id),eurAccount);
+    const pending=await rpc(owner,'mora_list_pending',[h]);
+    assert.equal(pending.find(c=>c.id===forints.id).account_id,eurAccount.toLowerCase());
+    assert.equal(pending.find(c=>c.id===early.id).account_id,eurAccount.toLowerCase());
+    assert.equal(await rpc(owner,'mora_link_wallet_card',[h,card.id,rsdAccount]),2);
+    assert.deepEqual((await rpc(owner,'mora_list_wallet_cards',[h])).find(c=>c.id===card.id).account_ids,[usdExtra.toLowerCase()]);
+    assert.equal(await rpc(owner,'mora_set_wallet_card_accounts',[h,card.id,[]]),2);
+    for (const id of [forints.id,early.id]) await rpc(owner,'mora_resolve_capture',[h,id,eurAccount,'','',true]);
+  });
   await check('AI agent keys read context and record one rollbackable import',async()=>{
     const agent=await rpc(owner,'mora_create_agent_token',[h,'Claude']);
     await denied(()=>rpc(outsider,'mora_create_agent_token',[h,'Other']));

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.36 — 2026-11-01
+
+- Multi-currency Wallet cards: besides its main account, a card can have one account per other currency. A purchase in that currency is booked to that account (for example RSD to the dinar account, USD to the dollar account); other currencies go to the main account with the usual Visa conversion. Set them when turning on Apple Pay on the iPhone (iPhone 1.0.22) or later in Apple Pay cards; waiting purchases are routed again. Requires the `wallet_card_currency_accounts` migration.
+- Wallet amounts with any three-letter currency code, such as `RSD 1,234.00`, are recognized on the server and in automatic booking; previously only a fixed list of currencies was.
+
 ## 1.6.35 — 2026-11-01
 
 - iPhone 1.0.21: Apple Pay on this iPhone fills in every card already used on this iPhone from Wallet runs, so only accounts need to be chosen. iOS gives apps no list of Wallet cards; the names come from the Card or Pass value of past payments.

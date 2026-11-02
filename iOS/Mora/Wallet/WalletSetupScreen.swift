@@ -12,6 +12,8 @@ struct WalletSetupScreen: View {
     @State private var cards: [WalletCardAssignment] = []
     @State private var confirmDisable = false
     @State private var cardHelp: UUID?
+    /// Accounts in other currencies per card row: a multi-currency card debits the account in the purchase currency.
+    @State private var otherCurrencies: [UUID: [UUID]] = [:]
     /// Exact "Card or Pass" values that Wallet already passed to the action on this iPhone.
     @State private var seenCards: [String] = []
 
@@ -65,7 +67,7 @@ struct WalletSetupScreen: View {
                     .font(.footnote).foregroundStyle(.orange)
             }
         } header: { Text(L("Apple Pay включён")) } footer: {
-            Text(L("Счета карт меняются в разделе «Карты Apple Pay» общей базы. Новая карта появится там после первой покупки и будет ждать выбора счёта."))
+            Text(L("Счета карт, в том числе счета в других валютах, меняются в разделе «Карты Apple Pay» общей базы. Новая карта появится там после первой покупки и будет ждать выбора счёта."))
         }
         Section {
             Text(L("1. Быстрые команды → Автоматизация → «Транзакция»: отметьте все карты и включите «Запускать сразу».\n2. Оставьте в автоматизации одно действие «Log Wallet Payment» (Mora): Amount, Merchant и Card or Pass из «Входных данных команды».\n3. Удалите из автоматизации прежнюю команду отправки, иначе покупка придёт дважды."))
@@ -95,10 +97,12 @@ struct WalletSetupScreen: View {
                                         .presentationCompactAdaptation(.popover)
                                 }
                         }
-                        Picker(L("Счёт"), selection: $card.account_id) {
+                        Picker(L("Основной счёт"), selection: $card.account_id) {
                             Text(L("Выберите счёт")).tag(Self.unselected)
                             ForEach(accounts) { Text("\($0.name) · \($0.currency)").tag($0.id) }
                         }
+                        CardCurrencyAccounts(accounts: accounts, main: card.account_id == Self.unselected ? nil : card.account_id,
+                                             selection: Binding(get: { otherCurrencies[card.id] ?? [] }, set: { otherCurrencies[card.id] = $0 }))
                     }
                 }
                 .onDelete { cards.remove(atOffsets: $0) }
@@ -117,8 +121,11 @@ struct WalletSetupScreen: View {
             Section {
                 Button(L("Включить Apple Pay на этом iPhone")) {
                     Task {
-                        let assignments = cards.map { WalletCardAssignment(card: $0.card.trimmingCharacters(in: .whitespaces), accountID: $0.account_id) }
-                        if await cloud.enableWalletSender(label: label.trimmingCharacters(in: .whitespaces), cards: assignments) {
+                        let assignments = cards.map { WalletCardAssignment(id: $0.id, card: $0.card.trimmingCharacters(in: .whitespaces), accountID: $0.account_id) }
+                        let other = Dictionary(uniqueKeysWithValues: cards.map { card in
+                            (card.id, CardCurrencyAccounts.valid(otherCurrencies[card.id] ?? [], main: card.account_id, in: accounts))
+                        }).filter { !$0.value.isEmpty }
+                        if await cloud.enableWalletSender(label: label.trimmingCharacters(in: .whitespaces), cards: assignments, otherCurrencies: other) {
                             sender = WalletSender.current()
                         }
                     }

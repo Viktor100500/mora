@@ -1,4 +1,5 @@
 import XCTest
+import FinanceCore
 @testable import MoraiOS
 
 final class WalletRunLogTests: XCTestCase {
@@ -102,4 +103,13 @@ final class WalletRunLogTests: XCTestCase {
 private actor Requests {
     private(set) var all: [URLRequest] = []
     func add(_ request: URLRequest) { all.append(request) }
+}
+
+final class CardCurrencyAccountsTests: XCTestCase {
+    func testOneAccountPerOtherCurrencyIsKept() {
+        let eur = Account(name: "Raif EUR", currency: "EUR"), rsd = Account(name: "Raif RSD", currency: "RSD")
+        let rsd2 = Account(name: "Other RSD", currency: "RSD"), eur2 = Account(name: "Other EUR", currency: "EUR")
+        let accounts = [eur, rsd, rsd2, eur2]
+        XCTAssertEqual(CardCurrencyAccounts.valid([rsd.id, rsd2.id, eur2.id, eur.id, UUID()], main: eur.id, in: accounts), [rsd.id])
+    }
 }

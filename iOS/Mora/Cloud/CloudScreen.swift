@@ -162,6 +162,11 @@ struct CloudScreen: View {
                         Text(card.label + (card.pending_count > 0 ? " · " + L("ждут: \(card.pending_count)") : "")).font(.caption).foregroundStyle(.secondary)
                     }
                 }
+                // Older databases without the multi-currency migration return no account_ids.
+                if let other = card.account_ids {
+                    CardCurrencyAccounts(accounts: store.ledger.accounts.filter { !$0.archived }, main: card.account_id,
+                                         selection: Binding(get: { other }, set: { value in Task { await cloud.setCardAccounts(card.id, accounts: value) } }))
+                }
             }
         } header: { Text(L("Карты Apple Pay")) } footer: {
             Text(L("Покупки картой записываются на выбранный счёт. Покупки новых карт ждут выбора счёта. Без Mora на iPhone команду с картами создаёт Mora на Mac: «Общая база и Apple Pay» → «Создать команду для iPhone…»."))

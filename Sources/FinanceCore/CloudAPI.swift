@@ -112,6 +112,9 @@ public struct CloudWalletCard: Codable, Identifiable, Equatable, Sendable {
     public let default_account_id: UUID
     public let last_seen: Date?
     public let pending_count: Int
+    /// Card accounts in other currencies: a purchase in such a currency is booked there.
+    /// Absent before the `wallet_card_currency_accounts` migration.
+    public var account_ids: [UUID]? = nil
 }
 
 public enum CloudAPIError: LocalizedError, Sendable {

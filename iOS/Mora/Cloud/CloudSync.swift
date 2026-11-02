@@ -78,6 +78,7 @@ final class CloudSync: ObservableObject {
         private enum CodingKeys: String, CodingKey { case p_household_id, p_card_id, p_account_id }
     }
     private struct AgentBody: Encodable, Sendable { let p_household_id: UUID; let p_label: String }
+    private struct CardAccountsBody: Encodable, Sendable { let p_household_id: UUID; let p_card_id: UUID; let p_account_ids: [UUID] }
     private struct RevokeAgentBody: Encodable, Sendable { let p_token_id: UUID }
     private struct ReviewBody: Encodable, Sendable {
         let p_household_id: UUID; let p_capture_id: UUID; let p_transaction: Transaction
@@ -588,7 +589,7 @@ final class CloudSync: ObservableObject {
     }
     /// Creates this iPhone's own phone key with its cards and accounts, so the
     /// Wallet action sends purchases itself. Returns whether Apple Pay is now on.
-    func enableWalletSender(label: String, cards: [WalletCardAssignment]) async -> Bool {
+    func enableWalletSender(label: String, cards: [WalletCardAssignment], otherCurrencies: [UUID: [UUID]] = [:]) async -> Bool {
         struct Body: Encodable, Sendable { let p_household_id: UUID; let p_label: String; let p_cards: [WalletCardAssignment] }
         var enabled = false
         await operation {
@@ -604,8 +605,29 @@ final class CloudSync: ObservableObject {
             }
             try await self.loadWalletCards(id)
             enabled = true
+            // Accounts in other currencies are set per card once the server knows the cards.
+            for assignment in cards {
+                guard let extra = otherCurrencies[assignment.id], !extra.isEmpty,
+                      let card = self.walletCards.first(where: { $0.token_id == issued.id && Self.cardKey($0.card) == Self.cardKey(assignment.card) })
+                else { continue }
+                let _: Int = try await self.rpc("mora_set_wallet_card_accounts", CardAccountsBody(p_household_id: id, p_card_id: card.id, p_account_ids: extra))
+            }
+            if !otherCurrencies.isEmpty { try await self.loadWalletCards(id) }
         }
         return enabled
+    }
+    /// The server compares card names ignoring case and repeated spaces.
+    private static func cardKey(_ name: String) -> String { name.split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased() }
+    /// Sets the card's accounts in other currencies; waiting purchases are routed again.
+    func setCardAccounts(_ card: UUID, accounts: [UUID]) async {
+        await operation {
+            guard let id = self.householdID else { return }
+            let _: Int = try await self.rpc("mora_set_wallet_card_accounts", CardAccountsBody(p_household_id: id, p_card_id: card, p_account_ids: accounts))
+            try await self.loadWalletCards(id)
+            _ = try await self.loadPending(id)
+        }
+        nextAttempt = .distantPast
+        await synchronize(inBackground: true)
     }
     /// Revokes this iPhone's phone key. Purchases waiting on the iPhone stay saved.
     func disableWalletSender() async {

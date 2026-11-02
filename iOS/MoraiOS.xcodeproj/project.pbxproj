@@ -27,6 +27,7 @@
 		657B7726F17D4315E713C6EB /* CurrencyPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B4EB47169E11E5D33A55AF /* CurrencyPicker.swift */; };
 		66937E5EF2D39C492F4E49D9 /* Files.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82E5A0638F195085193DE6F5 /* Files.swift */; };
 		6AA9F4CD6F747F8773393FA8 /* MacPairing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06283B4C7D9BC7737F298289 /* MacPairing.swift */; };
+		75241264723BC5B43A618B3F /* CardCurrencyAccounts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04D3B8D9CB748ACD16777C29 /* CardCurrencyAccounts.swift */; };
 		7A0FAC2A8A759AA6E0522800 /* OverviewScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6376376D9EC5F6E8AE7DFB56 /* OverviewScreen.swift */; };
 		7C02E4373E115058FD1C15E1 /* WalletRunLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A4E9DA3F49721E1DF85F7FB /* WalletRunLogTests.swift */; };
 		7E0492BAFA581CDC5F053656 /* AccountsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0A2F4EF48693450012E079 /* AccountsScreen.swift */; };
@@ -59,6 +60,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		04D3B8D9CB748ACD16777C29 /* CardCurrencyAccounts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CardCurrencyAccounts.swift; sourceTree = "<group>"; };
 		05D35A85A2341ED366AA546D /* SupportSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportSection.swift; sourceTree = "<group>"; };
 		06283B4C7D9BC7737F298289 /* MacPairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacPairing.swift; sourceTree = "<group>"; };
 		14EC5F098BA136755B3F0442 /* ReportCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportCache.swift; sourceTree = "<group>"; };
@@ -102,7 +104,7 @@
 		F3E78F6ACDBE2C140769209A /* ChangeDescription.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ChangeDescription.swift; path = ../Sources/Mora/ChangeDescription.swift; sourceTree = "<group>"; };
 		F65900D0DE8EB82F68603C47 /* ImportScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportScreens.swift; sourceTree = "<group>"; };
 		F9AC73B755D7E67297AE96D1 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
-		"TEMP_6E607AFC-1044-4317-8C01-9B987B6BC4E7" /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
+		"TEMP_E4AC3CD3-A3C2-4D55-88D4-9A4078B83938" /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -185,6 +187,7 @@
 		9C4FFE00966C10A543E1D05D /* Wallet */ = {
 			isa = PBXGroup;
 			children = (
+				04D3B8D9CB748ACD16777C29 /* CardCurrencyAccounts.swift */,
 				BCFF2BEB1FEAFE94C74F7F1C /* WalletDelivery.swift */,
 				951FB5CB562E7123711699C8 /* WalletRunLog.swift */,
 				C4E2901038A4DDB9BD22E007 /* WalletRunsScreen.swift */,
@@ -261,10 +264,10 @@
 			path = MoraTests;
 			sourceTree = "<group>";
 		};
-		"TEMP_D72684B2-83BB-4315-B79C-34A6C09E1143" /* iOS */ = {
+		"TEMP_F1F6EDFE-5954-406D-8087-526E7125DACE" /* iOS */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_6E607AFC-1044-4317-8C01-9B987B6BC4E7" /* Signing.xcconfig */,
+				"TEMP_E4AC3CD3-A3C2-4D55-88D4-9A4078B83938" /* Signing.xcconfig */,
 			);
 			path = iOS;
 			sourceTree = "<group>";
@@ -379,6 +382,7 @@
 				650885242DBE201F24A31FB8 /* AIImportScreen.swift in Sources */,
 				7E0492BAFA581CDC5F053656 /* AccountsScreen.swift in Sources */,
 				1133888B890EB3C1A8FA30F6 /* AnalyticsScreen.swift in Sources */,
+				75241264723BC5B43A618B3F /* CardCurrencyAccounts.swift in Sources */,
 				129FCB8A9685F1D935FDC35E /* ChangeDescription.swift in Sources */,
 				A3D9EB13A2AB05BEA95256C1 /* CloudScreen.swift in Sources */,
 				47DF943863B3B7E04EFFE1BA /* CloudSync.swift in Sources */,
@@ -475,7 +479,7 @@
 		};
 		BCE30933C473708F0E64C320 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_6E607AFC-1044-4317-8C01-9B987B6BC4E7" /* Signing.xcconfig */;
+			baseConfigurationReference = "TEMP_E4AC3CD3-A3C2-4D55-88D4-9A4078B83938" /* Signing.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -508,7 +512,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 22;
+				CURRENT_PROJECT_VERSION = 23;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -522,7 +526,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.21;
+				MARKETING_VERSION = 1.0.22;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -552,7 +556,7 @@
 		};
 		D00F07EA73DCC7592C635AE0 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_6E607AFC-1044-4317-8C01-9B987B6BC4E7" /* Signing.xcconfig */;
+			baseConfigurationReference = "TEMP_E4AC3CD3-A3C2-4D55-88D4-9A4078B83938" /* Signing.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -585,7 +589,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 22;
+				CURRENT_PROJECT_VERSION = 23;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -605,7 +609,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.21;
+				MARKETING_VERSION = 1.0.22;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

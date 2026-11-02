@@ -56,6 +56,16 @@ final class WalletReviewTests: XCTestCase {
         XCTAssertEqual(WalletReviewDraft(capture: try capture(account: account, currency: "CAD"), ledger: ledger).currency, "CAD")
     }
 
+    func testDinarPurchaseOfAMultiCurrencyCardIsBookedToItsDinarAccount() async throws {
+        var ledger = Ledger.empty; ledger.accounts = [Account(name: "Raif RSD", currency: "RSD")]
+        for amount in ["RSD 1,234.00", "1.234,00 RSD", "RSD\u{00A0}1,234.00"] {
+            let value = try await WalletReviewDraft.automaticTransaction(for: try capture(account: ledger.accounts[0].id, amount: amount, currency: "RSD"), in: ledger) { _, _, _, _ in
+                XCTFail("No conversion expected"); throw LedgerError.invalid("offline")
+            }
+            XCTAssertEqual(value?.amount, -1234, amount)
+        }
+    }
+
     func testWholeFoodsBankDescriptorIsCategorizedWhenWalletPurchaseIsBooked() async throws {
         var ledger = Ledger.empty
         ledger.accounts = [Account(name: "USD", currency: "USD")]
