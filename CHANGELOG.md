@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.35 — 2026-11-01
+
+- iPhone 1.0.21: Apple Pay on this iPhone fills in every card already used on this iPhone from Wallet runs, so only accounts need to be chosen. iOS gives apps no list of Wallet cards; the names come from the Card or Pass value of past payments.
+
 ## 1.6.34 — 2026-11-01
 
 - iPhone 1.0.20: a ? button next to the Wallet card name explains that it is the Card or Pass value of the payment, and names already seen in Wallet runs are offered to fill in with one tap. The Mac card field shows the same explanation as a tooltip.

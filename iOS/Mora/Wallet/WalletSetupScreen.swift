@@ -45,9 +45,12 @@ struct WalletSetupScreen: View {
         .disabled(cloud.busy)
         .overlay { if cloud.busy { ProgressView().controlSize(.large) } }
         .onAppear {
-            sender = WalletSender.current(); if cards.isEmpty { addCard() }
+            sender = WalletSender.current()
             var seen = Set<String>()
             seenCards = WalletRunLog.runs().map(\.card).filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+            // Wallet passes the exact card name with every payment, so cards already used need no typing.
+            if cards.isEmpty { cards = seenCards.map { WalletCardAssignment(card: $0, accountID: Self.unselected) } }
+            if cards.isEmpty { addCard() }
         }
         .confirmationDialog(L("Отключить Apple Pay на этом iPhone?"), isPresented: $confirmDisable, titleVisibility: .visible) {
             Button(L("Отключить"), role: .destructive) { Task { await cloud.disableWalletSender(); sender = WalletSender.current() } }
@@ -109,7 +112,7 @@ struct WalletSetupScreen: View {
                     }
                 }
             } header: { Text(L("Карты и счета")) } footer: {
-                Text(L("Название — как в поле «Card or Pass» оплаты: нажмите «?» рядом с полем. Покупки неизвестной карты или без карты будут ждать проверки и не спишутся с другого счёта."))
+                Text(L("Карты, которыми уже платили на этом iPhone, добавлены сами: выберите для них счета. Карта, которой ещё не платили, появится после первой покупки в «Карты Apple Pay». Покупки неизвестной карты или без карты ждут проверки и не спишутся с другого счёта."))
             }
             Section {
                 Button(L("Включить Apple Pay на этом iPhone")) {
