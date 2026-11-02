@@ -66,8 +66,9 @@ final class FloatingNotificationTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(30)); host.layoutSubtreeIfNeeded()
         XCTAssertEqual(probe.convert(probe.bounds, to: host), baseline)
         if let path = ProcessInfo.processInfo.environment["MORA_NOTICE_SNAPSHOT"] {
-            let progress = store.beginProgressNotice("Загружаем покупки из Wallet…")
-            defer { store.finishProgressNotice(progress) }
+            store.showNotice("Удаление операций: 2",
+                detail: "NJ BUS · -3 $ · 1 нояб. 2026 г. · Транспорт\nSynthetic purchase · -12,50 $ · 1 нояб. 2026 г. · Продукты",
+                actions: [.undo("snapshot")])
             let preview = ContentView(page: .constant(.overview), sheet: .constant(nil))
                 .environmentObject(store).environmentObject(CloudSync()).environmentObject(MerchantCategorizer())
                 .preferredColorScheme(.dark).tint(.moraGreen)

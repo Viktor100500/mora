@@ -263,13 +263,16 @@ private struct AppNoticeBanner: View {
                 }
             }.frame(width: 18, height: 18)
             VStack(alignment: .leading, spacing: 3) {
-                Text(event.message).font(.callout.weight(.medium)).lineLimit(1).contentTransition(.opacity)
+                Text(event.message).font(.callout.weight(.medium)).lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true).contentTransition(.opacity)
                 if let detail = event.detail {
-                    FinancialText(detail).font(.caption).foregroundStyle(.secondary).lineLimit(1).transition(.opacity)
+                    FinancialText(detail).font(.caption).foregroundStyle(.secondary).lineLimit(4)
+                        .fixedSize(horizontal: false, vertical: true).transition(.opacity)
                 }
             }
-            Spacer(minLength: 8)
-            NotificationActions(event: event)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
+            NotificationActions(event: event).fixedSize(horizontal: true, vertical: false)
             if !event.isInProgress {
                 Button(action: close) { Image(systemName: "xmark").font(.caption) }
                     .buttonStyle(.plain).foregroundStyle(.secondary)

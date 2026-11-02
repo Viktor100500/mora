@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.28 — 2026-11-01
+
+- Mac: notification text uses the available width and wraps onto multiple lines, so transaction details and multiple operations are readable without premature truncation.
+
 ## 1.6.27 — 2026-11-01
 
 - iPhone 1.0.14: pull to refresh in Overview and Transactions (and Sync now in Shared database) synchronizes with the shared database right away and reports the result — completed, purchases to review, canceled or failed — like Reload on the Mac.
