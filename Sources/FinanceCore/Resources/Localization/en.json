@@ -3,6 +3,7 @@
   "Команда сохранена": "Shortcut saved",
   "Название телефона": "Phone name",
   "Название карты в Wallet": "Card name in Wallet",
+  "Название, которое iPhone передаёт в поле «Card or Pass» автоматизации «Транзакция». Обычно совпадает с подписью карты в Wallet, например «Chase Freedom Unlimited». Регистр и лишние пробелы не важны.": "The name the iPhone passes as Card or Pass in the Transaction automation. It usually matches the card's label in Wallet, for example “Chase Freedom Unlimited”. Letter case and extra spaces don't matter.",
   "Удалить карту": "Remove card",
   "Добавить карту": "Add card",
   "Показать файл": "Show file",

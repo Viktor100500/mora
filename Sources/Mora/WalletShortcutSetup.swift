@@ -41,6 +41,7 @@ struct WalletShortcutSetupView: View {
                         ForEach($cards) { $card in
                             HStack {
                                 TextField(L("Название карты в Wallet"), text: $card.card).textFieldStyle(.roundedBorder)
+                                    .help(L("Название, которое iPhone передаёт в поле «Card or Pass» автоматизации «Транзакция». Обычно совпадает с подписью карты в Wallet, например «Chase Freedom Unlimited». Регистр и лишние пробелы не важны."))
                                 Picker(L("Счёт"), selection: $card.account_id) {
                                     Text(L("Выберите счёт")).tag(unselectedAccount)
                                     ForEach(accounts) { Text("\($0.name) · \($0.currency)").tag($0.id) }

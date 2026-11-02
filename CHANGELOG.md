@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.34 — 2026-11-01
+
+- iPhone 1.0.20: a ? button next to the Wallet card name explains that it is the Card or Pass value of the payment, and names already seen in Wallet runs are offered to fill in with one tap. The Mac card field shows the same explanation as a tooltip.
+
 ## 1.6.33 — 2026-11-01
 
 - iPhone 1.0.19: Apple Pay without a shortcut file. In Shared database → Apple Pay on this iPhone, choose Wallet cards and accounts; Mora creates the phone key itself and keeps it in the Keychain. The Log Wallet Payment action then saves each purchase on the iPhone first and sends it, also on a locked iPhone, without failing the automation. Offline purchases are retried with the same event id on the next payment or when Mora opens; a purchase not sent within 15 minutes waits for Send to Mora or Already entered by hand, so it never duplicates a manual entry. Purchases without amount or merchant are never sent. Wallet runs show every run and its delivery. Mora warns two days before its development signature expires.
