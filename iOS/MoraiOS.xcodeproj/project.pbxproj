@@ -39,10 +39,12 @@
 		AEE49357E8A3A6C9EE9AAE83 /* TransactionEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1CED08EE69D8287C08552F /* TransactionEditor.swift */; };
 		C1ACF4FB85C7D4AC8437A0B0 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7EABC9B8C57126A5C9087F8 /* Components.swift */; };
 		CC257AB75FA52B7F53DC6CAB /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0F407065AB8FA06ADF586CC7 /* InfoPlist.strings */; };
+		CED62CE9B0273557FB4183A3 /* WalletDelivery.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCFF2BEB1FEAFE94C74F7F1C /* WalletDelivery.swift */; };
 		D0FF25F050A0E85A5510A5ED /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9ABBD1E8E150D6529D1A8D84 /* Assets.xcassets */; };
 		D83EF4C0E53A8CDF4D3861E9 /* ReportCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14EC5F098BA136755B3F0442 /* ReportCache.swift */; };
 		E2527261C36FAE22159C7811 /* ImportScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = F65900D0DE8EB82F68603C47 /* ImportScreens.swift */; };
 		EE55AA1EA36D48FFC1AC6E74 /* LocalizationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B496B3B0EE4A5574647F3A61 /* LocalizationTests.swift */; };
+		F4051B2E6B74A39AE11C4739 /* WalletSetupScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = E344C9591051D2195C1A02FB /* WalletSetupScreen.swift */; };
 		F5B39C87B5B6C70718F3B778 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = BA8A1CFFB3223DBA4B5EC2EF /* Theme.swift */; };
 /* End PBXBuildFile section */
 
@@ -88,17 +90,19 @@
 		B496B3B0EE4A5574647F3A61 /* LocalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationTests.swift; sourceTree = "<group>"; };
 		B73290723DB39F73BF342AFD /* MoreScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreScreen.swift; sourceTree = "<group>"; };
 		BA8A1CFFB3223DBA4B5EC2EF /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		BCFF2BEB1FEAFE94C74F7F1C /* WalletDelivery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletDelivery.swift; sourceTree = "<group>"; };
 		BF18FC467A335C0717CE8A3B /* TransactionsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionsScreen.swift; sourceTree = "<group>"; };
 		C0318B2C398473B18013456E /* FinanceStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinanceStoreTests.swift; sourceTree = "<group>"; };
 		C4E2901038A4DDB9BD22E007 /* WalletRunsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletRunsScreen.swift; sourceTree = "<group>"; };
 		C7EABC9B8C57126A5C9087F8 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
 		D3D1434CFE66D39D0B602795 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
+		E344C9591051D2195C1A02FB /* WalletSetupScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletSetupScreen.swift; sourceTree = "<group>"; };
 		E91EAABA36757BE5E8763162 /* FinanceApp */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FinanceApp; path = ..; sourceTree = SOURCE_ROOT; };
 		F2416F36C6721CE96EB36684 /* FinanceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinanceStore.swift; sourceTree = "<group>"; };
 		F3E78F6ACDBE2C140769209A /* ChangeDescription.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ChangeDescription.swift; path = ../Sources/Mora/ChangeDescription.swift; sourceTree = "<group>"; };
 		F65900D0DE8EB82F68603C47 /* ImportScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportScreens.swift; sourceTree = "<group>"; };
 		F9AC73B755D7E67297AE96D1 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
-		"TEMP_47A0C5CE-5997-434B-86D3-A1E90F6DC1C3" /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
+		"TEMP_38A01346-0FD1-421E-861C-DEF8140B103C" /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -181,8 +185,10 @@
 		9C4FFE00966C10A543E1D05D /* Wallet */ = {
 			isa = PBXGroup;
 			children = (
+				BCFF2BEB1FEAFE94C74F7F1C /* WalletDelivery.swift */,
 				951FB5CB562E7123711699C8 /* WalletRunLog.swift */,
 				C4E2901038A4DDB9BD22E007 /* WalletRunsScreen.swift */,
+				E344C9591051D2195C1A02FB /* WalletSetupScreen.swift */,
 			);
 			path = Wallet;
 			sourceTree = "<group>";
@@ -255,10 +261,10 @@
 			path = MoraTests;
 			sourceTree = "<group>";
 		};
-		"TEMP_0C0E4D3F-AB55-4B49-BA0B-2273790BD4E0" /* iOS */ = {
+		"TEMP_5E133B21-E32F-4D7C-A101-1158EFDADF3C" /* iOS */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_47A0C5CE-5997-434B-86D3-A1E90F6DC1C3" /* Signing.xcconfig */,
+				"TEMP_38A01346-0FD1-421E-861C-DEF8140B103C" /* Signing.xcconfig */,
 			);
 			path = iOS;
 			sourceTree = "<group>";
@@ -397,8 +403,10 @@
 				F5B39C87B5B6C70718F3B778 /* Theme.swift in Sources */,
 				AEE49357E8A3A6C9EE9AAE83 /* TransactionEditor.swift in Sources */,
 				8B6894C18A118F40390C1F08 /* TransactionsScreen.swift in Sources */,
+				CED62CE9B0273557FB4183A3 /* WalletDelivery.swift in Sources */,
 				073EA49332D01D3373184C31 /* WalletRunLog.swift in Sources */,
 				99ACB4FCF65E722FC5A24ABC /* WalletRunsScreen.swift in Sources */,
+				F4051B2E6B74A39AE11C4739 /* WalletSetupScreen.swift in Sources */,
 				0D5C6F9C0B69FE94F1926DE6 /* WelcomeView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -467,7 +475,7 @@
 		};
 		BCE30933C473708F0E64C320 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_47A0C5CE-5997-434B-86D3-A1E90F6DC1C3" /* Signing.xcconfig */;
+			baseConfigurationReference = "TEMP_38A01346-0FD1-421E-861C-DEF8140B103C" /* Signing.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -500,7 +508,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 19;
+				CURRENT_PROJECT_VERSION = 20;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -514,7 +522,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.18;
+				MARKETING_VERSION = 1.0.19;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -544,7 +552,7 @@
 		};
 		D00F07EA73DCC7592C635AE0 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_47A0C5CE-5997-434B-86D3-A1E90F6DC1C3" /* Signing.xcconfig */;
+			baseConfigurationReference = "TEMP_38A01346-0FD1-421E-861C-DEF8140B103C" /* Signing.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -577,7 +585,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 19;
+				CURRENT_PROJECT_VERSION = 20;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -597,7 +605,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.18;
+				MARKETING_VERSION = 1.0.19;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

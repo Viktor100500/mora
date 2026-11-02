@@ -53,9 +53,11 @@ struct RootView: View {
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
             await store.reloadFromDisk()
+            // Purchases saved while offline go out as soon as Mora is opened.
+            async let wallet: Void = { if let sender = WalletSender.current() { await WalletDelivery.shared.deliverWaiting(with: sender) } }()
             async let rates: Void = rateLoop()
             async let sync: Void = cloud.run()
-            _ = await (rates, sync)
+            _ = await (wallet, rates, sync)
         }
         .onOpenURL { url in
             guard url.isFileURL else { return }

@@ -31,6 +31,8 @@ struct WalletShortcutSetupView: View {
                 Text(L("При первой реальной оплате оставьте iPhone разблокированным, чтобы разрешить чтение Wallet, если iOS его запросит. Интернет нужен для отправки; очереди без сети пока нет.")).font(.callout).foregroundStyle(.secondary)
                 Button(L("Показать файл")) { NSWorkspace.shared.activateFileViewerSelecting([savedURL]) }
             } else {
+                Label(L("Если на iPhone установлена Mora, команда не нужна: настройте карты в Mora на iPhone («Общая база» → «Apple Pay на этом iPhone»). Без сети покупки там ждут на телефоне и отправляются позже."), systemImage: "iphone")
+                    .font(.callout)
                 Text(L("Укажите названия карт так, как они отображаются в Wallet, и выберите счета. Mora не читает список карт iPhone. Если название не совпадёт или карта не определится, покупка останется на проверке."))
                     .font(.callout).foregroundStyle(.secondary)
                 TextField(L("Название телефона"), text: $label).textFieldStyle(.roundedBorder).disabled(issued != nil)

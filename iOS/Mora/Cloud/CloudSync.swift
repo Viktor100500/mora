@@ -586,6 +586,38 @@ final class CloudSync: ObservableObject {
         nextAttempt = .distantPast
         if account != nil { await synchronize(inBackground: true) }
     }
+    /// Creates this iPhone's own phone key with its cards and accounts, so the
+    /// Wallet action sends purchases itself. Returns whether Apple Pay is now on.
+    func enableWalletSender(label: String, cards: [WalletCardAssignment]) async -> Bool {
+        struct Body: Encodable, Sendable { let p_household_id: UUID; let p_label: String; let p_cards: [WalletCardAssignment] }
+        var enabled = false
+        await operation {
+            guard let id = self.householdID, let configuration = self.settings?.configuration else { throw CloudAPIError.unauthorized }
+            try await self.syncNow()
+            let issued: CloudIssuedToken = try await self.rpc("mora_create_wallet_setup", Body(p_household_id: id, p_label: label, p_cards: cards))
+            let sender = WalletSender(projectURL: configuration.projectURL, publicKey: configuration.publicKey,
+                                      token: issued.token, tokenID: issued.id, householdID: id, label: label)
+            do { try sender.save() } catch {
+                // An unsaved key could never be used: revoke it instead of leaving it active.
+                let _: Bool? = try? await self.rpc("mora_revoke_phone_token", RevokeAgentBody(p_token_id: issued.id))
+                throw error
+            }
+            try await self.loadWalletCards(id)
+            enabled = true
+        }
+        return enabled
+    }
+    /// Revokes this iPhone's phone key. Purchases waiting on the iPhone stay saved.
+    func disableWalletSender() async {
+        guard let sender = WalletSender.current() else { return }
+        await operation {
+            if self.householdID == sender.householdID {
+                let _: Bool = try await self.rpc("mora_revoke_phone_token", RevokeAgentBody(p_token_id: sender.tokenID))
+            }
+            WalletSender.remove()
+            if let id = self.householdID { try await self.loadWalletCards(id) }
+        }
+    }
     func dismissCapture(_ capture: CloudCapture) async {
         await operation {
             guard let id = self.householdID else { return }
