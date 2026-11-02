@@ -4,6 +4,7 @@ import FinanceCore
 struct OverviewScreen: View {
     @EnvironmentObject private var store: FinanceStore
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var cloud: CloudSync
     @AppStorage("mora.hideAmounts") private var hideAmounts = false
     @State private var trendDetail: TrendDetail = .months
     private var ledger: Ledger { store.ledger }
@@ -43,7 +44,12 @@ struct OverviewScreen: View {
                         .accessibilityLabel(L("Новая операция"))
                 }
             }
-            .refreshable { await store.reloadFromDisk(); await store.refreshExchangeRates() }
+            .refreshable {
+                await store.reloadFromDisk()
+                async let rates: Void = store.refreshExchangeRates()
+                async let sync: Void = cloud.synchronize(notifyResult: true)
+                _ = await (rates, sync)
+            }
         }
     }
 

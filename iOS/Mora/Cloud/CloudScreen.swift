@@ -42,7 +42,7 @@ struct CloudScreen: View {
         .navigationTitle(L("Общая база"))
         .disabled(cloud.busy)
         .overlay { if cloud.busy { ProgressView().controlSize(.large) } }
-        .refreshable { await cloud.refreshLists(); await cloud.synchronize() }
+        .refreshable { await cloud.refreshLists(); await cloud.synchronize(notifyResult: true) }
         .onAppear {
             if url.isEmpty { url = cloud.projectURL }
             if key.isEmpty { key = cloud.publicKey }
@@ -116,7 +116,7 @@ struct CloudScreen: View {
                 if let date = cloud.lastSync { Text(date.formatted(.relative(presentation: .named).locale(L10n.locale))) } else { Text("—") }
             }
             Toggle(L("Синхронизировать автоматически"), isOn: Binding(get: { cloud.enabled }, set: { value in Task { await cloud.pause(!value) } }))
-            Button { Task { await cloud.synchronize() } } label: { Label(L("Синхронизировать сейчас"), systemImage: "arrow.triangle.2.circlepath") }
+            Button { Task { await cloud.synchronize(notifyResult: true) } } label: { Label(L("Синхронизировать сейчас"), systemImage: "arrow.triangle.2.circlepath") }
         } footer: { Text(L("Открытая Mora проверяет изменения примерно каждые восемь секунд. Независимые изменения объединяются.")) }
         if cloud.conflict {
             Section {
@@ -134,20 +134,23 @@ struct CloudScreen: View {
         } header: { Text(L("Входящие Apple Pay")) } footer: {
             Text(L("Полные покупки записываются автоматически. Здесь остаются покупки без суммы, валюты или счета: нажмите, чтобы проверить."))
         }
-        if !cloud.walletCards.isEmpty {
-            Section {
-                ForEach(cloud.walletCards) { card in
-                    Picker(selection: Binding(get: { card.account_id }, set: { value in Task { await cloud.linkCard(card.id, account: value) } })) {
-                        Text(L("Не выбран")).tag(UUID?.none)
-                        ForEach(store.ledger.accounts.filter { !$0.archived }) { Text($0.name).tag(UUID?.some($0.id)) }
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(card.card.isEmpty ? L("без названия") : card.card)
-                            Text(card.label + (card.pending_count > 0 ? " · " + L("ждут: \(card.pending_count)") : "")).font(.caption).foregroundStyle(.secondary)
-                        }
+        Section {
+            if cloud.walletCards.isEmpty {
+                Text(L("Карт пока нет. Создайте команду на Mac и выберите счета для своих карт Wallet.")).foregroundStyle(.secondary)
+            }
+            ForEach(cloud.walletCards) { card in
+                Picker(selection: Binding(get: { card.account_id }, set: { value in Task { await cloud.linkCard(card.id, account: value) } })) {
+                    Text(L("Не выбран")).tag(UUID?.none)
+                    ForEach(store.ledger.accounts.filter { !$0.archived }) { Text($0.name).tag(UUID?.some($0.id)) }
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(card.card.isEmpty ? L("без названия") : card.card)
+                        Text(card.label + (card.pending_count > 0 ? " · " + L("ждут: \(card.pending_count)") : "")).font(.caption).foregroundStyle(.secondary)
                     }
                 }
-            } header: { Text(L("Карты Apple Pay")) } footer: { Text(L("Покупки картой записываются на выбранный счет.")) }
+            }
+        } header: { Text(L("Карты Apple Pay")) } footer: {
+            Text(L("Покупки картой записываются на выбранный счет. Команду для iPhone с картами и счетами создает Mora на Mac: «Общая база и Apple Pay» → «Создать команду для iPhone…». Покупки новых карт ждут выбора счета."))
         }
         Section {
             Button { Task { await cloud.invite() } } label: { Label(L("Пригласить участника"), systemImage: "person.badge.plus") }

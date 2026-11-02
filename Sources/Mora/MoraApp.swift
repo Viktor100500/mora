@@ -209,6 +209,7 @@ struct ContentView: View {
             }
         }
         .onChange(of: language) { _, _ in Task { await store.reloadFromDisk() } }
+        .onChange(of: store.revision) { cloud.localChanged() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await store.refreshExchangeRates() } }
         }

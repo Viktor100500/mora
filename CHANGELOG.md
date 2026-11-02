@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.6.27 — 2026-11-01
+
+- iPhone 1.0.14: pull to refresh in Overview and Transactions (and Sync now in Shared database) synchronizes with the shared database right away and reports the result — completed, purchases to review, canceled or failed — like Reload on the Mac.
+- Mac: a saved change goes to the shared database right away instead of waiting for the next eight-second poll, and a lost connection retries within 30 seconds instead of backing off for minutes, as on the iPhone.
+- Mac: connect Claude, ChatGPT or another MCP client through the shared database in Shared database and Apple Pay → Import with an AI agent, as in More → Import via AI on the iPhone. The connection address is shown once; agents can be disconnected at any time.
+- iPhone: Apple Pay cards are always listed in Shared database and explain that the shortcut with cards and accounts is created by Mora on a Mac.
+
 ## 1.6.26 — 2026-11-01
 
 - Mac: configure Wallet card names and their accounts before creating a quiet, locally signed iPhone shortcut in Shared database and Apple Pay. New configured keys hold unidentified cards for explicit account choice; new cards wait for linking. Existing purchases are unchanged.

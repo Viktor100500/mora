@@ -1142,5 +1142,22 @@
   "Не удалось синхронизироваться с облаком": "Couldn't sync with the cloud",
   "Время операции": "Transaction time",
   "Время": "Time",
-  "Необязательно. Укажите время, чтобы расположить операции по порядку в течение дня.": "Optional. Set the time to put transactions in order within the day."
+  "Необязательно. Укажите время, чтобы расположить операции по порядку в течение дня.": "Optional. Set the time to put transactions in order within the day.",
+  "AI-агент подключен": "AI agent connected",
+  "Агент видит названия счетов и категорий и операции за 60 дней, а добавлять может только новые операции. В проекте Supabase должны быть установлены миграция agent_import и функция mora-mcp.": "The agent sees account and category names and the last 60 days of transactions, and can only add new transactions. Your Supabase project needs the agent_import migration and the mora-mcp function.",
+  "Адрес подключения перестанет работать. Записанные операции останутся в истории импортов.": "The connection address will stop working. Recorded transactions stay in Import history.",
+  "Адрес работает как пароль: с ним можно читать счета и добавлять операции. Mora показывает его один раз; отключить агента можно в любой момент.": "The address works like a password: it can read accounts and add transactions. Mora shows it only once; you can disconnect the agent at any time.",
+  "Адрес скопирован": "Address copied",
+  "Другой клиент MCP": "Other MCP client",
+  "Еще не подключался": "Not used yet",
+  "На chatgpt.com откройте Настройки → Приложения и коннекторы → Расширенные и включите режим разработчика. Затем создайте коннектор с этим адресом без авторизации.": "On chatgpt.com, open Settings → Apps & Connectors → Advanced and turn on developer mode. Then create a connector with this address and no authentication.",
+  "На claude.ai откройте Настройки → Коннекторы → Добавить свой коннектор и вставьте адрес. Коннектор появится и в приложении Claude на iPhone.": "On claude.ai, open Settings → Connectors → Add custom connector and paste the address. The connector also appears in the Claude app on iPhone.",
+  "Отключить AI-агента?": "Disconnect the AI agent?",
+  "Подключить AI-агента": "Connect AI agent",
+  "Последний доступ: {0}": "Last used: {0}",
+  "Скопировать адрес": "Copy address",
+  "Mora выдаст адрес для Claude, ChatGPT или другого клиента MCP. Агент записывает операции одним импортом, его можно отменить в истории импортов.": "Mora issues an address for Claude, ChatGPT or another MCP client. The agent records transactions as one import that you can roll back in Import history.",
+  "Агенты еще не подключены": "No agents connected yet",
+  "Карт пока нет. Создайте команду на Mac и выберите счета для своих карт Wallet.": "No cards yet. Create the shortcut on a Mac and choose accounts for your Wallet cards.",
+  "Покупки картой записываются на выбранный счет. Команду для iPhone с картами и счетами создает Mora на Mac: «Общая база и Apple Pay» → «Создать команду для iPhone…». Покупки новых карт ждут выбора счета.": "Purchases with a card are booked to the selected account. Mora on a Mac creates the iPhone shortcut with cards and accounts (Shared database and Apple Pay → Create iPhone shortcut…). Purchases with new cards wait for an account."
 }

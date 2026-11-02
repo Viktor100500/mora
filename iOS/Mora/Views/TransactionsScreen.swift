@@ -4,6 +4,7 @@ import FinanceCore
 struct TransactionsScreen: View {
     @EnvironmentObject private var store: FinanceStore
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var cloud: CloudSync
     @State private var filters = TransactionSearch()
     @State private var result: TransactionSearch.Result?
     @State private var selection: Set<UUID> = []
@@ -63,6 +64,7 @@ struct TransactionsScreen: View {
             }
             .listStyle(.insetGrouped)
             .environment(\.editMode, $editMode)
+            .refreshable { await store.reloadFromDisk(); await cloud.synchronize(notifyResult: true) }
             .searchable(text: $filters.text, prompt: L("Поиск по описанию, заметкам и тегам"))
             .navigationTitle(L("Операции"))
             .toolbar { toolbar }

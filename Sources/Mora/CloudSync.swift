@@ -35,6 +35,9 @@ final class CloudSync: ObservableObject {
     }
     @Published var invitation: String?
     @Published var issuedToken: String?
+    @Published private(set) var agents: [CloudAgentConnection] = []
+    /// Shown once after connecting an agent: only its hash stays in the database.
+    @Published var newAgentURL: URL?
     private weak var store: FinanceStore?
     private let walletRate: @MainActor @Sendable (Decimal, String, String, Date) async throws -> CardConversion
     private let transport: URLSession
@@ -77,6 +80,8 @@ final class CloudSync: ObservableObject {
     private struct CreateBody: Encodable, Sendable { let p_name: String; let p_snapshot: Ledger }
     private struct SaveBody: Encodable, Sendable { let p_household_id: UUID; let p_version: Int64; let p_snapshot: Ledger }
     private struct TokenBody: Encodable, Sendable { let p_household_id: UUID; let p_account_id: UUID; let p_label: String }
+    private struct AgentBody: Encodable, Sendable { let p_household_id: UUID; let p_label: String }
+    private struct RevokeAgentBody: Encodable, Sendable { let p_token_id: UUID }
     private struct ResolveBody: Encodable, Sendable {
         let p_household_id: UUID; let p_capture_id: UUID; let p_account_id: UUID
         let p_amount: String; let p_merchant: String; let p_dismiss: Bool
@@ -115,6 +120,12 @@ final class CloudSync: ObservableObject {
             if enabled && signedIn && !store.isDemo && Date() >= nextAttempt { await synchronize(inBackground: true) }
             do { try await Task.sleep(for: .seconds(8)) } catch { return }
         }
+    }
+    /// A local edit goes out right away instead of waiting for the next poll or a network backoff.
+    func localChanged() {
+        guard let store, enabled && signedIn && !store.isDemo && !stopping else { return }
+        failureCount = 0; nextAttempt = .distantPast
+        Task { await synchronize(inBackground: true) }
     }
     private func load() async {
         guard let configURL else { return }
@@ -416,7 +427,9 @@ final class CloudSync: ObservableObject {
             } catch {
                 failure = error
                 self.failureCount += 1
-                self.nextAttempt = Date().addingTimeInterval(min(300, 8 * pow(2, Double(min(self.failureCount, 5)))))
+                // Without a network the next try stays close instead of backing off for minutes.
+                let limit: Double = Self.isConnectionError(error) ? 30 : 300
+                self.nextAttempt = Date().addingTimeInterval(min(limit, 8 * pow(2, Double(min(self.failureCount, 5)))))
             }
             // Disk writes stay durable throughout; only their presentation waits.
             await store.endDeferredUpdates()
@@ -629,6 +642,31 @@ final class CloudSync: ObservableObject {
             self.issuedToken = nil
         }
     }
+    // MARK: AI agents
+
+    /// Quiet: a project without the agent_import migration simply shows no agents.
+    func loadAgents() async {
+        await operation {
+            guard let id = self.householdID else { return }
+            let agents: [CloudAgentConnection]? = try? await self.rpc("mora_list_agent_tokens", HouseholdBody(p_household_id: id))
+            self.agents = agents ?? []
+        }
+    }
+    func connectAgent(label: String) async {
+        await operation {
+            guard let id = self.householdID, let configuration = self.settings?.configuration else { return }
+            let issued: CloudIssuedToken = try await self.rpc("mora_create_agent_token", AgentBody(p_household_id: id, p_label: label))
+            self.newAgentURL = configuration.agentURL(token: issued.token)
+            self.agents = try await self.rpc("mora_list_agent_tokens", HouseholdBody(p_household_id: id))
+        }
+    }
+    func revokeAgent(_ agent: CloudAgentConnection) async {
+        await operation {
+            guard let id = self.householdID else { return }
+            let _: Bool = try await self.rpc("mora_revoke_agent_token", RevokeAgentBody(p_token_id: agent.id))
+            self.agents = try await self.rpc("mora_list_agent_tokens", HouseholdBody(p_household_id: id))
+        }
+    }
     /// Choose the account for a Wallet card (nil unlinks). Its waiting purchases move to
     /// that account and complete ones are booked by the next synchronization.
     func linkCard(_ card: UUID, account: UUID?) async {
@@ -696,7 +734,7 @@ final class CloudSync: ObservableObject {
             settings?.enabled = false; settings?.householdID = nil; settings?.householdName = ""
             try await persistSettings()
             session = nil; signedIn = false; enabled = false; householdID = nil; householdName = ""
-            households = []; pending = []; inbox = []; attemptedCaptures = []; phoneTokens = []; walletCards = []; invitation = nil; issuedToken = nil; conflict = false; error = nil
+            households = []; pending = []; inbox = []; attemptedCaptures = []; phoneTokens = []; walletCards = []; agents = []; newAgentURL = nil; invitation = nil; issuedToken = nil; conflict = false; error = nil
         }
     }
 }

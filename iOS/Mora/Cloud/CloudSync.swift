@@ -172,7 +172,7 @@ final class CloudSync: ObservableObject {
         if !signedIn { signedIn = true }
     }
 
-    private func operation(inBackground: Bool = false, waitForCurrent: Bool = false, _ action: () async throws -> Void) async {
+    private func operation(inBackground: Bool = false, waitForCurrent: Bool = false, reportSyncResult: Bool = false, _ action: () async throws -> Void) async {
         if inBackground && !waitForCurrent && operationInProgress { return }
         // A tap during a background request waits instead of being dropped.
         while operationInProgress {
@@ -194,11 +194,21 @@ final class CloudSync: ObservableObject {
                 Task { await self.synchronize(inBackground: true) }
             }
         }
+        let earlierToast = store?.toast?.id
         do {
             try await action()
             if error != nil { error = nil }
+            // A Wallet import toast shown by this sync already reports the result and offers Undo.
+            if reportSyncResult && store?.toast.map({ $0.id == earlierToast }) ?? true {
+                store?.showToast(L("Синхронизация с облаком завершена"),
+                    detail: pending.isEmpty ? nil : L("Покупок на проверке: \(pending.count)"))
+            }
         } catch is CancellationError {
+            if reportSyncResult { store?.showToast(L("Синхронизация с облаком отменена"), kind: .warning) }
         } catch {
+            if reportSyncResult {
+                store?.showToast(L("Не удалось синхронизироваться с облаком"), detail: error.localizedDescription, kind: .error)
+            }
             if inBackground && Self.isConnectionError(error) { return }
             if self.error != error.localizedDescription { self.error = error.localizedDescription }
         }
@@ -391,9 +401,11 @@ final class CloudSync: ObservableObject {
 
     // MARK: Synchronization
 
-    func synchronize(inBackground: Bool = false, waitForCurrent: Bool = false) async {
+    /// `notifyResult` reports the outcome of a sync the user asked for (pull to refresh, Sync now),
+    /// like Reload on the Mac; routine polling stays quiet.
+    func synchronize(inBackground: Bool = false, waitForCurrent: Bool = false, notifyResult: Bool = false) async {
         guard enabled, householdID != nil else { return }
-        await operation(inBackground: inBackground, waitForCurrent: waitForCurrent) {
+        await operation(inBackground: inBackground, waitForCurrent: waitForCurrent, reportSyncResult: notifyResult) {
             guard let store = self.store, let id = self.householdID else { return }
             let originalIDs = Set(store.ledger.transactions.map(\.id))
             self.synchronizing = true

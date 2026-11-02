@@ -39,6 +39,7 @@ struct CloudSettingsView: View {
     @State private var selectedCapture: CloudCapture?
     @State private var handledNotification: UUID?
     @State private var showWalletSetup = false
+    @State private var revokingAgent: CloudAgentConnection?
     private var accounts: [Account] { store.ledger.accounts.filter { !$0.archived } }
     var body: some View {
         ScrollViewReader { scrollProxy in
@@ -63,7 +64,7 @@ struct CloudSettingsView: View {
                 else {
                     HStack { Label(cloud.email, systemImage: "person.crop.circle"); Spacer(); Button("Отключить облако…") { confirmDisconnect = true } }
                     if cloud.householdID == nil { householdCard }
-                    else { syncCard; inviteCard; phoneCard; cardsCard.id("wallet-cards"); inboxCard.id("wallet-inbox") }
+                    else { syncCard; inviteCard; phoneCard; cardsCard.id("wallet-cards"); inboxCard.id("wallet-inbox"); agentsCard }
                 }
                 Text("Первое подключение требует бесплатного проекта Supabase и установки схемы Mora. Оплата iPhone передает доступные сведения о покупке; это не банковская выписка. Автоматизация настраивается отдельно на каждом телефоне.").font(.caption).foregroundStyle(.secondary)
                 Link("Настройка автоматизации Apple", destination: URL(string: "https://support.apple.com/en-ng/guide/shortcuts/apd65c67538a/ios")!).font(.caption)
@@ -96,6 +97,13 @@ struct CloudSettingsView: View {
         } message: { Text("Локальные данные останутся на Mac. Ключи телефонов продолжат работать до отзыва в общей базе. Другие участники сохранят доступ.") }
         .sheet(item: $selectedCapture) { capture in WalletReviewForm(capture: capture).modifier(FeedbackFooter()).modifier(FinanceErrorAlert()).environmentObject(cloud).environmentObject(store) }
         .sheet(isPresented: $showWalletSetup) { WalletShortcutSetupView().environmentObject(cloud).environmentObject(store) }
+        .sheet(item: Binding(get: { cloud.newAgentURL.map(AgentConnectionURL.init) }, set: { if $0 == nil { cloud.newAgentURL = nil } })) { item in
+            AgentConnectionSheet(url: item.url)
+        }
+        .confirmationDialog(L("Отключить AI-агента?"), isPresented: Binding(get: { revokingAgent != nil }, set: { if !$0 { revokingAgent = nil } }), titleVisibility: .visible) {
+            Button(L("Отключить"), role: .destructive) { if let agent = revokingAgent { Task { await cloud.revokeAgent(agent) } } }
+        } message: { Text(L("Адрес подключения перестанет работать. Записанные операции останутся в истории импортов.")) }
+        .task(id: cloud.householdID) { if cloud.signedIn && cloud.householdID != nil { await cloud.loadAgents() } }
         }
     }
     private func navigate(_ request: NotificationNavigation?, scrollProxy: ScrollViewProxy) {
@@ -269,6 +277,33 @@ struct CloudSettingsView: View {
             }
         }
     }
+    private var agentsCard: some View {
+        Card {
+            VStack(alignment: .leading, spacing: 14) {
+                SectionHeading(title: L("Импорт через AI-агента"), subtitle: L("Mora выдаст адрес для Claude, ChatGPT или другого клиента MCP. Агент записывает операции одним импортом, его можно отменить в истории импортов."))
+                if cloud.agents.isEmpty { Text(L("Агенты еще не подключены")).foregroundStyle(.secondary) }
+                ForEach(cloud.agents) { agent in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Label(agent.label, systemImage: "sparkles")
+                            Text(agent.last_used_at.map { L("Последний доступ: \($0.formatted(date: .abbreviated, time: .shortened))") } ?? L("Еще не подключался"))
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button(L("Отключить")) { revokingAgent = agent }.disabled(cloud.busy)
+                    }.font(.callout)
+                }
+                Menu(L("Подключить AI-агента")) {
+                    ForEach(["Claude", "ChatGPT"], id: \.self) { name in
+                        Button(name) { Task { await cloud.connectAgent(label: name) } }
+                    }
+                    Button(L("Другой клиент MCP")) { Task { await cloud.connectAgent(label: L("AI-агент")) } }
+                }.fixedSize().disabled(cloud.busy)
+                Text(L("Агент видит названия счетов и категорий и операции за 60 дней, а добавлять может только новые операции. В проекте Supabase должны быть установлены миграция agent_import и функция mora-mcp."))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
+    }
     private var inboxCard: some View {
         Card {
             VStack(alignment: .leading, spacing: 14) {
@@ -316,4 +351,35 @@ struct CloudSettingsView: View {
     }
     private func copy(_ text: String) { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string) }
 
+}
+
+private struct AgentConnectionURL: Identifiable { let url: URL; var id: String { url.absoluteString } }
+
+/// The connection URL is shown once, with where to paste it in each agent.
+private struct AgentConnectionSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let url: URL
+    @State private var copied = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(L("AI-агент подключен")).font(.title2.bold())
+            Text(url.absoluteString).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
+                .padding(10).frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.primary.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+            Text(L("Адрес работает как пароль: с ним можно читать счета и добавлять операции. Mora показывает его один раз; отключить агента можно в любой момент."))
+                .font(.callout).foregroundStyle(.secondary)
+            Text("Claude").font(.headline)
+            Text(L("На claude.ai откройте Настройки → Коннекторы → Добавить свой коннектор и вставьте адрес. Коннектор появится и в приложении Claude на iPhone."))
+            Text("ChatGPT").font(.headline)
+            Text(L("На chatgpt.com откройте Настройки → Приложения и коннекторы → Расширенные и включите режим разработчика. Затем создайте коннектор с этим адресом без авторизации."))
+            HStack {
+                Spacer()
+                Button(copied ? L("Адрес скопирован") : L("Скопировать адрес")) {
+                    NSPasteboard.general.clearContents(); NSPasteboard.general.setString(url.absoluteString, forType: .string); copied = true
+                }
+                Button(L("Готово")) { dismiss() }.buttonStyle(.borderedProminent).disabled(!copied)
+            }
+        }.padding(24).frame(width: 560)
+            .interactiveDismissDisabled(!copied)
+    }
 }
