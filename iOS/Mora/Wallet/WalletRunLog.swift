@@ -92,3 +92,12 @@ struct LogWalletPaymentIntent: AppIntent {
         return .result()
     }
 }
+
+/// An App Shortcut makes iOS register Mora's actions with Shortcuts right after
+/// installation, so the action is listed under Mora and found by search.
+struct MoraAppShortcuts: AppShortcutsProvider {
+    static var appShortcuts: [AppShortcut] {
+        AppShortcut(intent: LogWalletPaymentIntent(), phrases: ["Log Wallet payment in \(.applicationName)"],
+                    shortTitle: "Log Wallet Payment", systemImageName: "wallet.pass")
+    }
+}
