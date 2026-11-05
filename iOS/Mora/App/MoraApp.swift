@@ -6,6 +6,7 @@ struct MoraApp: App {
     @StateObject private var store: FinanceStore
     @StateObject private var cloud = CloudSync()
     @StateObject private var router = AppRouter()
+    @StateObject private var categorizer = MerchantCategorizer()
 
     init() {
         _store = StateObject(wrappedValue: FinanceStore())
@@ -17,7 +18,9 @@ struct MoraApp: App {
                 .environmentObject(store)
                 .environmentObject(cloud)
                 .environmentObject(router)
+                .environmentObject(categorizer)
         }
+        .backgroundTask(.appRefresh(WalletBackgroundDelivery.identifier)) { await WalletBackgroundDelivery.run() }
     }
 }
 

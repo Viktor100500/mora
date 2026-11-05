@@ -41,12 +41,11 @@ struct CloudScreen: View {
                             Text(WalletSender.current() == nil ? L("Выключено") : L("Включено"))
                         } label: { Label(L("Apple Pay на этом iPhone"), systemImage: "wallet.pass") }
                     }
-                    NavigationLink { WalletRunsScreen() } label: { Label(L("Запуски Wallet"), systemImage: "list.bullet.rectangle") }
                     if AppSignature.expiresSoon(), let expiration = AppSignature.expiration {
                         Label(L("Подпись Mora действует до \(expiration.formatted(date: .abbreviated, time: .omitted))"), systemImage: "exclamationmark.triangle")
                             .font(.footnote).foregroundStyle(.orange)
                     }
-                } footer: { Text(L("С Mora на iPhone покупки Apple Pay записывает действие «Log Wallet Payment» в автоматизации: без сети покупка ждёт на iPhone и уходит позже.")) }
+                } footer: { Text(L("Карты, автоматизация «Быстрых команд» и журнал запусков Wallet. Без сети покупка ждёт на iPhone и уходит позже.")) }
             }
             Section {
                 Text(L("Общая база работает с вашим собственным проектом Supabase: разработчик не предоставляет сервер и не получает доступ к данным. Покупки Apple Pay приходят через «Быстрые команды» — экспериментальная интеграция, не банковская синхронизация."))
@@ -147,29 +146,6 @@ struct CloudScreen: View {
             }
         } header: { Text(L("Входящие Apple Pay")) } footer: {
             Text(L("Полные покупки записываются автоматически. Здесь остаются покупки без суммы, валюты или счета: нажмите, чтобы проверить."))
-        }
-        Section {
-            if cloud.walletCards.isEmpty {
-                Text(L("Карт пока нет. Включите «Apple Pay на этом iPhone» и выберите счета для своих карт Wallet.")).foregroundStyle(.secondary)
-            }
-            ForEach(cloud.walletCards) { card in
-                Picker(selection: Binding(get: { card.account_id }, set: { value in Task { await cloud.linkCard(card.id, account: value) } })) {
-                    Text(L("Не выбран")).tag(UUID?.none)
-                    ForEach(store.ledger.accounts.filter { !$0.archived }) { Text($0.name).tag(UUID?.some($0.id)) }
-                } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(card.card.isEmpty ? L("без названия") : card.card)
-                        Text(card.label + (card.pending_count > 0 ? " · " + L("ждут: \(card.pending_count)") : "")).font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                // Older databases without the multi-currency migration return no account_ids.
-                if let other = card.account_ids {
-                    CardCurrencyAccounts(accounts: store.ledger.accounts.filter { !$0.archived }, main: card.account_id,
-                                         selection: Binding(get: { other }, set: { value in Task { await cloud.setCardAccounts(card.id, accounts: value) } }))
-                }
-            }
-        } header: { Text(L("Карты Apple Pay")) } footer: {
-            Text(L("Покупки картой записываются на выбранный счёт. Покупки новых карт ждут выбора счёта. Без Mora на iPhone команду с картами создаёт Mora на Mac: «Общая база и Apple Pay» → «Создать команду для iPhone…»."))
         }
         Section {
             Button { Task { await cloud.invite() } } label: { Label(L("Пригласить участника"), systemImage: "person.badge.plus") }

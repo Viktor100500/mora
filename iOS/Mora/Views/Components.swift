@@ -105,6 +105,42 @@ struct DemoBanner: View {
     }
 }
 
+/// Like the Mac notice: Apple Pay purchases that could not be booked by themselves.
+struct WalletReviewBanner: View {
+    @EnvironmentObject private var cloud: CloudSync
+    @EnvironmentObject private var router: AppRouter
+    var body: some View {
+        if !cloud.pending.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Label(L("Проверьте покупки Apple Pay: \(cloud.pending.count)"), systemImage: "exclamationmark.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                ForEach(cloud.pending.prefix(3)) { capture in
+                    Button { router.open(.walletReview(capture)) } label: {
+                        HStack(alignment: .firstTextBaseline) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(capture.merchant.isEmpty ? L("Без продавца") : capture.merchant).font(.subheadline.weight(.medium))
+                                Text([capture.date.formatted(.dateTime.day().month(.abbreviated).hour().minute().locale(L10n.locale)),
+                                      capture.card ?? "", capture.reason.map(L) ?? ""].filter { !$0.isEmpty }.joined(separator: " · "))
+                                    .font(.caption).lineLimit(2)
+                            }
+                            Spacer()
+                            FinancialText(capture.amount.isEmpty ? "—" : capture.amount).font(.subheadline.weight(.semibold))
+                            Image(systemName: "chevron.right").font(.caption.weight(.semibold))
+                        }.contentShape(Rectangle())
+                    }.buttonStyle(.plain)
+                }
+                if cloud.pending.count > 3 {
+                    Text(L("Остальные — в «Ещё» → «Общая база и Apple Pay»")).font(.caption)
+                }
+            }
+            .foregroundStyle(.orange)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+    }
+}
+
 struct CurrencyWarning: View {
     @EnvironmentObject private var store: FinanceStore
     @EnvironmentObject private var router: AppRouter

@@ -36,6 +36,9 @@ final class FinanceStore: ObservableObject {
     var undoDescription: ChangeDescription? { undoDescriptions.first }
     var redoDescription: ChangeDescription? { redoDescriptions.first }
     var baseCurrency: String { ledger.preferences.baseCurrency }
+    /// The shared `MerchantCategorizer` reads the Mac store's API; the iPhone never defers updates.
+    var latestLedger: Ledger { ledger }
+    var isDeferringUpdates: Bool { false }
 
     init(directory customDirectory: URL? = nil, forcedDemo: Bool? = nil) {
         let args = ProcessInfo.processInfo.arguments

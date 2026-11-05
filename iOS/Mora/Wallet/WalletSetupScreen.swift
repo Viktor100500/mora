@@ -41,7 +41,7 @@ struct WalletSetupScreen: View {
             if let sender { enabled(sender) } else { setup }
             Section {
                 NavigationLink { WalletRunsScreen() } label: { Label(L("Запуски Wallet"), systemImage: "list.bullet.rectangle") }
-            }
+            } footer: { Text(L("Что передал Wallet при каждой оплате и как покупка дошла до Mora.")) }
         }
         .navigationTitle(L("Apple Pay на iPhone"))
         .disabled(cloud.busy)
@@ -66,15 +66,16 @@ struct WalletSetupScreen: View {
                 Label(L("Ключ создан для другой общей базы. Отключите Apple Pay и включите заново."), systemImage: "exclamationmark.triangle")
                     .font(.footnote).foregroundStyle(.orange)
             }
-        } header: { Text(L("Apple Pay включён")) } footer: {
-            Text(L("Счета карт, в том числе счета в других валютах, меняются в разделе «Карты Apple Pay» общей базы. Новая карта появится там после первой покупки и будет ждать выбора счёта."))
-        }
+        } header: { Text(L("Apple Pay включён")) }
+        WalletCardsSection()
         Section {
-            Text(L("1. Быстрые команды → Автоматизация → «Транзакция»: отметьте все карты и включите «Запускать сразу».\n2. Оставьте в автоматизации одно действие «Log Wallet Payment» (Mora): Amount, Merchant и Card or Pass из «Входных данных команды».\n3. Удалите из автоматизации прежнюю команду отправки, иначе покупка придёт дважды."))
-                .font(.subheadline)
-        } header: { Text(L("Автоматизация на iPhone")) }
-        Section { Button(L("Отключить Apple Pay на этом iPhone"), role: .destructive) { confirmDisable = true } }
+            Text(L(Self.automationText)).font(.subheadline)
+        } header: { Text(L("Автоматизация на iPhone")) } footer: {
+            Text(L("iOS прерывает автоматизацию, если у транзакции ещё нет суммы (транспорт, отложенные списания). Поэтому сумма читается последним действием: покупка уже сохранена и попадёт на проверку."))
+        }
     }
+
+    static let automationText = "1. Быстрые команды → Автоматизация → «Транзакция»: отметьте все карты и включите «Запускать сразу».\n2. Первое действие — «Start Wallet Payment» (Mora): Merchant, Card or Pass и Name из «Входных данных команды».\n3. Второе, последнее действие — «Add Wallet Amount» (Mora): Amount из «Входных данных команды».\n4. Удалите из автоматизации «Log Wallet Payment» и прежнюю команду отправки, иначе покупка придёт дважды."
 
     @ViewBuilder private var setup: some View {
         if cloud.householdID == nil {
@@ -141,5 +142,37 @@ struct WalletSetupScreen: View {
     private func use(_ name: String) {
         if let index = cards.firstIndex(where: { $0.card.trimmingCharacters(in: .whitespaces).isEmpty }) { cards[index].card = name }
         else { cards.append(WalletCardAssignment(card: name, accountID: Self.unselected)) }
+    }
+}
+
+/// Wallet cards of every phone key in the shared database and their accounts.
+private struct WalletCardsSection: View {
+    @EnvironmentObject private var store: FinanceStore
+    @EnvironmentObject private var cloud: CloudSync
+
+    var body: some View {
+        Section {
+            if cloud.walletCards.isEmpty {
+                Text(L("Карт пока нет. Включите «Apple Pay на этом iPhone» и выберите счета для своих карт Wallet.")).foregroundStyle(.secondary)
+            }
+            ForEach(cloud.walletCards) { card in
+                Picker(selection: Binding(get: { card.account_id }, set: { value in Task { await cloud.linkCard(card.id, account: value) } })) {
+                    Text(L("Не выбран")).tag(UUID?.none)
+                    ForEach(store.ledger.accounts.filter { !$0.archived }) { Text($0.name).tag(UUID?.some($0.id)) }
+                } label: {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(card.card.isEmpty ? L("без названия") : card.card)
+                        Text(card.label + (card.pending_count > 0 ? " · " + L("ждут: \(card.pending_count)") : "")).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+                // Older databases without the multi-currency migration return no account_ids.
+                if let other = card.account_ids {
+                    CardCurrencyAccounts(accounts: store.ledger.accounts.filter { !$0.archived }, main: card.account_id,
+                                         selection: Binding(get: { other }, set: { value in Task { await cloud.setCardAccounts(card.id, accounts: value) } }))
+                }
+            }
+        } header: { Text(L("Карты Apple Pay")) } footer: {
+            Text(L("Покупки картой записываются на выбранный счёт. Покупки новых карт ждут выбора счёта. Карта, которой ещё не платили, появится здесь после первой покупки."))
+        }
     }
 }

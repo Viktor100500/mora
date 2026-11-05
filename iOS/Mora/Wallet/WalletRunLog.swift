@@ -7,17 +7,27 @@ struct WalletRun: Codable, Identifiable, Equatable, Sendable {
     enum Delivery: String, Codable, Sendable {
         /// Apple Pay is not turned on in Mora: the run is only logged.
         case logged
-        /// No amount or merchant: never sent, so it cannot become an expense.
+        /// Saved by Mora 1.0.22 and older without amount or merchant: not sent until the user asks.
         case incomplete
+        /// The first action saved merchant and card; the amount action has not run yet.
+        case awaitingAmount
         /// Saved and waiting to be sent.
         case waiting
-        /// Not sent within 15 minutes: the user may have entered it by hand meanwhile.
+        /// Saved by Mora 1.0.22 and older: not sent within 15 minutes, waits for the user.
         case late
         case delivered
         /// The server refused the purchase itself; retrying does not help.
         case failed
         /// The user entered it by hand or chose not to count it.
         case skipped
+        /// An empty run next to a complete run of the same payment.
+        case duplicate
+    }
+
+    /// What happened to the run, for the run details on the iPhone.
+    struct Event: Codable, Equatable, Sendable {
+        var date: Date
+        var text: String
     }
 
     var id: UUID
@@ -25,6 +35,10 @@ struct WalletRun: Codable, Identifiable, Equatable, Sendable {
     var amount: String
     var merchant: String
     var card: String
+    /// The Wallet transaction's "Name", when the automation passes it.
+    var name = ""
+    /// The Mora action that saved the run.
+    var action = ""
     var delivery: Delivery = .logged
     var attempts = 0
     var lastError: String?
@@ -33,14 +47,24 @@ struct WalletRun: Codable, Identifiable, Equatable, Sendable {
     var serverReason: String?
     /// The user sent a late purchase explicitly, so the 15-minute rule no longer holds it.
     var confirmed = false
+    var events: [Event] = []
 
     var isComplete: Bool { !amount.isEmpty && !merchant.isEmpty }
+    /// Wallet passed nothing at all.
+    var isEmpty: Bool { amount.isEmpty && merchant.isEmpty && card.isEmpty && name.isEmpty }
+    /// Sent as the merchant: Wallet sometimes fills only the transaction name.
+    var sentMerchant: String { merchant.isEmpty ? name : merchant }
 
-    init(id: UUID = UUID(), receivedAt: Date, amount: String, merchant: String, card: String, delivery: Delivery = .logged) {
-        self.id = id; self.receivedAt = receivedAt; self.amount = amount; self.merchant = merchant; self.card = card; self.delivery = delivery
+    init(id: UUID = UUID(), receivedAt: Date, amount: String, merchant: String, card: String, name: String = "", delivery: Delivery = .logged) {
+        self.id = id; self.receivedAt = receivedAt; self.amount = amount; self.merchant = merchant; self.card = card; self.name = name; self.delivery = delivery
     }
 
-    // Runs saved by Mora 1.0.15 have no delivery fields.
+    mutating func log(_ text: String, at date: Date = .now) {
+        events.append(Event(date: date, text: text))
+        if events.count > 50 { events.removeFirst(events.count - 50) }
+    }
+
+    // Runs saved by Mora 1.0.15 have no delivery fields, 1.0.22 and older no events.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
@@ -48,12 +72,15 @@ struct WalletRun: Codable, Identifiable, Equatable, Sendable {
         amount = try c.decode(String.self, forKey: .amount)
         merchant = try c.decode(String.self, forKey: .merchant)
         card = try c.decode(String.self, forKey: .card)
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        action = try c.decodeIfPresent(String.self, forKey: .action) ?? ""
         delivery = try c.decodeIfPresent(Delivery.self, forKey: .delivery) ?? .logged
         attempts = try c.decodeIfPresent(Int.self, forKey: .attempts) ?? 0
         lastError = try c.decodeIfPresent(String.self, forKey: .lastError)
         serverState = try c.decodeIfPresent(String.self, forKey: .serverState)
         serverReason = try c.decodeIfPresent(String.self, forKey: .serverReason)
         confirmed = try c.decodeIfPresent(Bool.self, forKey: .confirmed) ?? false
+        events = try c.decodeIfPresent([Event].self, forKey: .events) ?? []
     }
 }
 
@@ -69,9 +96,16 @@ enum WalletRunLog {
     }
 
     @discardableResult
-    static func record(amount: String?, merchant: String?, card: String?, sending: Bool, at date: Date = .now, in directory: URL = directory) throws -> WalletRun {
-        var run = WalletRun(receivedAt: date, amount: clean(amount), merchant: clean(merchant), card: clean(card))
-        run.delivery = !sending ? .logged : run.isComplete ? .waiting : .incomplete
+    static func record(amount: String?, merchant: String?, card: String?, name: String? = nil, action: String = "Log Wallet Payment",
+                       awaitingAmount: Bool = false, sending: Bool, at date: Date = .now, in directory: URL = directory) throws -> WalletRun {
+        var run = WalletRun(receivedAt: date, amount: clean(amount), merchant: clean(merchant), card: clean(card), name: clean(name))
+        run.action = action
+        // Incomplete purchases are sent too: they wait for review in Mora instead of being lost.
+        run.delivery = !sending ? .logged : awaitingAmount ? .awaitingAmount : .waiting
+        let missing = [(run.amount, "сумма"), (run.merchant, "продавец"), (run.card, "карта")]
+            .filter { $0.0.isEmpty && !(awaitingAmount && $0.1 == "сумма") }.map(\.1)
+        run.log(missing.isEmpty ? "Получено действием «\(action)»" : "Получено действием «\(action)». Wallet не передал: \(missing.joined(separator: ", "))", at: date)
+        if !sending { run.log("Apple Pay в Mora не включён: покупка только в журнале", at: date) }
         try save(run, in: directory)
         prune(before: date.addingTimeInterval(-Double(keptDays) * 86_400), in: directory)
         return run
@@ -129,7 +163,7 @@ enum WalletRunLog {
 
 extension WalletRun {
     /// Still has to reach the server or needs the user's decision.
-    var needsDelivery: Bool { delivery == .waiting || delivery == .late }
+    var needsDelivery: Bool { delivery == .waiting || delivery == .late || delivery == .awaitingAmount }
 }
 
 /// The Shortcuts action of the Wallet "Transaction" automation. It runs without
@@ -144,15 +178,62 @@ struct LogWalletPaymentIntent: AppIntent {
     @Parameter(title: "Amount") var amount: String?
     @Parameter(title: "Merchant") var merchant: String?
     @Parameter(title: "Card or Pass") var card: String?
+    @Parameter(title: "Name") var name: String?
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Log \(\.$amount) at \(\.$merchant) with \(\.$card)")
+        Summary("Log \(\.$amount) at \(\.$merchant) with \(\.$card)") { \.$name }
     }
 
     func perform() async throws -> some IntentResult {
         let sender = WalletSender.current()
-        try? WalletRunLog.record(amount: amount, merchant: merchant, card: card, sending: sender != nil)
+        try? WalletRunLog.record(amount: amount, merchant: merchant, card: card, name: name, sending: sender != nil)
         if let sender { await WalletDelivery.shared.deliverWaiting(with: sender) }
+        await WalletBackgroundDelivery.scheduleIfNeeded()
+        return .result()
+    }
+}
+
+/// First action of the two-step automation. iOS 26 Shortcuts crashes while
+/// reading the Amount of a transaction that has no price yet (transit taps,
+/// deferred authorizations), and the whole automation stops. Saving merchant
+/// and card before the amount is read keeps such a purchase for review.
+struct StartWalletPaymentIntent: AppIntent {
+    static let title: LocalizedStringResource = "Start Wallet Payment"
+    static let description = IntentDescription("First action of the Wallet automation: saves the merchant, card and name of the transaction on this iPhone. Add “Add Wallet Amount” after it.")
+    static let openAppWhenRun = false
+    static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
+
+    @Parameter(title: "Merchant") var merchant: String?
+    @Parameter(title: "Card or Pass") var card: String?
+    @Parameter(title: "Name") var name: String?
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("Start payment at \(\.$merchant) with \(\.$card)") { \.$name }
+    }
+
+    func perform() async throws -> some IntentResult {
+        try? WalletRunLog.record(amount: nil, merchant: merchant, card: card, name: name, action: "Start Wallet Payment",
+                                 awaitingAmount: true, sending: WalletSender.current() != nil)
+        // Sends it without amount later if the amount action never runs.
+        await WalletBackgroundDelivery.scheduleIfNeeded()
+        return .result()
+    }
+}
+
+/// Second action: adds the amount to the purchase saved a moment ago and sends it.
+struct AddWalletAmountIntent: AppIntent {
+    static let title: LocalizedStringResource = "Add Wallet Amount"
+    static let description = IntentDescription("Last action of the Wallet automation: adds the amount to the purchase saved by “Start Wallet Payment” and sends it.")
+    static let openAppWhenRun = false
+    static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
+
+    @Parameter(title: "Amount") var amount: String?
+
+    static var parameterSummary: some ParameterSummary { Summary("Add amount \(\.$amount)") }
+
+    func perform() async throws -> some IntentResult {
+        await WalletDelivery.shared.addAmount(amount ?? "")
+        await WalletBackgroundDelivery.run()
         return .result()
     }
 }
@@ -161,6 +242,10 @@ struct LogWalletPaymentIntent: AppIntent {
 /// installation, so the action is listed under Mora and found by search.
 struct MoraAppShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
+        AppShortcut(intent: StartWalletPaymentIntent(), phrases: ["Start Wallet payment in \(.applicationName)"],
+                    shortTitle: "Start Wallet Payment", systemImageName: "wallet.pass")
+        AppShortcut(intent: AddWalletAmountIntent(), phrases: ["Add Wallet amount in \(.applicationName)"],
+                    shortTitle: "Add Wallet Amount", systemImageName: "dollarsign.circle")
         AppShortcut(intent: LogWalletPaymentIntent(), phrases: ["Log Wallet payment in \(.applicationName)"],
                     shortTitle: "Log Wallet Payment", systemImageName: "wallet.pass")
     }

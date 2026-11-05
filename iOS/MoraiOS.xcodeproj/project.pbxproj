@@ -38,6 +38,7 @@
 		99ACB4FCF65E722FC5A24ABC /* WalletRunsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4E2901038A4DDB9BD22E007 /* WalletRunsScreen.swift */; };
 		A3D9EB13A2AB05BEA95256C1 /* CloudScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85BFEB921FC926A84CB68715 /* CloudScreen.swift */; };
 		AEE49357E8A3A6C9EE9AAE83 /* TransactionEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1CED08EE69D8287C08552F /* TransactionEditor.swift */; };
+		BE0D8CEE4CCD69722D7A0763 /* MerchantCategorizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35FB27FDB12838BC42FF32F4 /* MerchantCategorizer.swift */; };
 		C1ACF4FB85C7D4AC8437A0B0 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7EABC9B8C57126A5C9087F8 /* Components.swift */; };
 		CC257AB75FA52B7F53DC6CAB /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0F407065AB8FA06ADF586CC7 /* InfoPlist.strings */; };
 		CED62CE9B0273557FB4183A3 /* WalletDelivery.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCFF2BEB1FEAFE94C74F7F1C /* WalletDelivery.swift */; };
@@ -66,6 +67,7 @@
 		14EC5F098BA136755B3F0442 /* ReportCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportCache.swift; sourceTree = "<group>"; };
 		263002D25366E09E01B9CF43 /* MobileStrings.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = MobileStrings.json; sourceTree = "<group>"; };
 		2B8D07C72F2ADAD285B72897 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		35FB27FDB12838BC42FF32F4 /* MerchantCategorizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MerchantCategorizer.swift; path = ../Sources/Mora/MerchantCategorizer.swift; sourceTree = "<group>"; };
 		3A4E9DA3F49721E1DF85F7FB /* WalletRunLogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletRunLogTests.swift; sourceTree = "<group>"; };
 		40143EA2813412A012DAA081 /* PairingVisuals.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingVisuals.swift; sourceTree = "<group>"; };
 		45201D32ED9DE875ED483E1D /* AIImportScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AIImportScreen.swift; sourceTree = "<group>"; };
@@ -104,7 +106,7 @@
 		F3E78F6ACDBE2C140769209A /* ChangeDescription.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ChangeDescription.swift; path = ../Sources/Mora/ChangeDescription.swift; sourceTree = "<group>"; };
 		F65900D0DE8EB82F68603C47 /* ImportScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportScreens.swift; sourceTree = "<group>"; };
 		F9AC73B755D7E67297AE96D1 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
-		"TEMP_E4AC3CD3-A3C2-4D55-88D4-9A4078B83938" /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
+		"TEMP_666FC3B8-4178-4B64-9060-2A8CA3E7E79A" /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -154,6 +156,7 @@
 			children = (
 				F3E78F6ACDBE2C140769209A /* ChangeDescription.swift */,
 				5681EBC601A1218085F1AC1A /* LedgerRepository.swift */,
+				35FB27FDB12838BC42FF32F4 /* MerchantCategorizer.swift */,
 			);
 			name = Shared;
 			sourceTree = "<group>";
@@ -264,10 +267,10 @@
 			path = MoraTests;
 			sourceTree = "<group>";
 		};
-		"TEMP_F1F6EDFE-5954-406D-8087-526E7125DACE" /* iOS */ = {
+		"TEMP_7BE671B5-972D-438C-9EB1-273BE371F9DA" /* iOS */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_E4AC3CD3-A3C2-4D55-88D4-9A4078B83938" /* Signing.xcconfig */,
+				"TEMP_666FC3B8-4178-4B64-9060-2A8CA3E7E79A" /* Signing.xcconfig */,
 			);
 			path = iOS;
 			sourceTree = "<group>";
@@ -394,6 +397,7 @@
 				6516965CD47DAF731ACE56E3 /* LedgerRepository.swift in Sources */,
 				098BA3CE366093E8E5331CDB /* Localization.swift in Sources */,
 				6AA9F4CD6F747F8773393FA8 /* MacPairing.swift in Sources */,
+				BE0D8CEE4CCD69722D7A0763 /* MerchantCategorizer.swift in Sources */,
 				60096CF674B3199D24AB1AB5 /* MoraApp.swift in Sources */,
 				5FC30B7EB94BBB5B7C508FD5 /* MoreScreen.swift in Sources */,
 				7A0FAC2A8A759AA6E0522800 /* OverviewScreen.swift in Sources */,
@@ -479,7 +483,7 @@
 		};
 		BCE30933C473708F0E64C320 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_E4AC3CD3-A3C2-4D55-88D4-9A4078B83938" /* Signing.xcconfig */;
+			baseConfigurationReference = "TEMP_666FC3B8-4178-4B64-9060-2A8CA3E7E79A" /* Signing.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -512,7 +516,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 23;
+				CURRENT_PROJECT_VERSION = 24;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -526,7 +530,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.22;
+				MARKETING_VERSION = 1.0.23;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -556,7 +560,7 @@
 		};
 		D00F07EA73DCC7592C635AE0 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_E4AC3CD3-A3C2-4D55-88D4-9A4078B83938" /* Signing.xcconfig */;
+			baseConfigurationReference = "TEMP_666FC3B8-4178-4B64-9060-2A8CA3E7E79A" /* Signing.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -589,7 +593,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 23;
+				CURRENT_PROJECT_VERSION = 24;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -609,7 +613,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.22;
+				MARKETING_VERSION = 1.0.23;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

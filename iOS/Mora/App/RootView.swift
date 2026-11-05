@@ -5,6 +5,7 @@ struct RootView: View {
     @EnvironmentObject private var store: FinanceStore
     @EnvironmentObject private var cloud: CloudSync
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var categorizer: MerchantCategorizer
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("mora.didSeeWelcome") private var didSeeWelcome = false
 
@@ -34,7 +35,7 @@ struct RootView: View {
         .modifier(PrivacyShield())
         .sheet(item: $router.sheet) { sheet in
             SheetContent(sheet: sheet)
-                .environmentObject(store).environmentObject(cloud).environmentObject(router)
+                .environmentObject(store).environmentObject(cloud).environmentObject(router).environmentObject(categorizer)
                 .environment(\.locale, L10n.locale)
                 .tint(.moraGreen)
                 .modifier(ErrorAlert())
@@ -49,15 +50,21 @@ struct RootView: View {
             await cloud.prepare(store: store)
         }
         .onChange(of: store.revision) { cloud.localChanged() }
-        .onChange(of: scenePhase) { _, phase in if phase == .background { cloud.finishInBackground() } }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .background else { return }
+            cloud.finishInBackground()
+            Task { await WalletBackgroundDelivery.scheduleIfNeeded() }
+        }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
             await store.reloadFromDisk()
             // Purchases saved while offline go out as soon as Mora is opened.
-            async let wallet: Void = { if let sender = WalletSender.current() { await WalletDelivery.shared.deliverWaiting(with: sender) } }()
+            async let wallet: Void = WalletBackgroundDelivery.run()
             async let rates: Void = rateLoop()
             async let sync: Void = cloud.run()
-            _ = await (wallet, rates, sync)
+            // Purchases booked by the server or another device arrive without a category.
+            async let categories: Void = categorizer.run(store: store)
+            _ = await (wallet, rates, sync, categories)
         }
         .onOpenURL { url in
             guard url.isFileURL else { return }

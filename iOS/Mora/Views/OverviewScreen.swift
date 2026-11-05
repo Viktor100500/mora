@@ -15,6 +15,7 @@ struct OverviewScreen: View {
             ScrollView {
                 LazyVStack(spacing: 16) {
                     if store.isDemo { DemoBanner() }
+                    WalletReviewBanner()
                     MonthSwitcher(month: $router.month)
                     netWorthCard
                     metrics

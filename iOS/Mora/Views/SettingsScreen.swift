@@ -5,6 +5,7 @@ struct SettingsScreen: View {
     @EnvironmentObject private var store: FinanceStore
     @EnvironmentObject private var cloud: CloudSync
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var categorizer: MerchantCategorizer
     @AppStorage("mora.hideAmounts") private var hideAmounts = false
     @State private var selectedBase = ""
     @State private var rateCurrency = "USD"
@@ -49,6 +50,12 @@ struct SettingsScreen: View {
                 Text(L("При смене базовой валюты лимиты бюджетов и суммы целей пересчитываются по текущему курсу."))
             }
             ratesSection
+            Section {
+                Toggle(L("Определять категории новых продавцов"), isOn: $categorizer.onlineEnabled)
+                if let status = categorizer.status { Text(status).font(.caption).foregroundStyle(.secondary) }
+            } header: { Text(L("Автоматические категории")) } footer: {
+                Text(L("Для знакомого продавца используется категория из истории. Встроенная база заведений Нью-Йорка и окрестностей работает без интернета, каталоги брендов загружаются в фоне. Названия покупок, суммы и счета никуда не отправляются."))
+            }
             Section {
                 Toggle(L("Бюджеты"), isOn: preference(\.showBudgets))
                 Toggle(L("Цели"), isOn: preference(\.showGoals))
