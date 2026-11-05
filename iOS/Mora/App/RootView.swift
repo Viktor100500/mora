@@ -140,6 +140,7 @@ private struct SheetContent: View {
         case .rule(let r): RuleEditor(rule: r)
         case .csv(let table, let name): CSVImportView(table: table, filename: name)
         case .walletReview(let capture): TransactionEditor(walletCapture: capture, ledger: store.ledger).id(capture.id)
+        case .walletRun(let run, let account): TransactionEditor(walletRun: (run, account), ledger: store.ledger).id(run.id)
         }
     }
 }

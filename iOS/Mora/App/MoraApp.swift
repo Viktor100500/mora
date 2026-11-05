@@ -39,6 +39,7 @@ enum AppSheet: Identifiable {
     case rule(CategoryRule?)
     case csv(CSVTable, String)
     case walletReview(CloudCapture)
+    case walletRun(WalletRun, UUID?)
 
     var id: String {
         switch self {
@@ -54,6 +55,7 @@ enum AppSheet: Identifiable {
         case .rule(let r): "rule-\(r?.id.uuidString ?? "new")"
         case .csv: "csv"
         case .walletReview(let capture): "wallet-\(capture.id)"
+        case .walletRun(let run, _): "wallet-run-\(run.id)"
         }
     }
 }

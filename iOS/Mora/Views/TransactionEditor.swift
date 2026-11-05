@@ -8,6 +8,8 @@ struct TransactionEditor: View {
     @Environment(\.dismiss) private var dismiss
     let transaction: Transaction?
     private let walletCapture: CloudCapture?
+    /// A broken Wallet purchase saved only on this iPhone; saving it books it here.
+    private let walletRun: WalletRun?
     private let amountSuggestion: WalletReviewDraft.AmountSuggestion?
     private let newWalletCard: String?
     @State private var merchant: String
@@ -33,11 +35,14 @@ struct TransactionEditor: View {
     private enum Field: Hashable { case amount, merchant, destinationAmount, note, tags }
     private enum Required: Hashable { case merchant, amount, account, destination, destinationAmount }
 
-    init(transaction: Transaction? = nil, template: Transaction? = nil, walletCapture: CloudCapture? = nil, ledger: Ledger) {
+    init(transaction: Transaction? = nil, template: Transaction? = nil, walletCapture: CloudCapture? = nil, walletRun: (run: WalletRun, accountID: UUID?)? = nil, ledger: Ledger) {
         self.transaction = transaction
         self.walletCapture = walletCapture
+        self.walletRun = walletRun?.run
         let source = transaction ?? template.map { $0.similarTransaction() }
-        let draft = walletCapture.map { WalletReviewDraft(capture: $0, ledger: ledger, locale: L10n.locale) }
+        let local = walletRun.map { CloudCapture(id: $0.run.id, merchant: $0.run.sentMerchant, amount: $0.run.amount,
+            account_id: $0.accountID ?? ledger.suggestedTransactionAccountID ?? UUID(), date: $0.run.receivedAt, card: $0.run.card) }
+        let draft = (walletCapture ?? local).map { WalletReviewDraft(capture: $0, ledger: ledger, locale: L10n.locale) }
         amountSuggestion = draft?.amount.isEmpty == true ? draft?.suggestion : nil
         newWalletCard = walletCapture.flatMap { $0.awaitsCardLink ? ($0.card ?? "") : nil }
         let dateReference = source?.date ?? draft?.date ?? Date()
@@ -45,7 +50,7 @@ struct TransactionEditor: View {
         _amount = State(initialValue: source.map { Money.plain(abs($0.conversion?.originalAmount ?? $0.amount)) } ?? draft?.prefillAmount ?? "")
         _kind = State(initialValue: source?.kind ?? .expense)
         _date = State(initialValue: dateReference)
-        _accountID = State(initialValue: source?.accountID ?? (walletCapture == nil ? ledger.suggestedTransactionAccountID : draft?.accountID))
+        _accountID = State(initialValue: source?.accountID ?? (draft == nil ? ledger.suggestedTransactionAccountID : draft?.accountID))
         _categoryID = State(initialValue: source?.categoryID)
         _destinationID = State(initialValue: source?.destinationAccountID)
         _destinationAmount = State(initialValue: source?.destinationAmount.map(Money.plain) ?? "")
@@ -76,7 +81,7 @@ struct TransactionEditor: View {
         merchant.trimmingCharacters(in: .whitespaces).isEmpty ? nil : ledger.suggestedCategory(merchant: merchant, kind: kind)
     }
     private var title: String {
-        walletCapture != nil ? L("Проверить покупку") : transaction == nil ? L("Новая операция") : L("Редактировать операцию")
+        walletRun != nil ? L("Обработать покупку") : walletCapture != nil ? L("Проверить покупку") : transaction == nil ? L("Новая операция") : L("Редактировать операцию")
     }
 
     private var errors: [Required: String] {
@@ -104,7 +109,7 @@ struct TransactionEditor: View {
                     Picker(L("Тип"), selection: $kind) {
                         ForEach(TransactionKind.allCases) { Text(L($0.title)).tag($0) }
                     }
-                    .pickerStyle(.segmented).disabled(standaloneTransfer || walletCapture != nil)
+                    .pickerStyle(.segmented).disabled(standaloneTransfer || walletCapture != nil || walletRun != nil)
                     .listRowSeparator(.hidden)
                     amountField
                     validation(.amount)
@@ -213,6 +218,7 @@ struct TransactionEditor: View {
             .onChange(of: kind) { _, new in if ledger.category(categoryID)?.kind != new { categoryID = nil } }
             .onChange(of: accountID) { _, id in if destinationID == id { destinationID = nil } }
             .onAppear { if transaction == nil && walletCapture == nil && amount.isEmpty { focus = .amount } }
+            .onAppear { if walletRun != nil && categoryID == nil { categoryID = suggestedCategory } }
         }
     }
 
@@ -419,6 +425,7 @@ struct TransactionEditor: View {
             let saved: Bool
             if let capture = walletCapture { saved = await cloud.review(capture, transaction: value) }
             else { saved = await store.saveTransaction(value, original: transaction) }
+            if saved, let run = walletRun { await WalletDelivery.shared.markProcessed(run.id) }
             if saved { dismiss() }
         }
     }

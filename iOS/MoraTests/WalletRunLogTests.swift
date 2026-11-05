@@ -21,7 +21,7 @@ final class WalletRunLogTests: XCTestCase {
 
         let runs = WalletRunLog.runs(in: directory)
         XCTAssertEqual(runs.count, 3, "identical payments at the same moment are separate runs")
-        XCTAssertEqual(runs.first?.delivery, .waiting, "a run without amount or merchant is sent for review, never dropped")
+        XCTAssertEqual(runs.first?.delivery, .waiting, "a run without amount or merchant is kept, never dropped")
         XCTAssertEqual(runs.first?.merchant, "")
         XCTAssertEqual(Set(runs.dropFirst().map(\.delivery)), [.logged, .waiting])
         XCTAssertEqual(runs.last?.amount, "$3.00")
@@ -105,30 +105,31 @@ final class WalletRunLogTests: XCTestCase {
         XCTAssertEqual(body["p_amount"], "$12.40"); XCTAssertEqual(body["p_merchant"], "Target")
     }
 
-    func testPurchaseWithoutAmountActionGoesToReview() async throws {
+    func testPurchaseWithoutAmountStaysOnTheIPhoneUntilProcessed() async throws {
         try WalletRunLog.record(amount: nil, merchant: "", card: "Chase", name: "NJ Transit", action: "Start Wallet Payment",
                                 awaitingAmount: true, sending: true, at: start, in: directory)
         let requests = Requests()
         let delivery = WalletDelivery(directory: directory) { request in
-            await requests.add(request)
-            return (Data(#"{"id":"c1","state":"pending","reason":"Не получена положительная сумма"}"#.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+            await requests.add(request); throw URLError(.badServerResponse)
         }
         await delivery.deliverWaiting(with: sender, now: start.addingTimeInterval(WalletDelivery.amountGrace + 1))
-        let run = try XCTUnwrap(WalletRunLog.runs(in: directory).first)
-        XCTAssertEqual(run.delivery, .delivered); XCTAssertEqual(run.serverState, "pending")
-        let sent = await requests.all
-        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(sent.first?.httpBody)) as? [String: String])
-        XCTAssertEqual(body["p_amount"], ""); XCTAssertEqual(body["p_merchant"], "NJ Transit", "the name stands in for a missing merchant")
+        var run = try XCTUnwrap(WalletRunLog.runs(in: directory).first)
+        XCTAssertEqual(run.delivery, .incomplete); XCTAssertTrue(run.needsProcessing)
+        XCTAssertEqual(run.sentMerchant, "NJ Transit", "the name stands in for a missing merchant")
+        let sent = await requests.all.count
+        XCTAssertEqual(sent, 0, "a broken purchase is never sent")
+
+        await delivery.markProcessed(run.id)
+        run = try XCTUnwrap(WalletRunLog.runs(in: directory).first)
+        XCTAssertEqual(run.delivery, .processed); XCTAssertFalse(run.needsProcessing)
     }
 
     func testEmptyRunNextToACompleteRunIsADuplicate() async throws {
         try WalletRunLog.record(amount: nil, merchant: nil, card: nil, sending: true, at: start, in: directory)
         try WalletRunLog.record(amount: "$3.00", merchant: "MTA", card: "Chase", sending: true, at: start.addingTimeInterval(5), in: directory)
         try WalletRunLog.record(amount: nil, merchant: nil, card: nil, sending: true, at: start.addingTimeInterval(3_600), in: directory)
-        let requests = Requests()
         let delivery = WalletDelivery(directory: directory) { request in
-            await requests.add(request)
-            return (Data(#"{"id":"c1","state":"pending"}"#.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+            (Data(#"{"id":"c1","state":"recorded"}"#.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
         }
         await delivery.deliverWaiting(with: sender, now: start.addingTimeInterval(3_610))
         var runs = WalletRunLog.runs(in: directory)
@@ -136,9 +137,7 @@ final class WalletRunLogTests: XCTestCase {
 
         await delivery.deliverWaiting(with: sender, now: start.addingTimeInterval(3_600 + WalletDelivery.amountGrace + 1))
         runs = WalletRunLog.runs(in: directory)
-        XCTAssertEqual(runs.first?.delivery, .delivered, "then it goes to review with its time")
-        await delivery.confirm(runs.last!.id, with: sender)
-        XCTAssertEqual(WalletRunLog.runs(in: directory).last?.delivery, .delivered, "the user can still send a duplicate")
+        XCTAssertEqual(runs.first?.delivery, .incomplete, "then the user processes it")
     }
 
     func testServerAnswersMapToRetryOrDecision() {

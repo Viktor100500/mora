@@ -43,7 +43,8 @@ struct WalletSender: Codable, Equatable, Sendable {
 /// Sends saved Wallet purchases to `mora_capture_payment`. One actor serializes
 /// sending and every change of a saved run. The server ignores a repeated event
 /// id, so retrying after a lost response never books a purchase twice. Nothing
-/// is dropped: a purchase without amount or merchant goes to review in Mora.
+/// is dropped: a purchase without amount or merchant waits on the iPhone until
+/// the user processes it in the transaction form.
 actor WalletDelivery {
     static let shared = WalletDelivery()
     /// How long the first action of the automation waits for its amount action,
@@ -83,35 +84,39 @@ actor WalletDelivery {
         try? WalletRunLog.save(run, in: directory)
     }
 
-    /// Sends waiting purchases oldest first and stops at the first connection problem.
+    /// Sends complete purchases oldest first and stops at the first connection problem.
+    /// A purchase without amount or merchant stays on the iPhone for the user to process.
     func deliverWaiting(with sender: WalletSender, now: Date = .now) async {
         let all = WalletRunLog.runs(in: directory)
         for var run in all.reversed() where run.delivery == .waiting || run.delivery == .awaitingAmount {
             if run.delivery == .awaitingAmount {
                 guard now.timeIntervalSince(run.receivedAt) >= Self.amountGrace else { continue }
-                run.delivery = .waiting
-                run.log("Сумма не пришла: «Быстрые команды» прервались, читая сумму. Покупка уйдёт на проверку без суммы.", at: now)
-                try? WalletRunLog.save(run, in: directory)
+                run.log("Сумма не пришла: «Быстрые команды» прервались, читая сумму", at: now)
             }
-            if run.isEmpty && !run.confirmed {
+            if run.isEmpty {
                 // Wallet can start the automation twice for one tap, once without any data.
                 if all.contains(where: { $0.id != run.id && !$0.isEmpty && abs($0.receivedAt.timeIntervalSince(run.receivedAt)) <= Self.amountGrace }) {
                     run.delivery = .duplicate
-                    run.log("Пустой запуск рядом с полной покупкой: не отправлен, чтобы не было дубля", at: now)
+                    run.log("Пустой запуск рядом с полной покупкой", at: now)
                     try? WalletRunLog.save(run, in: directory)
                     continue
                 }
                 if now.timeIntervalSince(run.receivedAt) < Self.amountGrace { continue }
+            }
+            guard run.isComplete else {
+                run.delivery = .incomplete
+                try? WalletRunLog.save(run, in: directory)
+                continue
             }
             run.attempts += 1
             let outcome = await send(run, with: sender)
             switch outcome {
             case .delivered(let state, let reason):
                 run.delivery = .delivered; run.serverState = state; run.serverReason = reason; run.lastError = nil
-                run.log(state == "recorded" ? "Отправлено: расход записан сервером" : "Отправлено: ждёт проверки в Mora" + (reason.map { " — \($0)" } ?? ""), at: now)
+                run.log("Отправлено, ответ сервера: \(state)" + (reason.map { " — \($0)" } ?? ""), at: now)
             case .retry(let message):
                 run.lastError = message
-                run.log("Не отправлено (попытка \(run.attempts)): \(message). Повтор позже", at: now)
+                run.log("Не отправлено (попытка \(run.attempts)): \(message)", at: now)
             case .keyRejected:
                 run.lastError = "Ключ телефона не принят: включите Apple Pay на iPhone заново."
                 run.log("Сервер не принял ключ телефона (попытка \(run.attempts))", at: now)
@@ -125,14 +130,11 @@ actor WalletDelivery {
         }
     }
 
-    /// The user sends a purchase that waits for a decision.
-    func confirm(_ id: UUID, with sender: WalletSender?) async {
-        update(id) { $0.delivery = .waiting; $0.confirmed = true; $0.log("Отправлено вручную из журнала") }
-        if let sender { await deliverWaiting(with: sender) }
-    }
+    /// The user booked the purchase in the transaction form.
+    func markProcessed(_ id: UUID) { update(id) { $0.delivery = .processed; $0.lastError = nil; $0.log("Обработано вручную") } }
 
     /// The user entered the purchase by hand or does not want to count it.
-    func skip(_ id: UUID) { update(id) { $0.delivery = .skipped; $0.log("Не учитывается: решение пользователя") } }
+    func skip(_ id: UUID) { update(id) { $0.delivery = .skipped; $0.log("Не учитывается") } }
 
     private func update(_ id: UUID, _ change: (inout WalletRun) -> Void) {
         guard var run = WalletRunLog.runs(in: directory).first(where: { $0.id == id }) else { return }

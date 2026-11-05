@@ -92,6 +92,12 @@ public struct CloudCapture: Codable, Identifiable, Equatable, Sendable {
     public var card_required: Bool? = nil
     /// A purchase from a card that has no account yet waits for the user's choice.
     public var awaitsCardLink: Bool { (card_id != nil && card_linked != true) || (card_required == true && card_id == nil) }
+
+    /// A purchase known only on the iPhone, prefilled the same way as a server one.
+    public init(id: UUID, merchant: String, amount: String, currency: String = "", account_id: UUID, date: Date, label: String = "", card: String? = nil) {
+        self.id = id; self.merchant = merchant; self.amount = amount; self.currency = currency
+        self.account_id = account_id; self.date = date; self.reason = nil; self.label = label; self.card = card
+    }
 }
 
 public struct WalletCardAssignment: Codable, Identifiable, Sendable {

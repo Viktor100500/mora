@@ -7,7 +7,7 @@ struct WalletRun: Codable, Identifiable, Equatable, Sendable {
     enum Delivery: String, Codable, Sendable {
         /// Apple Pay is not turned on in Mora: the run is only logged.
         case logged
-        /// Saved by Mora 1.0.22 and older without amount or merchant: not sent until the user asks.
+        /// No amount or merchant: never sent, waits for the user to process it.
         case incomplete
         /// The first action saved merchant and card; the amount action has not run yet.
         case awaitingAmount
@@ -18,6 +18,8 @@ struct WalletRun: Codable, Identifiable, Equatable, Sendable {
         case delivered
         /// The server refused the purchase itself; retrying does not help.
         case failed
+        /// The user booked it in the transaction form.
+        case processed
         /// The user entered it by hand or chose not to count it.
         case skipped
         /// An empty run next to a complete run of the same payment.
@@ -100,7 +102,7 @@ enum WalletRunLog {
                        awaitingAmount: Bool = false, sending: Bool, at date: Date = .now, in directory: URL = directory) throws -> WalletRun {
         var run = WalletRun(receivedAt: date, amount: clean(amount), merchant: clean(merchant), card: clean(card), name: clean(name))
         run.action = action
-        // Incomplete purchases are sent too: they wait for review in Mora instead of being lost.
+        // An incomplete purchase is kept as waiting until a possible repeat run is seen, then left for the user.
         run.delivery = !sending ? .logged : awaitingAmount ? .awaitingAmount : .waiting
         let missing = [(run.amount, "сумма"), (run.merchant, "продавец"), (run.card, "карта")]
             .filter { $0.0.isEmpty && !(awaitingAmount && $0.1 == "сумма") }.map(\.1)
@@ -163,7 +165,9 @@ enum WalletRunLog {
 
 extension WalletRun {
     /// Still has to reach the server or needs the user's decision.
-    var needsDelivery: Bool { delivery == .waiting || delivery == .late || delivery == .awaitingAmount }
+    var needsDelivery: Bool { delivery == .waiting || delivery == .late || delivery == .awaitingAmount || delivery == .incomplete || delivery == .failed }
+    /// Broken: the user books it in the transaction form.
+    var needsProcessing: Bool { delivery == .incomplete || delivery == .late || delivery == .failed }
 }
 
 /// The Shortcuts action of the Wallet "Transaction" automation. It runs without
@@ -196,7 +200,7 @@ struct LogWalletPaymentIntent: AppIntent {
 /// First action of the two-step automation. iOS 26 Shortcuts crashes while
 /// reading the Amount of a transaction that has no price yet (transit taps,
 /// deferred authorizations), and the whole automation stops. Saving merchant
-/// and card before the amount is read keeps such a purchase for review.
+/// and card before the amount is read keeps such a purchase for the user to process.
 struct StartWalletPaymentIntent: AppIntent {
     static let title: LocalizedStringResource = "Start Wallet Payment"
     static let description = IntentDescription("First action of the Wallet automation: saves the merchant, card and name of the transaction on this iPhone. Add “Add Wallet Amount” after it.")
