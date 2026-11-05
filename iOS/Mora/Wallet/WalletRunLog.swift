@@ -273,15 +273,11 @@ struct AddWalletAmountIntent: AppIntent {
     static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
 
     @Parameter(title: "Transaction") var transaction: String?
-    /// Kept for automations set up with an explicit Amount property; used before the parsed amount.
-    @Parameter(title: "Amount") var amount: String?
 
-    static var parameterSummary: some ParameterSummary {
-        Summary("Finish payment with \(\.$transaction)") { \.$amount }
-    }
+    static var parameterSummary: some ParameterSummary { Summary("Finish payment with \(\.$transaction)") }
 
     func perform() async throws -> some IntentResult {
-        await WalletDelivery.shared.addAmount(amount ?? "", transaction: transaction ?? "")
+        await WalletDelivery.shared.addAmount("", transaction: transaction ?? "")
         BankAlertLog.reconcileWallet()
         await WalletBackgroundDelivery.run()
         return .result()

@@ -324,12 +324,7 @@
   "Нажмите «+» или «Новая автоматизация».": "Tap “+” or New Automation.",
   "Нажмите «Готово».": "Tap Done.",
   "Нажмите «Далее» → «Новая пустая автоматизация».": "Tap Next → New Blank Automation.",
-  "Нажмите «Добавить действие» и найдите «Start Wallet Payment».": "Tap Add Action and find “Start Wallet Payment”.",
-  "Нажмите на неё ещё раз и выберите свойство, как на картинке. Так для всех трёх полей.": "Tap it again and choose the property as in the picture. Do this for all three fields.",
-  "Нажмите на синее поле → «Входные данные команды».": "Tap the blue field → Shortcut Input.",
-  "Нажмите на синее поле → «Входные данные команды». Свойство выбирать не нужно.": "Tap the blue field → Shortcut Input. No property needs to be chosen.",
   "Например, «Когда я прикладываю карту Wallet»": "E.g. “When I tap a Wallet Card or Pass”",
-  "Одно поле, без выбора свойства: Mora сама достанет сумму из транзакции.": "One field, no property to choose: Mora takes the amount from the transaction itself.",
   "Оно сохраняет покупку до того, как iOS прочитает сумму.": "It saves the purchase before iOS reads the amount.",
   "Откройте «Быстрые команды» и вкладку «Автоматизация».": "Open Shortcuts and the Automation tab.",
   "Открыть «Быстрые команды»": "Open Shortcuts",
@@ -364,5 +359,13 @@
   "Пошаговый помощник, около двух минут.": "Step-by-step assistant, about two minutes.",
   "iPhone сообщает о покупке через автоматизацию «Быстрых команд». Приложения не могут создать её сами, поэтому один раз настроим её вместе: 4 коротких шага и проверка, около двух минут.": "The iPhone reports a purchase through a Shortcuts automation. Apps cannot create it themselves, so let’s set it up once together: 4 short steps and a check, about two minutes.",
   "Проверьте настройку": "Check the Setup",
-  "Заплатите чем-нибудь Apple Pay — Mora покажет здесь, что передал Wallet.": "Pay for something with Apple Pay — Mora shows here what Wallet passed."
+  "Заплатите чем-нибудь Apple Pay — Mora покажет здесь, что передал Wallet.": "Pay for something with Apple Pay — Mora shows here what Wallet passed.",
+  "В поиске действий найдите «Mora» → «Start Wallet Payment».": "In Search Actions, find Mora → “Start Wallet Payment”.",
+  "Нажмите на поле Merchant, затем на «Входные данные команды» под блоком «Получить транзакцию».": "Tap the Merchant field, then tap Shortcut Input below “Receive transaction as input”.",
+  "Нажмите на вставленную переменную и выберите свойство Merchant. Так же для Name и Card or Pass — у каждого поля своё свойство.": "Tap the inserted variable and choose the Merchant property. Do the same for Name and Card or Pass: each field gets its own property.",
+  "Одно поле: в транзакции уже есть сумма, продавец, карта и имя.": "One field: the transaction already holds the amount, merchant, card and name.",
+  "Нажмите на поле Transaction, затем на «Входные данные команды». Свойство менять не нужно: «Транзакция» уже выбрана.": "Tap the Transaction field, then Shortcut Input. Leave the property as is: Transaction is already selected.",
+  "Получить транзакцию как входные данные": "Receive transaction as input",
+  "Сумма": "Amount",
+  "Продавец": "Merchant"
 }

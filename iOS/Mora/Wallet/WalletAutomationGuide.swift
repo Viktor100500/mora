@@ -73,21 +73,26 @@ struct WalletAutomationGuide: View {
         case 3:
             header(3, "Первое действие — Start Wallet Payment", "Оно сохраняет покупку до того, как iOS прочитает сумму.")
             GuideMock {
-                ActionMock(title: "Start Wallet Payment", parts: [.text("Start payment at "), .token("Продавец"), .text(" named "), .token("Имя"), .text(" with "), .token("Карта или пропуск")])
+                VStack(spacing: 8) {
+                    InputMock()
+                    ActionMock(title: "Start Wallet Payment", parts: [.text("Start payment at "), .token("Продавец"), .text(" named "), .token("Имя"), .text(" with "), .token("Карта или пропуск")])
+                }
             }
-            instructions(["Нажмите «Добавить действие» и найдите «Start Wallet Payment».",
-                          "Нажмите на синее поле → «Входные данные команды».",
-                          "Нажмите на неё ещё раз и выберите свойство, как на картинке. Так для всех трёх полей."])
+            instructions(["В поиске действий найдите «Mora» → «Start Wallet Payment».",
+                          "Нажмите на поле Merchant, затем на «Входные данные команды» под блоком «Получить транзакцию».",
+                          "Нажмите на вставленную переменную и выберите свойство Merchant. Так же для Name и Card or Pass — у каждого поля своё свойство."])
+            GuideMock { PropertyListMock(selected: "Продавец") }
         case 4:
-            header(4, "Последнее действие — Finish Wallet Payment", "Одно поле, без выбора свойства: Mora сама достанет сумму из транзакции.")
+            header(4, "Последнее действие — Finish Wallet Payment", "Одно поле: в транзакции уже есть сумма, продавец, карта и имя.")
             GuideMock {
-                VStack(spacing: 10) {
+                VStack(spacing: 8) {
+                    InputMock()
                     ActionMock(title: "Start Wallet Payment", parts: [.text("Start payment at "), .token("Продавец"), .text(" …")], dimmed: true)
                     ActionMock(title: "Finish Wallet Payment", parts: [.text("Finish payment with "), .token("Входные данные команды")])
                 }
             }
             instructions(["Добавьте «Finish Wallet Payment» под первым действием.",
-                          "Нажмите на синее поле → «Входные данные команды». Свойство выбирать не нужно.",
+                          "Нажмите на поле Transaction, затем на «Входные данные команды». Свойство менять не нужно: «Транзакция» уже выбрана.",
                           "Нажмите «Готово»."])
         default:
             header(5, "Проверьте настройку", "Заплатите чем-нибудь Apple Pay — Mora покажет здесь, что передал Wallet.")
@@ -275,6 +280,39 @@ private struct TriggerOptionsMock: View {
 
     private func row<C: View>(@ViewBuilder _ content: () -> C) -> some View {
         HStack(spacing: 10) { content() }.padding(.horizontal, 14).frame(height: 46)
+    }
+}
+
+/// The automation's first block, above the actions.
+private struct InputMock: View {
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "square.and.arrow.down.on.square").foregroundStyle(.blue)
+            Text(L("Получить транзакцию как входные данные")).font(.subheadline)
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .background(Color.moraCard, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+}
+
+/// The property list that opens after tapping an inserted Shortcut Input.
+private struct PropertyListMock: View {
+    let selected: String
+    private let properties = ["Транзакция", "Карта или пропуск", "Продавец", "Сумма", "Имя"]
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(properties, id: \.self) { property in
+                HStack {
+                    Text(L(property)).font(.subheadline)
+                    Spacer()
+                    if property == selected { Image(systemName: "checkmark").font(.subheadline.weight(.semibold)).foregroundStyle(.blue) }
+                }
+                .padding(.horizontal, 14).frame(height: 40)
+                if property != properties.last { Divider().padding(.leading, 14) }
+            }
+        }
+        .background(Color.moraCard, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 
