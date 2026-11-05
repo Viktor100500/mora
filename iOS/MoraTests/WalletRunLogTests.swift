@@ -141,6 +141,30 @@ final class WalletRunLogTests: XCTestCase {
         XCTAssertEqual(runs.first?.delivery, .incomplete, "then the user processes it")
     }
 
+    func testAmountIsTakenFromTheWholeTransaction() async throws {
+        XCTAssertEqual(WalletRunLog.amount(in: "Target\n$1,234.56\nChase Freedom"), "$1,234.56")
+        XCTAssertEqual(WalletRunLog.amount(in: "Kafa 12,40 € Raiffeisen"), "12,40 €")
+        XCTAssertEqual(WalletRunLog.amount(in: "RSD 1.250,00"), "RSD 1.250,00")
+        XCTAssertNil(WalletRunLog.amount(in: "OMNY Visa"))
+
+        try WalletRunLog.record(amount: nil, merchant: "Target", card: "Chase", action: "Start Wallet Payment",
+                                awaitingAmount: true, sending: true, at: start, in: directory)
+        let delivery = WalletDelivery(directory: directory) { _ in throw URLError(.notConnectedToInternet) }
+        await delivery.addAmount("", transaction: "Target $12.40 Chase", now: start.addingTimeInterval(3))
+        let run = try XCTUnwrap(WalletRunLog.runs(in: directory).first)
+        XCTAssertEqual(run.amount, "$12.40"); XCTAssertEqual(run.transaction, "Target $12.40 Chase"); XCTAssertTrue(run.amountActionRan)
+    }
+
+    func testMissingFieldsAreTakenFromTheWholeTransaction() {
+        var run = WalletRun(receivedAt: start, amount: "", merchant: "", card: "")
+        WalletRunLog.fill(&run, from: "Shell Oil 5741\n$48.10\nChase Freedom", knownCards: ["Chase Freedom"])
+        XCTAssertEqual(run.card, "Chase Freedom"); XCTAssertEqual(run.sentMerchant, "Shell Oil 5741")
+
+        var known = WalletRun(receivedAt: start, amount: "", merchant: "Shell", card: "Visa")
+        WalletRunLog.fill(&known, from: "Other\nChase Freedom", knownCards: ["Chase Freedom"])
+        XCTAssertEqual(known.card, "Visa"); XCTAssertEqual(known.sentMerchant, "Shell", "fields from the first action win")
+    }
+
     func testServerAnswersMapToRetryOrDecision() {
         XCTAssertEqual(WalletDelivery.outcome(status: 200, data: Data(#"{"state":"pending","reason":"x"}"#.utf8)), .delivered(state: "pending", reason: "x"))
         XCTAssertEqual(WalletDelivery.outcome(status: 401, data: Data()), .keyRejected)

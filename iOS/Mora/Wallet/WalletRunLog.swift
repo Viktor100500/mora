@@ -43,6 +43,8 @@ struct WalletRun: Codable, Identifiable, Equatable, Sendable {
     var transaction = ""
     /// The Mora action that saved the run.
     var action = ""
+    /// "Finish Wallet Payment" ran for this purchase: the automation is set up in two steps.
+    var amountActionRan = false
     var delivery: Delivery = .logged
     var attempts = 0
     var lastError: String?
@@ -79,6 +81,7 @@ struct WalletRun: Codable, Identifiable, Equatable, Sendable {
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
         transaction = try c.decodeIfPresent(String.self, forKey: .transaction) ?? ""
         action = try c.decodeIfPresent(String.self, forKey: .action) ?? ""
+        amountActionRan = try c.decodeIfPresent(Bool.self, forKey: .amountActionRan) ?? false
         delivery = try c.decodeIfPresent(Delivery.self, forKey: .delivery) ?? .logged
         attempts = try c.decodeIfPresent(Int.self, forKey: .attempts) ?? 0
         lastError = try c.decodeIfPresent(String.self, forKey: .lastError)
@@ -127,6 +130,35 @@ enum WalletRunLog {
         files(in: directory)
             .compactMap { try? decoder.decode(WalletRun.self, from: Data(contentsOf: $0)) }
             .sorted { $0.receivedAt > $1.receivedAt }
+    }
+
+    /// The first money value in the text of a Wallet transaction, such as "$12.40" or "12,40 €".
+    static func amount(in text: String) -> String? {
+        let number = #"[0-9]{1,3}(?:[ ,.\u00A0\u202F][0-9]{3})*(?:[.,][0-9]{1,2})?"#
+        let symbol = #"(?:[$€£¥₽]|[A-Z]{3})"#
+        for pattern in [symbol + #"\s?"# + number, number + #"\s?"# + symbol] {
+            if let range = text.range(of: pattern, options: .regularExpression) { return String(text[range]) }
+        }
+        return nil
+    }
+
+    /// Merchant, card and name missing from the first action, taken from the whole transaction
+    /// as text. A line equal to a card already seen on this iPhone is the card; the first
+    /// other line without the amount is the merchant.
+    static func fill(_ run: inout WalletRun, from text: String, knownCards: [String]) {
+        let amount = Self.amount(in: text)
+        let lines = text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        let cards = Set(knownCards.map { $0.lowercased() })
+        let card = lines.first { cards.contains($0.lowercased()) }
+        let merchant = lines.first { $0 != card && $0 != amount && Self.amount(in: $0) == nil }
+        if run.card.isEmpty, let card { run.card = card }
+        if run.merchant.isEmpty && run.name.isEmpty, let merchant { run.name = merchant }
+    }
+
+    /// Every run with all fields Wallet passed, to study what the automation sends.
+    static func export(in directory: URL = directory) -> String {
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601; encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        return (try? encoder.encode(runs(in: directory))).flatMap { String(data: $0, encoding: .utf8) } ?? "[]"
     }
 
     /// Removes the journal but keeps purchases that still wait for sending or a decision.
@@ -178,6 +210,9 @@ extension WalletRun {
 /// purchase is saved first and sent when Apple Pay is turned on in Mora.
 struct LogWalletPaymentIntent: AppIntent {
     static let title: LocalizedStringResource = "Log Wallet Payment"
+    /// Replaced by the two-step automation: automations that already use it keep
+    /// working, but it is no longer offered in Shortcuts.
+    static let isDiscoverable = false
     static let description = IntentDescription("Saves the amount, merchant and card of a Wallet transaction on this iPhone. When Apple Pay is turned on in Mora, also sends the purchase to the shared database and retries it later without internet.")
     static let openAppWhenRun = false
     static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
@@ -207,7 +242,7 @@ struct LogWalletPaymentIntent: AppIntent {
 /// and card before the amount is read keeps such a purchase for the user to process.
 struct StartWalletPaymentIntent: AppIntent {
     static let title: LocalizedStringResource = "Start Wallet Payment"
-    static let description = IntentDescription("First action of the Wallet automation: saves the merchant, card and name of the transaction on this iPhone. Add “Add Wallet Amount” after it.")
+    static let description = IntentDescription("First action of the Wallet automation: saves the merchant, card and name of the transaction on this iPhone. Add “Finish Wallet Payment” after it.")
     static let openAppWhenRun = false
     static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
 
@@ -228,18 +263,22 @@ struct StartWalletPaymentIntent: AppIntent {
     }
 }
 
-/// Second action: adds the amount to the purchase saved a moment ago and sends it.
+/// Second, last action: receives the whole transaction ("Shortcut Input"), takes
+/// the amount from it and sends the purchase saved a moment ago. If iOS fails
+/// while turning the transaction into text, the purchase is already saved.
 struct AddWalletAmountIntent: AppIntent {
-    static let title: LocalizedStringResource = "Add Wallet Amount"
-    static let description = IntentDescription("Last action of the Wallet automation: adds the amount to the purchase saved by “Start Wallet Payment” and sends it.")
+    static let title: LocalizedStringResource = "Finish Wallet Payment"
+    static let description = IntentDescription("Last action of the Wallet automation: pass Shortcut Input as is. Mora takes the amount from the transaction, completes the purchase saved by “Start Wallet Payment” and sends it.")
     static let openAppWhenRun = false
     static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
 
-    @Parameter(title: "Amount") var amount: String?
-    /// Read here, after the purchase is saved: if iOS fails on it, nothing is lost.
     @Parameter(title: "Transaction") var transaction: String?
+    /// Kept for automations set up with an explicit Amount property; used before the parsed amount.
+    @Parameter(title: "Amount") var amount: String?
 
-    static var parameterSummary: some ParameterSummary { Summary("Add amount \(\.$amount) of \(\.$transaction)") }
+    static var parameterSummary: some ParameterSummary {
+        Summary("Finish payment with \(\.$transaction)") { \.$amount }
+    }
 
     func perform() async throws -> some IntentResult {
         await WalletDelivery.shared.addAmount(amount ?? "", transaction: transaction ?? "")
@@ -256,10 +295,8 @@ struct MoraAppShortcuts: AppShortcutsProvider {
         AppShortcut(intent: StartWalletPaymentIntent(), phrases: ["Start Wallet payment in \(.applicationName)"],
                     shortTitle: "Start Wallet Payment", systemImageName: "wallet.pass")
         AppShortcut(intent: AddWalletAmountIntent(), phrases: ["Add Wallet amount in \(.applicationName)"],
-                    shortTitle: "Add Wallet Amount", systemImageName: "dollarsign.circle")
+                    shortTitle: "Finish Wallet Payment", systemImageName: "dollarsign.circle")
         AppShortcut(intent: LogBankMessageIntent(), phrases: ["Log bank message in \(.applicationName)"],
                     shortTitle: "Log Bank Message", systemImageName: "message")
-        AppShortcut(intent: LogWalletPaymentIntent(), phrases: ["Log Wallet payment in \(.applicationName)"],
-                    shortTitle: "Log Wallet Payment", systemImageName: "wallet.pass")
     }
 }

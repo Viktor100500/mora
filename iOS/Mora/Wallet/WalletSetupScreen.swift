@@ -7,6 +7,7 @@ import FinanceCore
 struct WalletSetupScreen: View {
     @EnvironmentObject private var store: FinanceStore
     @EnvironmentObject private var cloud: CloudSync
+    @EnvironmentObject private var router: AppRouter
     @State private var sender = WalletSender.current()
     @State private var label = UIDevice.current.name
     @State private var cards: [WalletCardAssignment] = []
@@ -67,15 +68,28 @@ struct WalletSetupScreen: View {
                     .font(.footnote).foregroundStyle(.orange)
             }
         } header: { Text(L("Apple Pay включён")) }
+        automationSection
         WalletCardsSection()
-        Section {
-            Text(L(Self.automationText)).font(.subheadline)
-        } header: { Text(L("Автоматизация на iPhone")) } footer: {
-            Text(L("iOS прерывает автоматизацию, если у транзакции ещё нет суммы (транспорт, отложенные списания). Поэтому сумма читается последним действием: покупка уже сохранена, и её можно обработать в Mora."))
-        }
     }
 
-    static let automationText = "1. Быстрые команды → Автоматизация → «Транзакция»: отметьте все карты и включите «Запускать сразу».\n2. Первое действие — «Start Wallet Payment» (Mora): Merchant, Card or Pass и Name из «Входных данных команды».\n3. Второе, последнее действие — «Add Wallet Amount» (Mora): Amount и Transaction из «Входных данных команды».\n4. Удалите из автоматизации «Log Wallet Payment» и прежнюю команду отправки, иначе покупка придёт дважды."
+    /// Whether the last payment came through the two-step automation.
+    @ViewBuilder private var automationSection: some View {
+        let last = WalletRunLog.runs().first { $0.delivery != .duplicate }
+        let ready = last.map(WalletAutomationCheck.isReady) == true
+        Section {
+            HStack(spacing: 12) {
+                IconTile(icon: ready ? "checkmark.seal" : "wand.and.stars", color: ready ? "green" : "orange", size: 42)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(L(ready ? "Автоматизация работает" : last == nil ? "Автоматизация ещё не настроена" : "Автоматизацию нужно обновить")).font(.headline)
+                    Text(L(ready ? "Последняя оплата пришла через «Start Wallet Payment» и «Finish Wallet Payment»." : "Пошаговый помощник, около двух минут."))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Button { router.open(.walletGuide) } label: {
+                Label(L(ready ? "Открыть помощника" : "Настроить автоматизацию"), systemImage: "list.number")
+            }
+        } header: { Text(L("Автоматизация на iPhone")) }
+    }
 
     @ViewBuilder private var setup: some View {
         if cloud.householdID == nil {
@@ -128,6 +142,7 @@ struct WalletSetupScreen: View {
                         }).filter { !$0.value.isEmpty }
                         if await cloud.enableWalletSender(label: label.trimmingCharacters(in: .whitespaces), cards: assignments, otherCurrencies: other) {
                             sender = WalletSender.current()
+                            router.open(.walletGuide)
                         }
                     }
                 }

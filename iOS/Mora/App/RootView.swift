@@ -96,6 +96,7 @@ struct RootView: View {
         case "account": router.sheet = .account(nil)
         case "category": router.sheet = .category(nil, .expense)
         case "welcome": router.sheet = .welcome
+        case "wallet-guide": router.sheet = .walletGuide
         default: break
         }
     }
@@ -141,6 +142,7 @@ private struct SheetContent: View {
         case .csv(let table, let name): CSVImportView(table: table, filename: name)
         case .walletReview(let capture): TransactionEditor(walletCapture: capture, ledger: store.ledger).id(capture.id)
         case .walletRun(let run, let account): TransactionEditor(walletRun: (run, account), ledger: store.ledger).id(run.id)
+        case .walletGuide: WalletAutomationGuide()
         }
     }
 }

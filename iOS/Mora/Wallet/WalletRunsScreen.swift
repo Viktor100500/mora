@@ -30,13 +30,7 @@ struct WalletRunsScreen: View {
             }
         }
         .navigationTitle(L("Запуски Wallet"))
-        .toolbar {
-            if waiting {
-                Button(L("Отправить")) { Task { await deliver() } }.disabled(sending)
-            } else if !runs.isEmpty {
-                Button(L("Очистить"), role: .destructive) { confirmClear = true }
-            }
-        }
+        .toolbar { toolbar }
         .confirmationDialog(L("Очистить журнал запусков?"), isPresented: $confirmClear, titleVisibility: .visible) {
             Button(L("Очистить"), role: .destructive) { WalletRunLog.clear(); reload() }
         } message: { Text(L("Покупки, которые ждут отправки или решения, останутся.")) }
@@ -44,6 +38,23 @@ struct WalletRunsScreen: View {
         .onAppear(perform: reload)
         .onChange(of: router.sheet == nil) { _, closed in if closed { reload() } }
         .onChange(of: scenePhase) { _, phase in if phase == .active { reload() } }
+    }
+
+    @ToolbarContentBuilder private var toolbar: some ToolbarContent {
+        if !runs.isEmpty {
+            ToolbarItem(placement: .topBarLeading) {
+                ShareLink(item: WalletRunLog.export(), preview: SharePreview(L("Журнал запусков Wallet"))) {
+                    Label(L("Экспорт журнала"), systemImage: "square.and.arrow.up")
+                }
+            }
+        }
+        ToolbarItem(placement: .primaryAction) {
+            if waiting {
+                Button(L("Отправить")) { Task { await deliver() } }.disabled(sending)
+            } else if !runs.isEmpty {
+                Button(L("Очистить"), role: .destructive) { confirmClear = true }
+            }
+        }
     }
 
     private func reload() { runs = WalletRunLog.runs() }
