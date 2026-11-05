@@ -50,7 +50,7 @@ struct OverviewScreen: View {
             .refreshable {
                 await store.reloadFromDisk()
                 async let rates: Void = store.refreshExchangeRates()
-                async let sync: Void = cloud.synchronize(notifyResult: true)
+                async let sync: Void = cloud.refresh()
                 _ = await (rates, sync)
             }
         }

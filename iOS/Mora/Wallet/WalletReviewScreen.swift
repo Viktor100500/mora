@@ -20,6 +20,8 @@ struct WalletReviewScreen: View {
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var queue: WalletReviewQueue
     @State private var deleting: Item?
+    /// Deleted rows leave at once instead of coming back until the delete is saved.
+    @State private var removed: Set<UUID> = []
 
     struct Item: Identifiable {
         enum Source { case iPhone(WalletRun), server(CloudCapture) }
@@ -41,7 +43,7 @@ struct WalletReviewScreen: View {
             Item(id: $0.id, merchant: $0.merchant, amount: $0.amount.isEmpty ? "" : $0.amount + ($0.currency.isEmpty ? "" : " " + $0.currency),
                  date: $0.date, card: $0.card ?? "", reason: $0.reason ?? "Нужна проверка", source: .server($0))
         }
-        return (local + server).sorted { $0.date > $1.date }
+        return (local + server).filter { !removed.contains($0.id) }.sorted { $0.date > $1.date }
     }
 
     var body: some View {
@@ -79,12 +81,15 @@ struct WalletReviewScreen: View {
     }
 
     private func delete(_ item: Item) {
+        withAnimation { _ = removed.insert(item.id) }
         Task {
             switch item.source {
             case .iPhone(let run): await WalletDelivery.shared.skip(run.id)
             case .server(let capture): await cloud.dismissCapture(capture)
             }
             queue.reload()
+            // Back in the list only if the delete failed.
+            removed.remove(item.id)
         }
     }
 

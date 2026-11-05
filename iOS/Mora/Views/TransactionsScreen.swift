@@ -64,7 +64,7 @@ struct TransactionsScreen: View {
             }
             .listStyle(.insetGrouped)
             .environment(\.editMode, $editMode)
-            .refreshable { await store.reloadFromDisk(); await cloud.synchronize(notifyResult: true) }
+            .refreshable { await store.reloadFromDisk(); await cloud.refresh() }
             .searchable(text: $filters.text, prompt: L("Поиск по описанию, заметкам и тегам"))
             .navigationTitle(L("Операции"))
             .toolbar { toolbar }

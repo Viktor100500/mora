@@ -56,7 +56,7 @@ struct CloudScreen: View {
         .navigationTitle(L("Общая база"))
         .disabled(cloud.busy)
         .overlay { if cloud.busy { ProgressView().controlSize(.large) } }
-        .refreshable { await cloud.refreshLists(); await cloud.synchronize(notifyResult: true) }
+        .refreshable { await cloud.refreshLists(); await cloud.refresh() }
         .onAppear {
             if url.isEmpty { url = cloud.projectURL }
             if key.isEmpty { key = cloud.publicKey }

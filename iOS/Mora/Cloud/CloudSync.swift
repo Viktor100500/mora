@@ -41,6 +41,8 @@ final class CloudSync: ObservableObject {
     /// The whole server inbox; `pending` shows only the purchases that need the user.
     private var inbox: [CloudCapture] = []
     private var attemptedCaptures: Set<UUID> = []
+    /// Captures the user deleted that the server has not confirmed yet: a sync in between must not bring them back.
+    private var dismissing: Set<UUID> = []
     private var synchronizing = false
 
     init(transport: URLSession = .shared) { self.transport = transport }
@@ -204,7 +206,7 @@ final class CloudSync: ObservableObject {
                 store?.showToast(L("Синхронизация с облаком завершена"),
                     detail: pending.isEmpty ? nil : L("Покупок на проверке: \(pending.count)"))
             }
-        } catch is CancellationError {
+        } catch let error where error is CancellationError || (error as? URLError)?.code == .cancelled {
             if reportSyncResult { store?.showToast(L("Синхронизация с облаком отменена"), kind: .warning) }
         } catch {
             if reportSyncResult {
@@ -300,11 +302,12 @@ final class CloudSync: ObservableObject {
     /// Complete purchases stay out of the review inbox until automatic booking has tried them,
     /// so a purchase that is about to be booked never asks the user to check it.
     private func publishPending() {
-        let shown = enabled ? inbox.filter { capture in
+        let visible = inbox.filter { !dismissing.contains($0.id) }
+        let shown = enabled ? visible.filter { capture in
             attemptedCaptures.contains(capture.id) || store.map { !WalletReviewDraft.canBookAutomatically(capture, in: $0.ledger) } ?? true
-        } : inbox
+        } : visible
         if pending != shown { pending = shown }
-        let processing = shown.count < inbox.count
+        let processing = shown.count < visible.count
         if processingWallet != processing { withAnimation(.spring(duration: 0.35)) { processingWallet = processing } }
     }
     private func diskLedger() async throws -> Ledger {
@@ -402,6 +405,11 @@ final class CloudSync: ObservableObject {
 
     // MARK: Synchronization
 
+    /// Pull to refresh. SwiftUI cancels a refresh action when the screen is rebuilt
+    /// while it runs, which aborted the request; the sync runs on its own task instead.
+    func refresh() async {
+        await Task { await self.synchronize(notifyResult: true) }.value
+    }
     /// `notifyResult` reports the outcome of a sync the user asked for (pull to refresh, Sync now),
     /// like Reload on the Mac; routine polling stays quiet.
     func synchronize(inBackground: Bool = false, waitForCurrent: Bool = false, notifyResult: Bool = false) async {
@@ -641,12 +649,15 @@ final class CloudSync: ObservableObject {
         }
     }
     func dismissCapture(_ capture: CloudCapture) async {
+        dismissing.insert(capture.id); publishPending()
         await operation {
             guard let id = self.householdID else { return }
             let _: Bool = try await self.rpc("mora_resolve_capture", ResolveBody(p_household_id: id, p_capture_id: capture.id,
                 p_account_id: capture.account_id, p_amount: capture.amount, p_merchant: capture.merchant, p_dismiss: true))
             _ = try await self.loadPending(id)
         }
+        // A failed delete shows the purchase again together with the error.
+        dismissing.remove(capture.id); publishPending()
     }
     func review(_ capture: CloudCapture, transaction: Transaction) async -> Bool {
         var saved = false
