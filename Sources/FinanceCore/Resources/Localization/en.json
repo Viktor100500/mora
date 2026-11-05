@@ -1063,6 +1063,7 @@
   "Синхронизация…": "Synchronizing…",
   "Загружаем и обрабатываем новые операции. Список обновится после завершения.": "Downloading and processing new transactions. The list will update when finished.",
   "Загружаем покупки из Wallet…": "Loading Wallet purchases…",
+  "Открываем ваши финансы…": "Opening your finances…",
   "Не удалось загрузить покупки из Wallet": "Could not load Wallet purchases",
   "Синхронизация завершена": "Synchronization complete",
   "Синхронизация не завершена": "Synchronization incomplete",

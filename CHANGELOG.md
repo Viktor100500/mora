@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.6.40 — 2026-11-04
+
+- Mac: an opaque Mora launch screen with a softly glowing particle network. Nearby particles connect with brighter lines and move away from the pointer. The screen fades into the ready app without an added delay; Reduce Motion keeps the network still. The welcome sheet appears after the transition.
+
 ## 1.6.39 — 2026-11-04
 
 - iPhone 1.0.26: purchases from bank text messages and, on iOS 27, bank app notifications. A Shortcuts "Message" or "Notification" automation passes the text to the new Mora action Log Bank Message. One-time codes, fraud checks, declines and offers are skipped without saving their text. The first message of a new format waits under More → Bank Texts and Notifications: check the amount and pick the merchant by tapping words, and Mora remembers the format so later messages are sent to the shared database automatically. Cards are named after the sender and last four digits, for example `Raiffeisen ··5109`, and are linked to an account once like Wallet cards.

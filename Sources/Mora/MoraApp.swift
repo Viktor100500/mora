@@ -118,6 +118,7 @@ struct ContentView: View {
     @State private var confirmStart = false
     @State private var rollbackRequest: UUID?
     @State private var reloadingCloud = false
+    @State private var showingLaunchScreen = true
     @AppStorage("mora.hideAmounts") private var hideAmounts = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var currency: String { store.ledger.preferences.baseCurrency }
@@ -181,20 +182,29 @@ struct ContentView: View {
                 .background(scheme == .dark ? Color(nsColor: .windowBackgroundColor) : Color(red: 0.965, green: 0.965, blue: 0.95))
             }
         }
+        .opacity(showingLaunchScreen ? 0 : 1)
+        .accessibilityHidden(showingLaunchScreen)
         .frame(minWidth: 1040, minHeight: 700)
         .disabled(store.isLoading || store.isTerminating)
-        .overlay { if store.isLoading { ProgressView().controlSize(.large) } }
         .overlay(alignment: .bottomTrailing) {
             currencyWarning.frame(maxWidth: 680).padding(24).transition(.opacity)
         }
         .modifier(FloatingNotificationOverlay(event: store.activeNotice, close: { store.notice = nil }))
+        .overlay {
+            if showingLaunchScreen { LaunchScreen().ignoresSafeArea().transition(.opacity) }
+        }
         .smoothUpdates(value: page)
         .smoothUpdates(value: month)
         .onDisappear { monthPreparation?.cancel() }
         .task {
             await store.load()
-            if store.isDemo && !didSeeWelcome && !CommandLine.arguments.contains("--demo") && sheet == nil {
-                sheet = .welcome
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeInOut(duration: reduceMotion ? 0.15 : 0.6)) {
+                showingLaunchScreen = false
+            } completion: {
+                if store.isDemo && !didSeeWelcome && !CommandLine.arguments.contains("--demo") && sheet == nil {
+                    sheet = .welcome
+                }
             }
         }
         .onReceive(dataRefresh) { _ in Task { @MainActor in  await store.reloadFromDisk()  } }
@@ -219,15 +229,17 @@ struct ContentView: View {
         .toolbarBackground(.hidden, for: .windowToolbar)
         .toolbar(removing: .sidebarToggle)
         .toolbar {
-            if #available(macOS 26.0, *) {
-                ToolbarSpacer(.flexible, placement: .primaryAction)
-                ToolbarItem(placement: .primaryAction) {
-                    HStack(spacing: 10) { importControl; reloadControl; transactionControls }
-                }
-                    .sharedBackgroundVisibility(.hidden)
-            } else {
-                ToolbarItemGroup(placement: .primaryAction) {
-                    HStack(spacing: 10) { importControl; reloadControl; transactionControls }
+            if !showingLaunchScreen {
+                if #available(macOS 26.0, *) {
+                    ToolbarSpacer(.flexible, placement: .primaryAction)
+                    ToolbarItem(placement: .primaryAction) {
+                        HStack(spacing: 10) { importControl; reloadControl; transactionControls }
+                    }
+                        .sharedBackgroundVisibility(.hidden)
+                } else {
+                    ToolbarItemGroup(placement: .primaryAction) {
+                        HStack(spacing: 10) { importControl; reloadControl; transactionControls }
+                    }
                 }
             }
         }
