@@ -14,7 +14,6 @@ struct OverviewScreen: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    ScrollTopAnchor()
                     if store.isDemo { DemoBanner() }
                     WalletReviewBanner()
                     MonthSwitcher(month: $router.month)
@@ -33,8 +32,8 @@ struct OverviewScreen: View {
                     StorageFooter()
                 }
                 .padding(.horizontal, 16).padding(.bottom, 24)
+                .scrollsToTopOnReselect(.overview)
             }
-            .scrollsToTopOnReselect(.overview)
             .background(Color.moraBackground)
             .navigationTitle(L("Обзор"))
             .toolbar {

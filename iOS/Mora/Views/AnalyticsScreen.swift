@@ -41,7 +41,6 @@ struct AnalyticsScreen: View {
         NavigationStack {
             ScrollView {
                 LazyVStack(spacing: 16) {
-                    ScrollTopAnchor()
                     MonthSwitcher(month: $router.month)
                     Card {
                         VStack(alignment: .leading, spacing: 12) {
@@ -96,8 +95,8 @@ struct AnalyticsScreen: View {
                     if detail == .selectedDates && !selectedDays.isEmpty { selectedTransactions }
                 }
                 .padding(.horizontal, 16).padding(.bottom, 24)
+                .scrollsToTopOnReselect(.analytics)
             }
-            .scrollsToTopOnReselect(.analytics)
             .background(Color.moraBackground)
             .navigationTitle(L("Аналитика"))
             .onChange(of: router.month) { _, _ in

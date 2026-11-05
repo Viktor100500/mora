@@ -349,25 +349,44 @@ struct StorageFooter: View {
     }
 }
 
-/// The first row of a tab's ScrollView: tapping the open tab again scrolls back to it.
-struct ScrollTopAnchor: View {
-    static let id = "scroll-top"
-    var body: some View { Color.clear.frame(height: 0).id(Self.id) }
-}
-
 extension View {
-    /// Lists scroll to the top on a repeated tab tap by themselves; a ScrollView needs `ScrollTopAnchor` and this.
+    /// Applied to a tab's ScrollView content: tapping the open tab again scrolls back
+    /// to the very top, with the large title expanded, the way Lists do by themselves.
     func scrollsToTopOnReselect(_ tab: AppTab) -> some View { modifier(ScrollToTopOnReselect(tab: tab)) }
 }
 
 private struct ScrollToTopOnReselect: ViewModifier {
     @EnvironmentObject private var router: AppRouter
+    @State private var finder = ScrollViewFinder.Box()
     let tab: AppTab
+
     func body(content: Content) -> some View {
-        ScrollViewReader { proxy in
-            content.onChange(of: router.reselections[tab]) {
-                withAnimation { proxy.scrollTo(ScrollTopAnchor.id, anchor: .top) }
+        content
+            .background(ScrollViewFinder(box: finder))
+            .onChange(of: router.reselections[tab]) {
+                guard let scrollView = finder.scrollView else { return }
+                // A collapsed large title shrinks the inset, so go back to the expanded one.
+                let top = max(finder.expandedTop, scrollView.adjustedContentInset.top)
+                scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: -top), animated: true)
             }
+    }
+}
+
+private struct ScrollViewFinder: UIViewRepresentable {
+    final class Box {
+        weak var scrollView: UIScrollView?
+        /// The top inset seen while the large title was expanded.
+        var expandedTop: CGFloat = 0
+    }
+    let box: Box
+
+    func makeUIView(context: Context) -> UIView { UIView() }
+    func updateUIView(_ view: UIView, context: Context) {
+        Task { @MainActor in
+            var parent = view.superview
+            while let current = parent, !(current is UIScrollView) { parent = current.superview }
+            box.scrollView = parent as? UIScrollView
+            if let scrollView = box.scrollView { box.expandedTop = max(box.expandedTop, scrollView.adjustedContentInset.top) }
         }
     }
 }
