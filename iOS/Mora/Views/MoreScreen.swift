@@ -39,6 +39,7 @@ struct MoreScreen: View {
                             }
                         }
                     }
+                    NavigationLink { BankAlertsScreen() } label: { Label(L("SMS и уведомления банков"), systemImage: "message.badge") }
                     NavigationLink { SettingsScreen() } label: { Label(L("Настройки"), systemImage: "slider.horizontal.3") }
                 }
                 SupportSection()

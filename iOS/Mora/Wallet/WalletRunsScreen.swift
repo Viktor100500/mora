@@ -94,7 +94,8 @@ struct WalletRunsScreen: View {
         case .failed: ("Сервер не принял покупку", "xmark", "orange")
         case .processed: ("Обработано", "checkmark", "green")
         case .skipped: ("Не учитывается", "minus", "gray")
-        case .duplicate: ("Пустой повтор запуска", "minus", "gray")
+        case .duplicate: run.isEmpty ? ("Пустой повтор запуска", "minus", "gray")
+            : ("Уже записано из SMS или уведомления банка", "square.on.square", "gray")
         }
     }
 }

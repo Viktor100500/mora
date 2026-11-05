@@ -193,7 +193,11 @@ enum WalletBackgroundDelivery {
 
     /// Sends what waits and asks iOS for another attempt while something still waits.
     static func run() async {
-        if let sender = WalletSender.current() { await WalletDelivery.shared.deliverWaiting(with: sender) }
+        if let sender = WalletSender.current() {
+            BankAlertLog.reconcileWallet()
+            await WalletDelivery.shared.deliverWaiting(with: sender)
+            await BankAlertDelivery.shared.deliverWaiting(with: sender)
+        }
         await scheduleIfNeeded()
     }
 

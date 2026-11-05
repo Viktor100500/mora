@@ -1,0 +1,313 @@
+import Foundation
+import AppIntents
+import FinanceCore
+
+/// A bank text message or app notification passed to Mora by a Shortcuts automation.
+/// One-time codes and unrelated messages are kept only as a line without their text.
+struct BankAlert: Codable, Identifiable, Equatable, Sendable {
+    enum State: String, Codable, Sendable {
+        /// Not a purchase: a code, a fraud check, a decline or an offer. The text is not kept.
+        case ignored
+        /// A new wording: the user checks the fields once and Mora remembers the format.
+        case review
+        /// Apple Pay is not turned on in Mora: nothing can be sent.
+        case logged
+        case waiting
+        case delivered
+        case failed
+        /// The same purchase already came from the Wallet automation.
+        case duplicate
+        case skipped
+    }
+
+    var id = UUID()
+    var receivedAt: Date
+    /// The SMS sender or the app that sent the notification.
+    var source: String
+    var text: String
+    var amount = ""
+    var currency = ""
+    var merchant = ""
+    var cardLast4 = ""
+    var income = false
+    var state: State
+    var ignoredReason: BankMessage.Ignored?
+    /// The exact pieces of the text the amount and merchant came from.
+    var amountText = ""
+    var merchantText = ""
+    var attempts = 0
+    var lastError: String?
+    var serverState: String?
+    /// The Wallet run of the same purchase. A pair is never matched again.
+    var walletRunID: UUID?
+
+    /// The card name sent to the shared database. Mora links it to an account
+    /// the first time, like a Wallet card.
+    var card: String {
+        let name = source.trimmingCharacters(in: .whitespaces).isEmpty ? "SMS" : source
+        return cardLast4.isEmpty ? name : "\(name) ··\(cardLast4)"
+    }
+
+    var needsUser: Bool { state == .review || state == .failed }
+
+    var parsed: BankMessage.Parsed? {
+        guard let value = Money.parse(amount), value > 0 else { return nil }
+        return BankMessage.Parsed(amount: value, currency: currency.isEmpty ? nil : currency, merchant: merchant,
+                                  cardLast4: cardLast4.isEmpty ? nil : cardLast4, direction: income ? .income : .expense,
+                                  automatic: false, amountText: amountText, merchantText: merchantText)
+    }
+}
+
+/// One file per message like the Wallet journal, writable while the iPhone is
+/// locked after its first unlock. Writes after `record` go through `BankAlertDelivery`.
+enum BankAlertLog {
+    static let keptDays = 14
+
+    static var directory: URL {
+        URL.applicationSupportDirectory.appending(path: "Mora/BankAlerts", directoryHint: .isDirectory)
+    }
+    static var templatesFile: URL {
+        URL.applicationSupportDirectory.appending(path: "Mora/BankTemplates.json")
+    }
+
+    @discardableResult
+    static func record(text: String, source: String, sending: Bool, at date: Date = .now,
+                       directory: URL = directory, templates: [BankMessageTemplate] = templates(),
+                       walletRuns: [WalletRun] = WalletRunLog.runs()) throws -> BankAlert {
+        let source = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        var alert: BankAlert
+        switch BankMessage.parse(text, sender: source, templates: templates) {
+        case .ignored(let reason):
+            alert = BankAlert(receivedAt: date, source: source, text: "", state: .ignored, ignoredReason: reason)
+        case .parsed(let value):
+            alert = BankAlert(receivedAt: date, source: source, text: BankMessage.normalized(text), state: .review)
+            alert.apply(value)
+            if let run = pairableRun(for: alert, in: walletRuns, pairedIn: directory) {
+                alert.state = .duplicate; alert.walletRunID = run.id
+                alert.lastError = "Эта покупка уже пришла из Wallet: сообщение не отправлено."
+            } else if value.automatic && !alert.income {
+                alert.state = sending ? .waiting : .logged
+            }
+        }
+        try save(alert, in: directory)
+        prune(before: date.addingTimeInterval(-Double(keptDays) * 86_400), in: directory)
+        return alert
+    }
+
+    // MARK: Working together with the Wallet automation
+
+    /// A tap in a shop starts the Wallet automation and the bank reports the same purchase.
+    /// Wallet keeps the purchase; the message only completes what Wallet did not pass.
+    static let pairWindow: TimeInterval = 10 * 60
+
+    static func isSamePurchase(_ alert: BankAlert, _ run: WalletRun) -> Bool {
+        guard !alert.income, let amount = Money.parse(alert.amount), amount > 0,
+              let paid = Money.parse(run.amount).map(abs) else { return false }
+        return paid == amount && abs(run.receivedAt.timeIntervalSince(alert.receivedAt)) < pairWindow
+    }
+
+    static func pairableRun(for alert: BankAlert, in runs: [WalletRun], pairedIn directory: URL) -> WalletRun? {
+        let paired = Set(alerts(in: directory).compactMap(\.walletRunID))
+        return runs.first { !paired.contains($0.id) && $0.delivery != .duplicate && $0.delivery != .skipped && isSamePurchase(alert, $0) }
+    }
+
+    /// Runs right after a Wallet purchase is saved or gets its amount, before it is sent.
+    /// A message of the same purchase not sent yet is dropped; one already sent keeps
+    /// the purchase and the Wallet run is not sent.
+    static func reconcileWallet(now: Date = .now, directory: URL = directory, walletDirectory: URL = WalletRunLog.directory) {
+        var alerts = alerts(in: directory)
+        let paired = Set(alerts.compactMap(\.walletRunID))
+        for var run in WalletRunLog.runs(in: walletDirectory)
+        where run.delivery == .waiting && !paired.contains(run.id) && now.timeIntervalSince(run.receivedAt) < pairWindow {
+            guard let index = alerts.firstIndex(where: {
+                $0.walletRunID == nil && [.review, .waiting, .logged, .delivered].contains($0.state) && isSamePurchase($0, run)
+            }) else { continue }
+            alerts[index].walletRunID = run.id
+            if alerts[index].state == .delivered {
+                run.delivery = .duplicate
+                run.log("Уже записано из SMS или уведомления банка: не отправлено", at: now)
+                try? WalletRunLog.save(run, in: walletDirectory)
+            } else {
+                alerts[index].state = .duplicate
+                alerts[index].lastError = "Эта покупка уже пришла из Wallet: сообщение не отправлено."
+            }
+            try? save(alerts[index], in: directory)
+        }
+    }
+
+    static func save(_ alert: BankAlert, in directory: URL = directory) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
+                                                attributes: [.protectionKey: FileProtectionType.completeUntilFirstUserAuthentication])
+        try encoder.encode(alert).write(to: directory.appending(path: alert.id.uuidString + ".json"),
+                                        options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    }
+
+    /// Newest first.
+    static func alerts(in directory: URL = directory) -> [BankAlert] {
+        ((try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? [])
+            .filter { $0.pathExtension == "json" }
+            .compactMap { try? decoder.decode(BankAlert.self, from: Data(contentsOf: $0)) }
+            .sorted { $0.receivedAt > $1.receivedAt }
+    }
+
+    static func remove(_ id: UUID, in directory: URL = directory) {
+        try? FileManager.default.removeItem(at: directory.appending(path: id.uuidString + ".json"))
+    }
+
+    private static func prune(before date: Date, in directory: URL) {
+        for alert in alerts(in: directory) where alert.receivedAt < date && !alert.needsUser && alert.state != .waiting {
+            remove(alert.id, in: directory)
+        }
+    }
+
+    // MARK: Formats
+
+    static func templates(in file: URL = templatesFile) -> [BankMessageTemplate] {
+        (try? decoder.decode([BankMessageTemplate].self, from: Data(contentsOf: file))) ?? []
+    }
+
+    static func saveTemplates(_ templates: [BankMessageTemplate], in file: URL = templatesFile) throws {
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try encoder.encode(templates).write(to: file, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
+    }
+
+    /// Remembers the wording of a confirmed message. Nil when the merchant is not part of the text.
+    @discardableResult
+    static func learn(from text: String, source: String, parsed: BankMessage.Parsed, in file: URL = templatesFile) throws -> BankMessageTemplate? {
+        guard let template = BankMessageTemplate(learningFrom: text, sender: source, parsed: parsed) else { return nil }
+        var all = templates(in: file).filter { $0.pattern != template.pattern || $0.sender != template.sender }
+        all.append(template)
+        try saveTemplates(all, in: file)
+        return template
+    }
+
+    private static var encoder: JSONEncoder {
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601; return encoder
+    }
+
+    private static var decoder: JSONDecoder {
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601; return decoder
+    }
+}
+
+extension BankAlert {
+    mutating func apply(_ value: BankMessage.Parsed) {
+        amount = Money.plain(value.amount); currency = value.currency ?? ""
+        merchant = value.merchant; cardLast4 = value.cardLast4 ?? ""; income = value.direction == .income
+        amountText = value.amountText; merchantText = value.merchantText
+    }
+}
+
+/// Sends confirmed bank messages to `mora_capture_payment` with the Wallet phone key.
+/// The message id is the event id, so a retry never books a purchase twice.
+actor BankAlertDelivery {
+    static let shared = BankAlertDelivery()
+    typealias Transport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
+    private let directory: URL
+    private let transport: Transport
+
+    init(directory: URL = BankAlertLog.directory, transport: @escaping Transport = { try await URLSession.shared.data(for: $0) }) {
+        self.directory = directory; self.transport = transport
+    }
+
+    func deliverWaiting(with sender: WalletSender? = WalletSender.current()) async {
+        guard let sender else { return }
+        for var alert in BankAlertLog.alerts(in: directory).reversed() where alert.state == .waiting {
+            alert.attempts += 1
+            let outcome: WalletDelivery.Outcome
+            do {
+                let (data, response) = try await transport(Self.request(for: alert, with: sender))
+                outcome = WalletDelivery.outcome(status: (response as? HTTPURLResponse)?.statusCode ?? 0, data: data)
+            } catch { outcome = .retry(error.localizedDescription) }
+            switch outcome {
+            case .delivered(let state, _): alert.state = .delivered; alert.serverState = state; alert.lastError = nil
+            case .retry(let message): alert.lastError = message
+            case .keyRejected: alert.lastError = "Ключ телефона не принят: включите Apple Pay на iPhone заново."
+            case .refused(let message): alert.state = .failed; alert.lastError = message
+            }
+            try? BankAlertLog.save(alert, in: directory)
+            if case .retry = outcome { return }
+            if case .keyRejected = outcome { return }
+        }
+    }
+
+    /// The user checked the fields: Mora remembers the wording and sends the purchase.
+    func confirm(_ edited: BankAlert, sending: Bool) async -> Bool {
+        var alert = edited
+        var learned = false
+        if let parsed = alert.parsed { learned = (try? BankAlertLog.learn(from: alert.text, source: alert.source, parsed: parsed)) != nil }
+        guard alert.state != .duplicate else { try? BankAlertLog.save(alert, in: directory); return learned }
+        alert.state = alert.income ? .skipped : sending ? .waiting : .logged
+        if alert.income { alert.lastError = "Возвраты и зачисления пока добавляются вручную." }
+        try? BankAlertLog.save(alert, in: directory)
+        if sending { await deliverWaiting() }
+        return learned
+    }
+
+    /// Wallet passes no amount for transit taps and deferred authorizations. When the
+    /// bank reports the amount meanwhile, it completes the Wallet purchase instead of
+    /// becoming a second one.
+    func completeWallet(_ id: UUID, now: Date = .now) async {
+        guard var alert = BankAlertLog.alerts(in: directory).first(where: { $0.id == id }),
+              alert.state != .duplicate, alert.state != .ignored, !alert.income, !alert.amount.isEmpty,
+              let run = WalletRunLog.runs().first(where: {
+                  $0.delivery == .awaitingAmount && abs($0.receivedAt.timeIntervalSince(alert.receivedAt)) < BankAlertLog.pairWindow
+              }) else { return }
+        await WalletDelivery.shared.addAmount([alert.amount, alert.currency].filter { !$0.isEmpty }.joined(separator: " "), now: now)
+        alert.state = .duplicate; alert.walletRunID = run.id
+        alert.lastError = "Сумма добавлена к покупке из Wallet, которая пришла без суммы."
+        try? BankAlertLog.save(alert, in: directory)
+    }
+
+    func skip(_ id: UUID) {
+        guard var alert = BankAlertLog.alerts(in: directory).first(where: { $0.id == id }) else { return }
+        alert.state = .skipped
+        try? BankAlertLog.save(alert, in: directory)
+    }
+
+    static func request(for alert: BankAlert, with sender: WalletSender) -> URLRequest {
+        var request = URLRequest(url: sender.projectURL.appending(path: "rest/v1/rpc/mora_capture_payment"), timeoutInterval: 10)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(sender.publicKey, forHTTPHeaderField: "apikey")
+        let body: [String: String] = [
+            "p_token": sender.token, "p_event_id": alert.id.uuidString.lowercased(),
+            "p_amount": alert.amount, "p_currency": alert.currency, "p_merchant": alert.merchant,
+            "p_occurred_at": alert.receivedAt.ISO8601Format(), "p_card": alert.card,
+        ]
+        request.httpBody = try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+        return request
+    }
+}
+
+/// The Shortcuts action for the "Message" automation (bank SMS) and, on iOS 27,
+/// the "Notification" automation (bank and card apps). Runs without opening Mora,
+/// also on a locked iPhone, and never fails the automation.
+struct LogBankMessageIntent: AppIntent {
+    static let title: LocalizedStringResource = "Log Bank Message"
+    static let description = IntentDescription("Reads a purchase from a bank text message or app notification. One-time codes and other messages are dropped without saving their text. A new message format waits for review in Mora once; later messages in the same format are sent automatically.")
+    static let openAppWhenRun = false
+    static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
+
+    @Parameter(title: "Text") var text: String?
+    @Parameter(title: "From") var source: String?
+    @Parameter(title: "Title") var title: String?
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("Log \(\.$text) from \(\.$source)") { \.$title }
+    }
+
+    func perform() async throws -> some IntentResult {
+        let body = [title, text].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.joined(separator: "\n")
+        guard !body.isEmpty else { return .result() }
+        let sender = WalletSender.current()
+        if let alert = try? BankAlertLog.record(text: body, source: source ?? "", sending: sender != nil) {
+            await BankAlertDelivery.shared.completeWallet(alert.id)
+        }
+        if let sender {
+            await WalletDelivery.shared.deliverWaiting(with: sender)
+            await BankAlertDelivery.shared.deliverWaiting(with: sender)
+        }
+        return .result()
+    }
+}

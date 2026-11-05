@@ -194,6 +194,7 @@ struct LogWalletPaymentIntent: AppIntent {
     func perform() async throws -> some IntentResult {
         let sender = WalletSender.current()
         try? WalletRunLog.record(amount: amount, merchant: merchant, card: card, name: name, sending: sender != nil)
+        BankAlertLog.reconcileWallet()
         if let sender { await WalletDelivery.shared.deliverWaiting(with: sender) }
         await WalletBackgroundDelivery.scheduleIfNeeded()
         return .result()
@@ -242,6 +243,7 @@ struct AddWalletAmountIntent: AppIntent {
 
     func perform() async throws -> some IntentResult {
         await WalletDelivery.shared.addAmount(amount ?? "", transaction: transaction ?? "")
+        BankAlertLog.reconcileWallet()
         await WalletBackgroundDelivery.run()
         return .result()
     }
@@ -255,6 +257,8 @@ struct MoraAppShortcuts: AppShortcutsProvider {
                     shortTitle: "Start Wallet Payment", systemImageName: "wallet.pass")
         AppShortcut(intent: AddWalletAmountIntent(), phrases: ["Add Wallet amount in \(.applicationName)"],
                     shortTitle: "Add Wallet Amount", systemImageName: "dollarsign.circle")
+        AppShortcut(intent: LogBankMessageIntent(), phrases: ["Log bank message in \(.applicationName)"],
+                    shortTitle: "Log Bank Message", systemImageName: "message")
         AppShortcut(intent: LogWalletPaymentIntent(), phrases: ["Log Wallet payment in \(.applicationName)"],
                     shortTitle: "Log Wallet Payment", systemImageName: "wallet.pass")
     }

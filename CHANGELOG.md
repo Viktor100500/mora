@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.6.39 — 2026-11-04
+
+- iPhone 1.0.26: purchases from bank text messages and, on iOS 27, bank app notifications. A Shortcuts "Message" or "Notification" automation passes the text to the new Mora action Log Bank Message. One-time codes, fraud checks, declines and offers are skipped without saving their text. The first message of a new format waits under More → Bank Texts and Notifications: check the amount and pick the merchant by tapping words, and Mora remembers the format so later messages are sent to the shared database automatically. Cards are named after the sender and last four digits, for example `Raiffeisen ··5109`, and are linked to an account once like Wallet cards.
+- Bank messages and the Wallet automation work together: a purchase reported by both is recorded once, and a bank amount completes a Wallet purchase that arrived without one (transit taps).
+
 ## 1.6.36 — 2026-11-01
 
 - Multi-currency Wallet cards: besides its main account, a card can have one account per other currency. A purchase in that currency is booked to that account (for example RSD to the dinar account, USD to the dollar account); other currencies go to the main account with the usual Visa conversion. Set them when turning on Apple Pay on the iPhone (iPhone 1.0.22) or later in Apple Pay cards; waiting purchases are routed again. Requires the `wallet_card_currency_accounts` migration.

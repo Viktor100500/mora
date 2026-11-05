@@ -29,6 +29,12 @@ public enum BankMessage {
         /// The exact pieces of text the values came from, for learning a template.
         public var amountText: String
         public var merchantText: String
+
+        public init(amount: Decimal, currency: String?, merchant: String, cardLast4: String?, direction: Direction,
+                    automatic: Bool, amountText: String, merchantText: String) {
+            self.amount = amount; self.currency = currency; self.merchant = merchant; self.cardLast4 = cardLast4
+            self.direction = direction; self.automatic = automatic; self.amountText = amountText; self.merchantText = merchantText
+        }
     }
 
     public enum Result: Equatable, Sendable {
@@ -79,7 +85,8 @@ public enum BankMessage {
         patterns.contains { text.range(of: $0, options: [.regularExpression, .caseInsensitive]) != nil }
     }
 
-    private static func normalized(_ text: String) -> String {
+    /// Single spaces, line breaks kept: fields such as "Mesto:" stay on their own line.
+    public static func normalized(_ text: String) -> String {
         text.replacingOccurrences(of: "[\u{00a0}\u{202f}\u{2009}]", with: " ", options: .regularExpression)
             .replacingOccurrences(of: "[ \\t]+", with: " ", options: .regularExpression)
             .replacingOccurrences(of: " ?\\n[\\s]*", with: "\n", options: .regularExpression)
@@ -215,13 +222,14 @@ public struct BankMessageTemplate: Codable, Equatable, Identifiable, Sendable {
 
     /// Nil when the confirmed merchant or amount is not literally in the message.
     public init?(learningFrom text: String, sender: String, parsed: BankMessage.Parsed) {
-        var pattern = text.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-            .replacingOccurrences(of: "[\u{00a0}\u{202f}\u{2009}]", with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        func flat(_ value: String) -> String {
+            BankMessage.normalized(value).replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        }
+        var pattern = flat(text)
         guard !parsed.amountText.isEmpty, !parsed.merchantText.isEmpty,
-              let amount = pattern.range(of: parsed.amountText) else { return nil }
+              let amount = pattern.range(of: flat(parsed.amountText)) else { return nil }
         pattern.replaceSubrange(amount, with: "{amount}")
-        guard let merchant = pattern.range(of: parsed.merchantText) else { return nil }
+        guard let merchant = pattern.range(of: flat(parsed.merchantText)) else { return nil }
         pattern.replaceSubrange(merchant, with: "{merchant}")
         if let card = parsed.cardLast4, let range = pattern.range(of: card) { pattern.replaceSubrange(range, with: "{card}") }
         self.init(sender: sender.trimmingCharacters(in: .whitespaces), pattern: pattern, direction: parsed.direction)
