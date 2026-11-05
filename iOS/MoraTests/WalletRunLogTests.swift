@@ -95,11 +95,12 @@ final class WalletRunLogTests: XCTestCase {
         let sentEarly = await requests.all.count
         XCTAssertEqual(sentEarly, 0, "the purchase waits for its amount action")
 
-        await delivery.addAmount(" $12.40 ", now: start.addingTimeInterval(6))
+        await delivery.addAmount(" $12.40 ", transaction: " Purchase ", now: start.addingTimeInterval(6))
         await delivery.deliverWaiting(with: sender, now: start.addingTimeInterval(6))
         let runs = WalletRunLog.runs(in: directory)
         XCTAssertEqual(runs.count, 1)
         XCTAssertEqual(runs.first?.amount, "$12.40"); XCTAssertEqual(runs.first?.delivery, .delivered)
+        XCTAssertEqual(runs.first?.transaction, "Purchase")
         let sent = await requests.all
         let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(sent.first?.httpBody)) as? [String: String])
         XCTAssertEqual(body["p_amount"], "$12.40"); XCTAssertEqual(body["p_merchant"], "Target")

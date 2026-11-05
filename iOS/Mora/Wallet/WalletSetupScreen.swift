@@ -75,7 +75,7 @@ struct WalletSetupScreen: View {
         }
     }
 
-    static let automationText = "1. Быстрые команды → Автоматизация → «Транзакция»: отметьте все карты и включите «Запускать сразу».\n2. Первое действие — «Start Wallet Payment» (Mora): Merchant, Card or Pass и Name из «Входных данных команды».\n3. Второе, последнее действие — «Add Wallet Amount» (Mora): Amount из «Входных данных команды».\n4. Удалите из автоматизации «Log Wallet Payment» и прежнюю команду отправки, иначе покупка придёт дважды."
+    static let automationText = "1. Быстрые команды → Автоматизация → «Транзакция»: отметьте все карты и включите «Запускать сразу».\n2. Первое действие — «Start Wallet Payment» (Mora): Merchant, Card or Pass и Name из «Входных данных команды».\n3. Второе, последнее действие — «Add Wallet Amount» (Mora): Amount и Transaction из «Входных данных команды».\n4. Удалите из автоматизации «Log Wallet Payment» и прежнюю команду отправки, иначе покупка придёт дважды."
 
     @ViewBuilder private var setup: some View {
         if cloud.householdID == nil {

@@ -39,6 +39,8 @@ struct WalletRun: Codable, Identifiable, Equatable, Sendable {
     var card: String
     /// The Wallet transaction's "Name", when the automation passes it.
     var name = ""
+    /// The Wallet transaction's "Transaction" property as text, when the automation passes it.
+    var transaction = ""
     /// The Mora action that saved the run.
     var action = ""
     var delivery: Delivery = .logged
@@ -75,6 +77,7 @@ struct WalletRun: Codable, Identifiable, Equatable, Sendable {
         merchant = try c.decode(String.self, forKey: .merchant)
         card = try c.decode(String.self, forKey: .card)
         name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        transaction = try c.decodeIfPresent(String.self, forKey: .transaction) ?? ""
         action = try c.decodeIfPresent(String.self, forKey: .action) ?? ""
         delivery = try c.decodeIfPresent(Delivery.self, forKey: .delivery) ?? .logged
         attempts = try c.decodeIfPresent(Int.self, forKey: .attempts) ?? 0
@@ -185,7 +188,7 @@ struct LogWalletPaymentIntent: AppIntent {
     @Parameter(title: "Name") var name: String?
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Log \(\.$amount) at \(\.$merchant) with \(\.$card)") { \.$name }
+        Summary("Log \(\.$amount) at \(\.$merchant) with \(\.$card) named \(\.$name)")
     }
 
     func perform() async throws -> some IntentResult {
@@ -212,7 +215,7 @@ struct StartWalletPaymentIntent: AppIntent {
     @Parameter(title: "Name") var name: String?
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Start payment at \(\.$merchant) with \(\.$card)") { \.$name }
+        Summary("Start payment at \(\.$merchant) named \(\.$name) with \(\.$card)")
     }
 
     func perform() async throws -> some IntentResult {
@@ -232,11 +235,13 @@ struct AddWalletAmountIntent: AppIntent {
     static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
 
     @Parameter(title: "Amount") var amount: String?
+    /// Read here, after the purchase is saved: if iOS fails on it, nothing is lost.
+    @Parameter(title: "Transaction") var transaction: String?
 
-    static var parameterSummary: some ParameterSummary { Summary("Add amount \(\.$amount)") }
+    static var parameterSummary: some ParameterSummary { Summary("Add amount \(\.$amount) of \(\.$transaction)") }
 
     func perform() async throws -> some IntentResult {
-        await WalletDelivery.shared.addAmount(amount ?? "")
+        await WalletDelivery.shared.addAmount(amount ?? "", transaction: transaction ?? "")
         await WalletBackgroundDelivery.run()
         return .result()
     }
