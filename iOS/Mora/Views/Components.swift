@@ -105,57 +105,33 @@ struct DemoBanner: View {
     }
 }
 
-/// Like the Mac notice: Apple Pay purchases that could not be booked by themselves.
-/// "Process" opens the transaction form prefilled with what Wallet passed.
+/// Like the Mac notice: how many Apple Pay purchases need the user. The list
+/// itself lives in "More" → "Purchases to Review".
 struct WalletReviewBanner: View {
     @EnvironmentObject private var cloud: CloudSync
     @EnvironmentObject private var router: AppRouter
-    @Environment(\.scenePhase) private var scenePhase
-    @State private var broken: [WalletRun] = []
-
-    private struct Item: Identifiable {
-        let id: UUID; let merchant: String; let amount: String; let date: Date; let detail: String; let sheet: AppSheet
-    }
-    private var items: [Item] {
-        broken.map { Item(id: $0.id, merchant: $0.sentMerchant, amount: $0.amount, date: $0.receivedAt,
-                          detail: $0.card, sheet: cloud.processing($0, review: nil)) } +
-        cloud.pending.map { Item(id: $0.id, merchant: $0.merchant, amount: $0.amount, date: $0.date,
-                                 detail: [$0.card ?? "", $0.reason.map(L) ?? ""].filter { !$0.isEmpty }.joined(separator: " · "), sheet: .walletReview($0)) }
-    }
+    @EnvironmentObject private var queue: WalletReviewQueue
 
     var body: some View {
-        let items = items
-        // A view that is always present, so the list is read even while there is nothing to show.
-        VStack(spacing: 0) {
-            if !items.isEmpty {
-                VStack(alignment: .leading, spacing: 10) {
-                    Label(L("Обработайте покупки Apple Pay: \(items.count)"), systemImage: "exclamationmark.circle.fill")
-                        .font(.subheadline.weight(.semibold))
-                    ForEach(items.prefix(5)) { item in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.merchant.isEmpty ? L("Без продавца") : item.merchant).font(.subheadline.weight(.medium))
-                                Text([item.date.formatted(.dateTime.day().month(.abbreviated).hour().minute().locale(L10n.locale)), item.detail]
-                                    .filter { !$0.isEmpty }.joined(separator: " · ")).font(.caption).lineLimit(2)
-                            }
-                            Spacer()
-                            FinancialText(item.amount.isEmpty ? "—" : item.amount).font(.subheadline.weight(.semibold))
-                            Button(L("Обработать")) { router.open(item.sheet) }.buttonStyle(.borderedProminent).controlSize(.small).tint(.orange)
-                        }
+        let count = queue.count(with: cloud)
+        if count > 0 {
+            Button { router.openMore("wallet-review") } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "exclamationmark.circle.fill").font(.title2)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(L("Покупки на проверку: \(count)")).font(.subheadline.weight(.semibold))
+                        Text(L("Wallet передал не всё — допишите вручную")).font(.caption)
                     }
+                    Spacer()
+                    Image(systemName: "chevron.right").font(.caption.weight(.semibold))
                 }
                 .foregroundStyle(.orange)
                 .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            }
+                .contentShape(Rectangle())
+            }.buttonStyle(.plain)
         }
-        .onAppear(perform: reload)
-        .onChange(of: router.sheet == nil) { _, closed in if closed { reload() } }
-        .onChange(of: scenePhase) { _, phase in if phase == .active { reload() } }
     }
-
-    private func reload() { broken = WalletRunLog.runs().filter(\.needsProcessing) }
 }
 
 struct CurrencyWarning: View {
@@ -370,5 +346,28 @@ struct StorageFooter: View {
         }
         .font(.caption2).foregroundStyle(.tertiary).multilineTextAlignment(.center)
         .frame(maxWidth: .infinity).padding(.vertical, 8)
+    }
+}
+
+/// The first row of a tab's ScrollView: tapping the open tab again scrolls back to it.
+struct ScrollTopAnchor: View {
+    static let id = "scroll-top"
+    var body: some View { Color.clear.frame(height: 0).id(Self.id) }
+}
+
+extension View {
+    /// Lists scroll to the top on a repeated tab tap by themselves; a ScrollView needs `ScrollTopAnchor` and this.
+    func scrollsToTopOnReselect(_ tab: AppTab) -> some View { modifier(ScrollToTopOnReselect(tab: tab)) }
+}
+
+private struct ScrollToTopOnReselect: ViewModifier {
+    @EnvironmentObject private var router: AppRouter
+    let tab: AppTab
+    func body(content: Content) -> some View {
+        ScrollViewReader { proxy in
+            content.onChange(of: router.reselections[tab]) {
+                withAnimation { proxy.scrollTo(ScrollTopAnchor.id, anchor: .top) }
+            }
+        }
     }
 }

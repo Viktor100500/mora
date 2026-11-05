@@ -6,6 +6,7 @@ struct RootView: View {
     @EnvironmentObject private var cloud: CloudSync
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var categorizer: MerchantCategorizer
+    @EnvironmentObject private var reviewQueue: WalletReviewQueue
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("mora.didSeeWelcome") private var didSeeWelcome = false
 
@@ -14,7 +15,7 @@ struct RootView: View {
     }
 
     var body: some View {
-        TabView(selection: $router.tab) {
+        TabView(selection: Binding(get: { router.tab }, set: { router.select($0) })) {
             OverviewScreen()
                 .tabItem { Label(L("Обзор"), systemImage: "square.grid.2x2") }.tag(AppTab.overview)
             TransactionsScreen()
@@ -25,7 +26,7 @@ struct RootView: View {
                 .tabItem { Label(L("Счета"), systemImage: "wallet.bifold") }.tag(AppTab.accounts)
             MoreScreen()
                 .tabItem { Label(L("Ещё"), systemImage: "ellipsis.circle") }.tag(AppTab.more)
-                .badge(cloud.pending.count)
+                .badge(reviewQueue.count(with: cloud))
         }
         .tint(.moraGreen)
         .environment(\.locale, L10n.locale)
@@ -35,7 +36,7 @@ struct RootView: View {
         .modifier(PrivacyShield())
         .sheet(item: $router.sheet) { sheet in
             SheetContent(sheet: sheet)
-                .environmentObject(store).environmentObject(cloud).environmentObject(router).environmentObject(categorizer)
+                .environmentObject(store).environmentObject(cloud).environmentObject(router).environmentObject(categorizer).environmentObject(reviewQueue)
                 .environment(\.locale, L10n.locale)
                 .tint(.moraGreen)
                 .modifier(ErrorAlert())
@@ -50,6 +51,7 @@ struct RootView: View {
             await cloud.prepare(store: store)
         }
         .onChange(of: store.revision) { cloud.localChanged() }
+        .onChange(of: router.sheet == nil) { _, closed in if closed { reviewQueue.reload() } }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .background else { return }
             cloud.finishInBackground()
@@ -57,9 +59,10 @@ struct RootView: View {
         }
         .task(id: scenePhase) {
             guard scenePhase == .active else { return }
+            reviewQueue.reload()
             await store.reloadFromDisk()
             // Purchases saved while offline go out as soon as Mora is opened.
-            async let wallet: Void = WalletBackgroundDelivery.run()
+            async let wallet: Void = { await WalletBackgroundDelivery.run(); await reviewQueue.reload() }()
             async let rates: Void = rateLoop()
             async let sync: Void = cloud.run()
             // Purchases booked by the server or another device arrive without a category.

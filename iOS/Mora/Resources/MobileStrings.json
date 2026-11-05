@@ -222,7 +222,6 @@
   "Покупки картой записываются на выбранный счёт. Покупки новых карт ждут выбора счёта. Карта, которой ещё не платили, появится здесь после первой покупки.": "Card purchases are booked to the chosen account. Purchases with new cards wait for an account choice. A card not used yet appears here after its first purchase.",
   "Что передал Wallet при каждой оплате и как покупка дошла до Mora.": "What Wallet passed with each payment and how the purchase reached Mora.",
   "iOS прерывает автоматизацию, если у транзакции ещё нет суммы (транспорт, отложенные списания). Поэтому сумма читается последним действием: покупка уже сохранена, и её можно обработать в Mora.": "iOS stops the automation when a transaction has no amount yet (transit, deferred charges). So the amount is read by the last action: the purchase is already saved and can be processed in Mora.",
-  "Обработайте покупки Apple Pay: {0}": "Process Apple Pay purchases: {0}",
   "Обработать": "Process",
   "Обработать покупку": "Process Purchase",
   "Не отправлено (попытка {0}): {1}": "Not sent (attempt {0}): {1}",
@@ -367,5 +366,16 @@
   "Нажмите на поле Transaction, затем на «Входные данные команды». Свойство менять не нужно: «Транзакция» уже выбрана.": "Tap the Transaction field, then Shortcut Input. Leave the property as is: Transaction is already selected.",
   "Получить транзакцию как входные данные": "Receive transaction as input",
   "Сумма": "Amount",
-  "Продавец": "Merchant"
+  "Продавец": "Merchant",
+  "Покупки на проверку": "Purchases to Review",
+  "Покупки на проверку: {0}": "Purchases to review: {0}",
+  "Wallet передал не всё — допишите вручную": "Wallet missed some details — complete them by hand",
+  "Все покупки обработаны": "All purchases are processed",
+  "Wallet передал эти покупки не полностью. Нажмите, чтобы дописать сумму или продавца: форма уже заполнена тем, что удалось получить.": "Wallet passed these purchases incompletely. Tap one to add the amount or merchant: the form is prefilled with what was received.",
+  "Удалить покупку?": "Delete Purchase?",
+  "Она не попадёт в расходы. Отменить удаление нельзя.": "It will not be counted as an expense. This cannot be undone.",
+  "Wallet не передал сумму": "Wallet did not pass the amount",
+  "Wallet не передал продавца": "Wallet did not pass the merchant",
+  "Нет": "None",
+  "Полные покупки записываются автоматически. Сюда попадают покупки, которые Wallet передал не полностью.": "Complete purchases are recorded automatically. Purchases Wallet passed incompletely land here."
 }

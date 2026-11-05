@@ -5,6 +5,7 @@ struct MoreScreen: View {
     @EnvironmentObject private var store: FinanceStore
     @EnvironmentObject private var cloud: CloudSync
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var reviewQueue: WalletReviewQueue
     @State private var importingCSV = false
     @State private var directScreen: String?
     private var preferences: Preferences { store.ledger.preferences }
@@ -31,8 +32,8 @@ struct MoreScreen: View {
                         HStack {
                             Label(L("Общая база и Apple Pay"), systemImage: "icloud")
                             Spacer()
-                            if !cloud.pending.isEmpty {
-                                Text("\(cloud.pending.count)").font(.caption.weight(.bold)).foregroundStyle(.white)
+                            if reviewQueue.count(with: cloud) > 0 {
+                                Text("\(reviewQueue.count(with: cloud))").font(.caption.weight(.bold)).foregroundStyle(.white)
                                     .padding(.horizontal, 7).padding(.vertical, 2).background(Color.red, in: Capsule())
                             } else if cloud.householdID != nil {
                                 Text(cloud.enabled ? L("Включена") : L("Пауза")).font(.caption).foregroundStyle(.secondary)
@@ -55,12 +56,20 @@ struct MoreScreen: View {
                 case "cloud": CloudScreen()
                 case "imports": ImportHistoryScreen()
                 case "ai": AIImportScreen()
+                case "wallet-review": WalletReviewScreen()
                 case "budgets": BudgetsScreen()
                 case "goals": GoalsScreen()
                 default: RecurringScreen()
                 }
             }
-            .onAppear { if let name = router.debugMoreDestination { router.debugMoreDestination = nil; directScreen = name } }
+            .onAppear {
+                if let name = router.debugMoreDestination { router.debugMoreDestination = nil; directScreen = name }
+                if let name = router.moreDestination { router.moreDestination = nil; directScreen = name }
+            }
+            .onChange(of: router.moreDestination) { _, name in
+                guard let name else { return }
+                router.moreDestination = nil; directScreen = name
+            }
             .fileImporter(isPresented: $importingCSV, allowedContentTypes: [.commaSeparatedText, .plainText, .text]) { result in
                 switch result {
                 case .success(let url):

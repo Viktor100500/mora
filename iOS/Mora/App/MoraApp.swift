@@ -7,6 +7,7 @@ struct MoraApp: App {
     @StateObject private var cloud = CloudSync()
     @StateObject private var router = AppRouter()
     @StateObject private var categorizer = MerchantCategorizer()
+    @StateObject private var reviewQueue = WalletReviewQueue()
 
     init() {
         _store = StateObject(wrappedValue: FinanceStore())
@@ -19,6 +20,7 @@ struct MoraApp: App {
                 .environmentObject(cloud)
                 .environmentObject(router)
                 .environmentObject(categorizer)
+                .environmentObject(reviewQueue)
         }
         .backgroundTask(.appRefresh(WalletBackgroundDelivery.identifier)) { await WalletBackgroundDelivery.run() }
     }
@@ -71,6 +73,18 @@ enum AppSheet: Identifiable {
     @Published var transactionFilter: TransactionFilterRequest?
     /// A screen inside "More" requested by a debug launch argument.
     var debugMoreDestination: String?
+    /// A screen inside "More" another tab asked to open.
+    @Published var moreDestination: String?
+
+    func openMore(_ screen: String) { tab = .more; moreDestination = screen }
+
+    /// Bumped when a tab's bar item is tapped while that tab is already open,
+    /// so screens built on a plain ScrollView can scroll back to the top.
+    @Published private(set) var reselections: [AppTab: Int] = [:]
+
+    func select(_ tab: AppTab) {
+        if tab == self.tab { reselections[tab, default: 0] += 1 } else { self.tab = tab }
+    }
 
     func open(_ sheet: AppSheet) {
         if self.sheet == nil { self.sheet = sheet; return }

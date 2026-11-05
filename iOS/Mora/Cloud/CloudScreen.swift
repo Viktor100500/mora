@@ -5,6 +5,7 @@ struct CloudScreen: View {
     @EnvironmentObject private var store: FinanceStore
     @EnvironmentObject private var cloud: CloudSync
     @EnvironmentObject private var router: AppRouter
+    @EnvironmentObject private var reviewQueue: WalletReviewQueue
     @State private var url = ""
     @State private var key = ""
     @State private var email = ""
@@ -139,13 +140,14 @@ struct CloudScreen: View {
             } header: { Label(L("Конфликт синхронизации"), systemImage: "exclamationmark.triangle").foregroundStyle(.orange) }
         }
         Section {
-            if cloud.pending.isEmpty { Text(L("Покупок на проверке нет")).foregroundStyle(.secondary) }
-            ForEach(cloud.pending) { capture in
-                Button { router.open(.walletReview(capture)) } label: { captureRow(capture) }.buttonStyle(.plain)
-                    .swipeActions { Button(role: .destructive) { Task { await cloud.dismissCapture(capture) } } label: { Label(L("Скрыть"), systemImage: "eye.slash") } }
+            NavigationLink { WalletReviewScreen() } label: {
+                LabeledContent {
+                    let count = reviewQueue.count(with: cloud)
+                    Text(count == 0 ? L("Нет") : "\(count)").foregroundStyle(count == 0 ? Color.secondary : Color.orange)
+                } label: { Label(L("Покупки на проверку"), systemImage: "tray") }
             }
-        } header: { Text(L("Входящие Apple Pay")) } footer: {
-            Text(L("Полные покупки записываются автоматически. Здесь остаются покупки без суммы, валюты или счета: нажмите, чтобы проверить."))
+        } footer: {
+            Text(L("Полные покупки записываются автоматически. Сюда попадают покупки, которые Wallet передал не полностью."))
         }
         Section {
             Button { Task { await cloud.invite() } } label: { Label(L("Пригласить участника"), systemImage: "person.badge.plus") }
@@ -157,20 +159,6 @@ struct CloudScreen: View {
                 }
             }
             Button(L("Отключить общую базу"), role: .destructive) { confirmDisconnect = true }
-        }
-    }
-
-    private func captureRow(_ capture: CloudCapture) -> some View {
-        HStack(spacing: 12) {
-            IconTile(icon: capture.awaitsCardLink ? "creditcard" : "wallet.pass", color: capture.awaitsCardLink ? "blue" : "orange", size: 38)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(capture.merchant.isEmpty ? L("Без описания") : capture.merchant).font(.body.weight(.medium))
-                Text(capture.reason.map(L) ?? L("Нужна проверка")).font(.caption).foregroundStyle(.orange).lineLimit(2)
-                Text([capture.card, capture.label, capture.date.formatted(date: .abbreviated, time: .shortened)].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · "))
-                    .font(.caption2).foregroundStyle(.secondary)
-            }
-            Spacer()
-            FinancialText(capture.amount.isEmpty ? "—" : capture.amount + (capture.currency.isEmpty ? "" : " " + capture.currency)).font(.subheadline.weight(.semibold))
         }
     }
 }
