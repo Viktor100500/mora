@@ -120,6 +120,7 @@ struct ContentView: View {
     @State private var reloadingCloud = false
     @State private var showingLaunchScreen = true
     @AppStorage("mora.hideAmounts") private var hideAmounts = false
+    @State private var sidebarWidth = SidebarLayout.idealWidth
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private var currency: String { store.ledger.preferences.baseCurrency }
     private let dataRefresh = Timer.publish(every: 2, on: .main, in: .default).autoconnect()
@@ -139,7 +140,11 @@ struct ContentView: View {
 
     var body: some View {
         NavigationSplitView {
-            sidebar.navigationSplitViewColumnWidth(min: 210, ideal: 228, max: 260)
+            let limits = sidebarLimits
+            sidebar
+                .frame(minWidth: limits.minimum, maxWidth: limits.maximum)
+                .navigationSplitViewColumnWidth(min: limits.minimum, ideal: limits.ideal, max: limits.maximum)
+                .background(SidebarWidthLimiter(limits: limits))
                 .toolbar(removing: .sidebarToggle)
         } detail: {
             VStack(spacing: 0) {
@@ -296,6 +301,17 @@ struct ContentView: View {
         } catch { store.error = error.localizedDescription }
      } }
 
+    private var netWorthText: String {
+        // `-MoraDemoNetWorth 12345678.90` with `--demo` checks the sidebar with a long amount.
+        if store.isDemo, let preview = UserDefaults.standard.string(forKey: "MoraDemoNetWorth"), let amount = Decimal(string: preview) {
+            return DisplayMoney.string(amount, currency: currency)
+        }
+        return DisplayMoney.string(store.reportNetWorth, currency: currency)
+    }
+    private var sidebarLimits: SidebarLayout.Limits {
+        SidebarLayout.limits(netWorth: netWorthText, navigationTitles: Page.allCases.filter { $0.isVisible(in: store.ledger.preferences) }.map { L($0.title) })
+    }
+
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 12) {
@@ -313,7 +329,7 @@ struct ContentView: View {
             Button { page = .accounts } label: {
             VStack(alignment: .leading, spacing: 8) {
                 Label(L("Общий капитал"), systemImage: "chart.line.uptrend.xyaxis").font(.caption).foregroundStyle(.secondary)
-                FinancialText(DisplayMoney.string(store.reportNetWorth, currency: currency)).font(.system(size: 22, weight: .semibold, design: .rounded)).minimumScaleFactor(0.7).lineLimit(1)
+                FinancialText(netWorthText).font(.system(size: SidebarLayout.netWorthFontSize(for: netWorthText, sidebarWidth: sidebarWidth), weight: .semibold, design: .rounded)).lineLimit(1).minimumScaleFactor(0.5).accessibilityIdentifier("sidebar.netWorth")
                 Text(L("\(store.ledger.accounts.count) счетов · \(currency)")).font(.caption2).foregroundStyle(.secondary)
             }.padding(16).frame(maxWidth: .infinity, alignment: .leading).background(Color.moraGreen.opacity(0.05)).clipShape(RoundedRectangle(cornerRadius: 14)).contentShape(RoundedRectangle(cornerRadius: 14))
             }.buttonStyle(.plain).help(L("Открыть счета")).padding(16)
@@ -329,6 +345,9 @@ struct ContentView: View {
                 }.buttonStyle(.plain).help(hideAmounts ? L("Показать суммы") : L("Скрыть суммы для скриншота")).accessibilityLabel(hideAmounts ? L("Показать суммы") : L("Скрыть суммы"))
             }.foregroundStyle(.secondary).padding(.horizontal, 20).padding(.bottom, 16)
         }
+        .background(GeometryReader { proxy in
+            Color.clear.onAppear { sidebarWidth = proxy.size.width }.onChange(of: proxy.size.width) { _, width in sidebarWidth = width }
+        })
     }
     private var importControl: some View {
         Menu {
