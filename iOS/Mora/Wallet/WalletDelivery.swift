@@ -84,11 +84,13 @@ actor WalletDelivery {
         try? WalletRunLog.save(run, in: directory)
     }
 
-    /// Sends complete purchases oldest first and stops at the first connection problem.
-    /// A purchase without amount or merchant stays on the iPhone for the user to process.
+    /// Sends purchases oldest first and stops at the first connection problem. A purchase
+    /// without amount or merchant waits for review in the shared inbox on every device.
     func deliverWaiting(with sender: WalletSender, now: Date = .now) async {
         let all = WalletRunLog.runs(in: directory)
-        for var run in all.reversed() where run.delivery == .waiting || run.delivery == .awaitingAmount {
+        // Incomplete purchases go to the shared inbox too, so the Mac and the iPhone review the
+        // same list; older builds kept them on the iPhone (`incomplete`, `late`).
+        for var run in all.reversed() where [.waiting, .awaitingAmount, .incomplete, .late].contains(run.delivery) {
             if run.delivery == .awaitingAmount {
                 guard now.timeIntervalSince(run.receivedAt) >= Self.amountGrace else { continue }
                 run.log("Сумма не пришла: «Быстрые команды» прервались, читая сумму", at: now)
@@ -102,11 +104,6 @@ actor WalletDelivery {
                     continue
                 }
                 if now.timeIntervalSince(run.receivedAt) < Self.amountGrace { continue }
-            }
-            guard run.isComplete else {
-                run.delivery = .incomplete
-                try? WalletRunLog.save(run, in: directory)
-                continue
             }
             run.attempts += 1
             let outcome = await send(run, with: sender)
@@ -143,7 +140,7 @@ actor WalletDelivery {
     }
 
     /// Waiting purchases that the system should retry in the background.
-    var hasWaiting: Bool { WalletRunLog.runs(in: directory).contains { $0.delivery == .waiting || $0.delivery == .awaitingAmount } }
+    var hasWaiting: Bool { WalletRunLog.runs(in: directory).contains { [.waiting, .awaitingAmount, .incomplete, .late].contains($0.delivery) } }
 
     private func send(_ run: WalletRun, with sender: WalletSender) async -> Outcome {
         do {

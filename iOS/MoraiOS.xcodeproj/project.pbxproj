@@ -116,7 +116,7 @@
 		F3E78F6ACDBE2C140769209A /* ChangeDescription.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ChangeDescription.swift; path = ../Sources/Mora/ChangeDescription.swift; sourceTree = "<group>"; };
 		F65900D0DE8EB82F68603C47 /* ImportScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportScreens.swift; sourceTree = "<group>"; };
 		F9AC73B755D7E67297AE96D1 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
-		"TEMP_3384FA77-7B95-4291-A488-C49AB7DD1E97" /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
+		"TEMP_51ED2446-304D-40BF-B63C-AC4D5F0632AE" /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -290,10 +290,10 @@
 			path = MoraTests;
 			sourceTree = "<group>";
 		};
-		"TEMP_7801FDEB-69CA-4969-BA1A-A19CA62EB845" /* iOS */ = {
+		"TEMP_B6D10DD1-81A3-4A68-A659-0418C1B852EC" /* iOS */ = {
 			isa = PBXGroup;
 			children = (
-				"TEMP_3384FA77-7B95-4291-A488-C49AB7DD1E97" /* Signing.xcconfig */,
+				"TEMP_51ED2446-304D-40BF-B63C-AC4D5F0632AE" /* Signing.xcconfig */,
 			);
 			path = iOS;
 			sourceTree = "<group>";
@@ -511,7 +511,7 @@
 		};
 		BCE30933C473708F0E64C320 /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_3384FA77-7B95-4291-A488-C49AB7DD1E97" /* Signing.xcconfig */;
+			baseConfigurationReference = "TEMP_51ED2446-304D-40BF-B63C-AC4D5F0632AE" /* Signing.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -544,7 +544,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 37;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -558,7 +558,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.35;
+				MARKETING_VERSION = 1.0.36;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -588,7 +588,7 @@
 		};
 		D00F07EA73DCC7592C635AE0 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = "TEMP_3384FA77-7B95-4291-A488-C49AB7DD1E97" /* Signing.xcconfig */;
+			baseConfigurationReference = "TEMP_51ED2446-304D-40BF-B63C-AC4D5F0632AE" /* Signing.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -621,7 +621,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 36;
+				CURRENT_PROJECT_VERSION = 37;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -641,7 +641,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.35;
+				MARKETING_VERSION = 1.0.36;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
