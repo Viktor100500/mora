@@ -13,5 +13,7 @@ python3 cloud/shortcuts/build_wallet_automation.py --output "$WORK/unsigned.shor
 shortcuts sign --mode anyone --input "$WORK/unsigned.shortcut" --output "$WORK/signed.shortcut"
 python3 cloud/shortcuts/build_wallet_automation.py --verify "$WORK/signed.shortcut"
 cp "$WORK/signed.shortcut" "iOS/Mora/Resources/Mora Apple Pay.shortcut"
-(cd iOS && xcodegen generate >/dev/null)
+# The Xcode project lists bundled files; without XcodeGen here, regenerate it on the development Mac.
+if command -v xcodegen >/dev/null; then (cd iOS && xcodegen generate >/dev/null)
+else print "XcodeGen не найден: выполните xcodegen generate в iOS/ на основном Mac или пришлите файл."; fi
 print "Готово: iOS/Mora/Resources/Mora Apple Pay.shortcut"
