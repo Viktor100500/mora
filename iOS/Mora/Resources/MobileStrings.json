@@ -377,5 +377,14 @@
   "Нажмите на поле Amount, затем на «Входные данные команды».": "Tap the Amount field, then Shortcut Input.",
   "Нажмите на вставленную переменную и выберите свойство Amount. Затем «Готово».": "Tap the inserted variable and choose the Amount property. Then tap Done.",
   "Поле Amount: свойство «Сумма». Транспорт и отложенные списания иногда приходят без суммы — такую покупку можно обработать": "Amount field: the Amount property. Transit and deferred charges sometimes arrive without an amount — such a purchase can be processed",
-  "транзакция": "transaction"
+  "транзакция": "transaction",
+  "Добавьте автоматизацию": "Add the Automation",
+  "Одна готовая команда: триггер «Транзакция» и оба действия Mora уже связаны.": "One ready shortcut: the Transaction trigger and both Mora actions are already connected.",
+  "Когда я прикладываю карту Wallet": "When I tap a Wallet card",
+  "Нажмите «Добавить в Быстрые команды» и затем «Добавить быструю команду».": "Tap Add to Shortcuts, then Add Shortcut.",
+  "Откройте автоматизацию и отметьте карты, которыми платите. Включите «Запускать сразу».": "Open the automation and select the cards you pay with. Turn on Run Immediately.",
+  "Вернитесь в Mora и нажмите «Дальше».": "Come back to Mora and tap Next.",
+  "Настроить вручную": "Set Up Manually",
+  "Добавить в Быстрые команды": "Add to Shortcuts",
+  "iPhone сообщает о покупке через автоматизацию «Быстрых команд». Готовая автоматизация добавляется одной кнопкой, затем нужно только выбрать карты.": "The iPhone reports a purchase through a Shortcuts automation. The ready automation is added with one button; then you only choose the cards."
 }

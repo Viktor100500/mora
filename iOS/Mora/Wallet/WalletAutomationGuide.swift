@@ -1,16 +1,28 @@
 import SwiftUI
 
-/// Step-by-step setup of the Wallet "Transaction" automation. iOS does not let an
-/// app create automations, so each step shows what the Shortcuts screen looks
-/// like, and the last step checks the next payment from the run journal.
+/// Setup of the Wallet "Transaction" automation. iOS 27 keeps an automation's
+/// trigger inside the shortcut and shares it, so one link adds everything; older
+/// iOS cannot, and each step shows what the Shortcuts screen looks like. The
+/// last step checks the next payment from the run journal.
 struct WalletAutomationGuide: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var step = 0
     @State private var startedAt = Date()
     @State private var latest: WalletRun?
+    @State private var manual = !Self.oneTapAvailable
 
-    private static let steps = 5
+    /// Shared from an iOS 27 iPhone: the Transaction trigger with no cards chosen,
+    /// then Start Wallet Payment and Finish Wallet Payment wired to its Merchant,
+    /// Name, Card or Pass and Amount. It holds no key or personal data.
+    static let templateURL = URL(string: "https://www.icloud.com/shortcuts/1eb769cc18ee4426919bfc1349ccf307")!
+    static var oneTapAvailable: Bool {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--wallet-one-tap") { return true }
+        #endif
+        return ProcessInfo.processInfo.isOperatingSystemAtLeast(OperatingSystemVersion(majorVersion: 27, minorVersion: 0, patchVersion: 0))
+    }
+    private var steps: Int { manual ? 5 : 2 }
 
     var body: some View {
         NavigationStack {
@@ -33,7 +45,7 @@ struct WalletAutomationGuide: View {
             .animation(.spring(duration: 0.35), value: step)
             .task(id: step) {
                 // The last step watches the journal for the first payment after the setup.
-                guard step == Self.steps else { return }
+                guard step == steps else { return }
                 while !Task.isCancelled {
                     latest = WalletRunLog.runs().first { $0.receivedAt >= startedAt.addingTimeInterval(-60) }
                     do { try await Task.sleep(for: .seconds(2)) } catch { return }
@@ -44,16 +56,50 @@ struct WalletAutomationGuide: View {
 
     private var progress: some View {
         HStack(spacing: 6) {
-            ForEach(1...Self.steps, id: \.self) { index in
+            ForEach(1...steps, id: \.self) { index in
                 Capsule().fill(index <= step ? Color.moraGreen : Color.secondary.opacity(0.2)).frame(height: 5)
             }
         }
-        .accessibilityLabel(L("Шаг \(step) из \(Self.steps)"))
+        .accessibilityLabel(L("Шаг \(step) из \(steps)"))
     }
 
     @ViewBuilder private var content: some View {
+        if step == 0 { intro }
+        else if !manual { oneTapContent }
+        else { manualContent }
+    }
+
+    @ViewBuilder private var oneTapContent: some View {
+        if step == 1 {
+            header(1, "Добавьте автоматизацию", "Одна готовая команда: триггер «Транзакция» и оба действия Mora уже связаны.")
+            GuideMock {
+                VStack(spacing: 8) {
+                    HStack(spacing: 10) {
+                        WalletAppIcon()
+                        Text(L("Когда я прикладываю карту Wallet")).font(.subheadline.weight(.semibold))
+                        Spacer(minLength: 0)
+                    }
+                    .padding(12)
+                    .background(Color.moraCard, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    ActionMock(title: "Start Wallet Payment", parts: [.text("Start payment at "), .token("Продавец"), .text(" named "), .token("Имя"), .text(" with "), .token("Карта или пропуск")])
+                    ActionMock(title: "Finish Wallet Payment", parts: [.text("Finish payment of "), .token("Сумма")])
+                }
+            }
+            instructions(["Нажмите «Добавить в Быстрые команды» и затем «Добавить быструю команду».",
+                          "Откройте автоматизацию и отметьте карты, которыми платите. Включите «Запускать сразу».",
+                          "Вернитесь в Mora и нажмите «Дальше»."])
+            Button { withAnimation { manual = true; step = 1 } } label: {
+                Text(L("Настроить вручную")).font(.subheadline).frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.plain).foregroundStyle(Color.moraGreen)
+        } else {
+            header(2, "Проверьте настройку", "Заплатите чем-нибудь Apple Pay — Mora покажет здесь, что передал Wallet.")
+            WalletAutomationCheck(run: latest)
+        }
+    }
+
+    @ViewBuilder private var manualContent: some View {
         switch step {
-        case 0: intro
         case 1:
             header(1, "Создайте автоматизацию", "Всё делается в приложении «Быстрые команды». Возвращайтесь в Mora после каждого шага.")
             GuideMock { TriggerSearchMock() }
@@ -109,7 +155,8 @@ struct WalletAutomationGuide: View {
             }
             .frame(maxWidth: .infinity).padding(.top, 12)
             Text(L("Mora запишет каждую оплату Apple Pay")).font(.title2.weight(.bold)).frame(maxWidth: .infinity).multilineTextAlignment(.center)
-            Text(L("iPhone сообщает о покупке через автоматизацию «Быстрых команд». Приложения не могут создать её сами, поэтому один раз настроим её вместе: 4 коротких шага и проверка, около двух минут."))
+            Text(L(manual ? "iPhone сообщает о покупке через автоматизацию «Быстрых команд». Приложения не могут создать её сами, поэтому один раз настроим её вместе: 4 коротких шага и проверка, около двух минут."
+                          : "iPhone сообщает о покупке через автоматизацию «Быстрых команд». Готовая автоматизация добавляется одной кнопкой, затем нужно только выбрать карты."))
                 .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: .infinity)
             Card {
                 VStack(alignment: .leading, spacing: 12) {
@@ -130,7 +177,7 @@ struct WalletAutomationGuide: View {
 
     private func header(_ number: Int, _ title: String, _ subtitle: String) -> some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(L("Шаг \(number) из \(Self.steps)")).font(.caption.weight(.semibold)).foregroundStyle(Color.moraGreen)
+            Text(L("Шаг \(number) из \(steps)")).font(.caption.weight(.semibold)).foregroundStyle(Color.moraGreen)
             Text(L(title)).font(.title3.weight(.bold))
             Text(L(subtitle)).font(.subheadline).foregroundStyle(.secondary)
         }
@@ -153,7 +200,13 @@ struct WalletAutomationGuide: View {
             switch step {
             case 0:
                 primary("Начать") { startedAt = Date(); step = 1 }
-            case 1...4:
+            case 1 where !manual:
+                primary("Добавить в Быстрые команды") { openURL(Self.templateURL) }
+                HStack(spacing: 10) {
+                    Button { step -= 1 } label: { Text(L("Назад")).frame(maxWidth: .infinity) }.buttonStyle(.bordered).controlSize(.large)
+                    Button { step += 1 } label: { Text(L("Дальше")).frame(maxWidth: .infinity) }.buttonStyle(.bordered).controlSize(.large).tint(.moraGreen)
+                }
+            case 1..<steps:
                 HStack(spacing: 10) {
                     Button { step -= 1 } label: { Text(L("Назад")).frame(maxWidth: .infinity) }.buttonStyle(.bordered).controlSize(.large)
                     primary("Дальше") { step += 1 }
