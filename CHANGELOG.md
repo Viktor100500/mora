@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.5 — 2026-11-08
+
+Mac 1.7.5 (build 84)
+
+- **Transaction diagnostics.** The local diagnostic log records data refreshes and filtered-list updates to help investigate intermittent freezes.
+
 ## 1.7.4 — 2026-11-08
 
 Mac 1.7.4 (build 83)

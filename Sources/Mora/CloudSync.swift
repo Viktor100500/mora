@@ -422,6 +422,7 @@ final class CloudSync: ObservableObject {
         guard enabled, householdID != nil else { return }
         await operation(inBackground: inBackground, reportSyncResult: notifyResult) {
             guard let store = self.store, let id = self.householdID else { return }
+            self.diagnostics?.record("sync-start-revision-\(store.revision)", taskCancelled: Task.isCancelled)
             let originalIDs = Set(store.ledger.transactions.map(\.id))
             store.beginDeferredUpdates()
             self.stagedPending = self.inbox
@@ -495,6 +496,7 @@ final class CloudSync: ObservableObject {
                     detail: captures.isEmpty ? nil : L("Покупок на проверке: \(captures.count)"),
                     kind: captures.isEmpty ? .success : .warning, actions: actions)
             }
+            self.diagnostics?.record("sync-end-revision-\(store.revision)", taskCancelled: Task.isCancelled)
         }
     }
     private func bookWalletPurchases() async throws {

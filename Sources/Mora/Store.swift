@@ -31,6 +31,7 @@ final class FinanceStore: ObservableObject {
         set { if let newValue { showNotice(newValue) } else { activeNotice = nil } }
     }
     let notifications: AppNotifications
+    let diagnostics: CloudSyncDiagnostics
     var undoCount: Int { ledger.undoCount }
     var redoCount: Int { ledger.redoCount }
     var undoDescription: ChangeDescription? { undoDescriptions.first }
@@ -79,6 +80,7 @@ final class FinanceStore: ObservableObject {
         else if let i = args.firstIndex(of: "--data-dir"), args.indices.contains(i + 1) { directory = URL(fileURLWithPath: args[i + 1]) }
         else { directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Mora", isDirectory: true) }
         fileURL = directory.appendingPathComponent("ledger.json")
+        diagnostics = CloudSyncDiagnostics(directory: directory)
         repository = LedgerRepository(fileURL: fileURL, forcedDemo: args.contains("--demo"))
         notifications = AppNotifications(fileURL: args.contains("--demo") ? nil : directory.appendingPathComponent("notification-history.json"))
         ledger = .empty; isDemo = false
@@ -111,6 +113,7 @@ final class FinanceStore: ObservableObject {
             if snapshot.revision > (deferredSnapshot?.revision ?? revision) { deferredSnapshot = snapshot }
             return
         }
+        diagnostics.record("ledger-publish-revision-\(snapshot.revision)", taskCancelled: Task.isCancelled)
         AppMotion.update {
             notificationTokenCache = snapshot.token
             undoDescriptions = snapshot.undoDescriptions; redoDescriptions = snapshot.redoDescriptions

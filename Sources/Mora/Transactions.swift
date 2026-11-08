@@ -79,13 +79,23 @@ struct TransactionsView: View {
         })
         .task(id: searchRequest) {
             let request = searchRequest, snapshot = store.ledger.withoutChangeHistory()
+            store.diagnostics.record("list-start-revision-\(request.revision)-accounts-\(request.query.accountIDs?.count ?? -1)", taskCancelled: Task.isCancelled)
             do {
                 if !request.query.text.isEmpty { try await Task.sleep(for: .milliseconds(150)) }
                 let result = try await BackgroundWork.shared.perform { try request.query.prepare(in: snapshot) }
-                guard !Task.isCancelled, request == searchRequest else { return }
+                guard !Task.isCancelled, request == searchRequest else {
+                    store.diagnostics.record("list-discarded-revision-\(request.revision)", taskCancelled: Task.isCancelled)
+                    return
+                }
+                store.diagnostics.record("list-apply-revision-\(request.revision)-rows-\(result.rows.count)", taskCancelled: Task.isCancelled)
                 AppMotion.update(using: AppMotion.list) { presentation.apply(result) }
-            } catch is CancellationError { }
-            catch { presentation.failedRefresh(); store.error = error.localizedDescription }
+                store.diagnostics.record("list-applied-revision-\(request.revision)", taskCancelled: Task.isCancelled)
+            } catch is CancellationError {
+                store.diagnostics.record("list-cancelled-revision-\(request.revision)", taskCancelled: Task.isCancelled)
+            } catch {
+                store.diagnostics.record("list-failed-revision-\(request.revision)", error: error, taskCancelled: Task.isCancelled)
+                presentation.failedRefresh(); store.error = error.localizedDescription
+            }
         }
         .confirmationDialog(L("Удалить \(selection.count) операций?"), isPresented: $confirmDelete, titleVisibility: .visible) { Button(L("Удалить операции"), role: .destructive) { Task { @MainActor in
             let result = await store.change { [selection] ledger -> (Bool, ChangeDescription) in
