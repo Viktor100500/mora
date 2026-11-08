@@ -7,7 +7,7 @@ struct WalletRun: Codable, Identifiable, Equatable, Sendable {
     enum Delivery: String, Codable, Sendable {
         /// Apple Pay is not turned on in Mora: the run is only logged.
         case logged
-        /// No amount or merchant: never sent, waits for the user to process it.
+        /// Kept on the iPhone by Mora 1.0.24–1.0.34 without amount or merchant; now sent for review.
         case incomplete
         /// The first action saved merchant and card; the amount action has not run yet.
         case awaitingAmount

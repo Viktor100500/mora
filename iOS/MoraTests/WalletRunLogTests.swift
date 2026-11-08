@@ -105,23 +105,32 @@ final class WalletRunLogTests: XCTestCase {
         XCTAssertEqual(body["p_amount"], "$12.40"); XCTAssertEqual(body["p_merchant"], "Target")
     }
 
-    func testPurchaseWithoutAmountStaysOnTheIPhoneUntilProcessed() async throws {
+    func testPurchaseWithoutAmountGoesToTheSharedInbox() async throws {
         try WalletRunLog.record(amount: nil, merchant: "", card: "Chase", name: "NJ Transit", action: "Start Wallet Payment",
                                 awaitingAmount: true, sending: true, at: start, in: directory)
         let requests = Requests()
         let delivery = WalletDelivery(directory: directory) { request in
-            await requests.add(request); throw URLError(.badServerResponse)
+            await requests.add(request)
+            return (Data(#"{"id":"c1","state":"pending","reason":"Не получена положительная сумма"}"#.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
         }
         await delivery.deliverWaiting(with: sender, now: start.addingTimeInterval(WalletDelivery.amountGrace + 1))
-        var run = try XCTUnwrap(WalletRunLog.runs(in: directory).first)
-        XCTAssertEqual(run.delivery, .incomplete); XCTAssertTrue(run.needsProcessing)
-        XCTAssertEqual(run.sentMerchant, "NJ Transit", "the name stands in for a missing merchant")
-        let sent = await requests.all.count
-        XCTAssertEqual(sent, 0, "a broken purchase is never sent")
+        let run = try XCTUnwrap(WalletRunLog.runs(in: directory).first)
+        XCTAssertEqual(run.delivery, .delivered); XCTAssertEqual(run.serverState, "pending"); XCTAssertFalse(run.needsProcessing)
+        let sent = await requests.all
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(sent.first?.httpBody)) as? [String: String])
+        XCTAssertEqual(body["p_amount"], ""); XCTAssertEqual(body["p_merchant"], "NJ Transit")
+    }
 
-        await delivery.markProcessed(run.id)
-        run = try XCTUnwrap(WalletRunLog.runs(in: directory).first)
-        XCTAssertEqual(run.delivery, .processed); XCTAssertFalse(run.needsProcessing)
+    func testPurchasesKeptOnTheIPhoneByOlderBuildsAreSent() async throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        var old = WalletRun(receivedAt: start, amount: "", merchant: "K1 Grocery 1", card: "Visa", delivery: .incomplete)
+        old.action = "Start Wallet Payment"
+        try WalletRunLog.save(old, in: directory)
+        let delivery = WalletDelivery(directory: directory) { request in
+            (Data(#"{"id":"c1","state":"pending"}"#.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+        await delivery.deliverWaiting(with: sender, now: start.addingTimeInterval(86_400))
+        XCTAssertEqual(WalletRunLog.runs(in: directory).first?.delivery, .delivered)
     }
 
     func testEmptyRunNextToACompleteRunIsADuplicate() async throws {
@@ -137,7 +146,7 @@ final class WalletRunLogTests: XCTestCase {
 
         await delivery.deliverWaiting(with: sender, now: start.addingTimeInterval(3_600 + WalletDelivery.amountGrace + 1))
         runs = WalletRunLog.runs(in: directory)
-        XCTAssertEqual(runs.first?.delivery, .incomplete, "then the user processes it")
+        XCTAssertEqual(runs.first?.delivery, .delivered, "then it goes to the shared inbox with its time")
     }
 
     /// Seen on the iPhone 8 Nov 2026: for a transit tap Wallet passes no merchant and
