@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.1 — 2026-11-07
+
+Mac 1.7.1 (build 80)
+
+- **Settings layout.** The AI agent picker in Settings → AI Assistant lines up with the Copy buttons below it again, instead of stopping short of the right edge.
+
 ## 1.7.0 — 2026-11-07
 
 Mac 1.7.0 (build 79) · iPhone 1.0.33 (build 34)
