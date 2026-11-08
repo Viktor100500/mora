@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.7.0 — 2026-11-07
+
+Mac 1.7.0 (build 79) · iPhone 1.0.33 (build 34)
+
+### Mac
+
+- **Sidebar width stays within limits.** Dragging the divider now stops at the narrowest and widest sidebar width instead of letting it squeeze or stretch without limit. The narrowest width always keeps menu items such as Categories and Rules and Import History on one line.
+- **Net worth is always shown in full.** The Net Worth amount at the bottom of the sidebar is no longer cut off with an ellipsis. Long amounts (tens of millions with kopecks, in any currency) shrink smoothly to fit, and if an amount still does not fit at the smallest size, the sidebar becomes wider. Hiding amounts does not change the layout.
+
+### iPhone
+
+- **One list of Apple Pay purchases to review** (1.0.31). Purchases saved on the iPhone and those waiting in the shared database now form a single Purchases to Review screen in More, so the counts always agree. The overview shows how many are waiting and opens the list; the More tab badge counts both. Swiping deletes a purchase after a confirmation instead of hiding it.
+- **Reliable pull to refresh** (1.0.32). A sync is no longer reported as "cancelled" when the screen redraws during a pull to refresh, and a deleted purchase to review disappears at once instead of briefly coming back.
+- **Back to the top** (1.0.33). Tapping the open Overview or Analytics tab again scrolls back to the top with the large title expanded, like Transactions and Accounts.
+
 ## 1.6.40 — 2026-11-04
 
 - Mac: an opaque Mora launch screen with a softly glowing particle network. Nearby particles connect with brighter lines and move away from the pointer. The screen fades into the ready app without an added delay; Reduce Motion keeps the network still. The welcome sheet appears after the transition.
