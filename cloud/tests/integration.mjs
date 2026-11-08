@@ -482,6 +482,101 @@ try {
     const revoked=(await mcp({jsonrpc:'2.0',id:7,method:'tools/call',params:{name:'get_mora_context',arguments:{}}})).result;
     assert.equal(revoked.isError,true); assert(revoked.content[0].text.includes('revoked'));
   });
+  await check('the Telegram form books purchases with its account and category through a phone key',async()=>{
+    const phone=await rpc(owner,'mora_create_phone_token',[h,accountID,'Telegram · Настя']);
+    const now=new Date().toISOString();
+    const add=(id,amount,currency,merchant,category=null,account=accountID)=>
+      rpc(anon,'mora_phone_add_purchase',[phone.token,id,account,amount,currency,merchant,category,'наличные',now]);
+    const ctx=await rpc(anon,'mora_phone_context',[phone.token]);
+    assert(ctx.accounts.some(a=>a.id===accountID.toLowerCase()&&a.currency==='USD'));
+    assert(ctx.categories.some(c=>c.name==='Cafe'));
+    assert.equal(ctx.default_account_id,accountID.toLowerCase());
+    assert(!JSON.stringify(ctx).includes(phone.token));
+    const event=uuid();
+    const booked=await add(event,'7.25','usd','  Corner   shop ',categoryID);
+    assert.equal(booked.state,'recorded'); assert.equal(booked.category,'Cafe'); assert.equal(booked.account,'Shared test account');
+    assert.equal((await add(event,'7.25','USD','Corner shop',categoryID)).duplicate,true);
+    const tx=(await rpc(owner,'mora_get_household',[h])).snapshot.transactions.find(t=>t.externalID==='wallet:'+booked.id);
+    assert.equal(tx.id,booked.id.toUpperCase()); assert.equal(tx.amount,-7.25); assert.equal(tx.merchant,'Corner shop');
+    assert.equal(tx.categoryID,categoryID); assert.deepEqual(tx.tags,['Telegram']); assert.equal(tx.note,'наличные · Telegram · Настя');
+    assert.equal((await add(uuid(),'3','USD','Cafe Central')).category,'Cafe','Mora\'s rules pick a category when the form has none');
+    const foreign=await add(uuid(),'40','EUR','Markt');
+    assert.equal(foreign.state,'pending'); assert.equal(foreign.reason,'Валюта покупки отличается от валюты счета');
+    assert((await rpc(owner,'mora_list_pending',[h])).some(c=>c.id===foreign.id&&c.label==='Telegram · Настя'));
+    await assert.rejects(()=>add(uuid(),'1.234','USD','Too precise'),/at most 2 decimals/);
+    await assert.rejects(()=>add(uuid(),'1','USD','   '),/merchant/);
+    await assert.rejects(()=>add(uuid(),'1','USD','X',uuid()),/expense category/);
+    await assert.rejects(()=>add(uuid(),'1','USD','X',null,uuid()),/active shared account/);
+    await denied(()=>rpc(anon,'mora_phone_context',['0'.repeat(64)]));
+    const after=await rpc(anon,'mora_phone_context',[phone.token]);
+    assert.equal(after.recent[0].merchant,'Markt');
+    assert.equal(after.recent.find(r=>r.merchant==='Corner shop').category_id,categoryID.toLowerCase());
+    assert.equal(after.totals.today.USD,10.25); assert.equal(after.totals.today.EUR,40);
+
+    // The function, with PostgREST replaced by the anonymous role and Telegram by a recorder.
+    const zlib=await import('node:zlib'), crypto=await import('node:crypto');
+    const {WIDGET_HTML}=await import('../supabase/functions/mora-telegram/widget.ts');
+    assert(zlib.deflateSync(Buffer.from(WIDGET_HTML),{level:9}).length<3800,'the widget fits Telegram\'s 4 KB compressed limit');
+    const {handle}=await import('../supabase/functions/mora-telegram/index.ts');
+    const sent=[], botToken='123:test-token', nastya=4242, stranger=777;
+    const env={url:'https://example-project.supabase.co',key:'sb_publishable_test',botToken,phoneToken:phone.token,
+      webhookSecret:'hook-secret',allowedUsers:new Set([nastya]),miniAppUrl:'https://example.github.io/miniapp/',miniAppLink:'https://t.me/mora_test_bot/add',
+      fetch:async(url,init)=>{
+        const u=new URL(url), body=JSON.parse(init.body);
+        if (u.hostname==='api.telegram.org') {
+          const method=u.pathname.split('/').pop(); sent.push({method,beta:u.pathname.startsWith('/beta/'),body});
+          return new Response(JSON.stringify({ok:true,result:method==='sendWidget'?{message_id:9}:true}));
+        }
+        const name=u.pathname.split('/').pop(), names=Object.keys(body);
+        try {
+          const value=(await anon.query(`select public.${name}(${names.map((n,i)=>`${n}=>$${i+1}`).join(',')}) as value`,names.map(n=>body[n]))).rows[0].value;
+          return new Response(JSON.stringify(value));
+        } catch (error) { return new Response(JSON.stringify({message:error.message}),{status:400}); }
+      }};
+    const post=(route,body,headers={})=>handle(new Request(`${env.url}/functions/v1/mora-telegram/${route}`,{method:'POST',headers,body:JSON.stringify(body)}),env);
+    const initData=(user,authDate=Math.floor(Date.now()/1000))=>{
+      const p=new URLSearchParams({auth_date:String(authDate),query_id:'AAH',user:JSON.stringify({id:user,first_name:'Настя'})});
+      const check=[...p.entries()].map(([k,v])=>`${k}=${v}`).sort().join('\n');
+      const secret=crypto.createHmac('sha256','WebAppData').update(botToken).digest();
+      p.set('hash',crypto.createHmac('sha256',secret).update(check).digest('hex'));
+      return p.toString();
+    };
+    const form=await (await post('api/context',{init_data:initData(nastya)})).json();
+    assert(form.accounts.some(a=>a.name==='Shared test account'));
+    assert.equal((await post('api/context',{init_data:initData(stranger)})).status,400);
+    assert.equal((await post('api/context',{init_data:initData(nastya).replace(/hash=[0-9a-f]/,'hash=0')})).status,400);
+    assert.equal((await post('api/context',{init_data:initData(nastya,Math.floor(Date.now()/1000)-2*86400)})).status,400,'old initData expires');
+    const purchase={init_data:initData(nastya),event_id:uuid(),account_id:accountID.toLowerCase(),amount:5.5,currency:'USD',merchant:'Bakery',category_id:categoryID.toLowerCase(),note:''};
+    const result=await (await post('api/purchase',purchase)).json();
+    assert.equal(result.state,'recorded'); assert(result.message.startsWith('✓ Bakery'));
+    assert.deepEqual(sent.splice(0).map(s=>[s.method,s.body.chat_id]),[['sendMessage',nastya]],'a receipt goes to the chat');
+    assert.equal((await (await post('api/purchase',purchase)).json()).duplicate,true);
+    assert.equal(sent.splice(0).length,0,'a retried purchase sends no second receipt');
+    const bad=await post('api/purchase',{...purchase,event_id:uuid(),amount:-1});
+    assert.equal(bad.status,400); assert.match((await bad.json()).error,/больше нуля/);
+
+    assert.equal((await post('webhook',{message:{chat:{id:stranger,type:'private'},from:{id:stranger},text:'/start'}},{'x-telegram-bot-api-secret-token':'wrong'})).status,403);
+    const hook=(update)=>post('webhook',update,{'x-telegram-bot-api-secret-token':'hook-secret'});
+    await hook({message:{chat:{id:stranger,type:'private'},from:{id:stranger},text:'/start'}});
+    assert.match(sent.splice(0)[0].body.text,new RegExp(`Telegram ID: ${stranger}`));
+    await hook({message:{chat:{id:nastya,type:'private'},from:{id:nastya},text:'/widget'}});
+    const widget=sent.splice(0)[0];
+    assert.equal(widget.method,'sendWidget'); assert.equal(widget.beta,true); assert.equal(widget.body.allow_queries,true);
+    assert.equal(widget.body.html,WIDGET_HTML);
+    const state=JSON.parse(widget.body.chat_data);
+    assert(Buffer.byteLength(widget.body.chat_data)<=1024); assert.equal(state.l,env.miniAppLink); assert.equal(state.r[0][0],'Bakery');
+    await hook({widget_query:{id:'wq1',from:{id:nastya},chat:{id:nastya,type:'private'},message_id:9,data:`q|2.40|0|${state.r[0][2]}`}});
+    const [edit,answer]=sent.splice(0);
+    assert.equal(edit.method,'editMessageWidgetData'); assert.equal(edit.body.message_id,9);
+    assert.equal(answer.method,'answerWidgetQuery'); assert.equal(answer.body.widget_query_id,'wq1'); assert.match(answer.body.data,/^✓ Bakery −2,40 USD/);
+    await hook({widget_query:{id:'wq1',from:{id:nastya},chat:{id:nastya,type:'private'},message_id:9,data:`q|2.40|0|${state.r[0][2]}`}});
+    assert.match(sent.splice(0)[1].body.data,/Уже записано/,'a repeated widget query records nothing new');
+    await hook({widget_query:{id:'wq2',from:{id:stranger},chat:{id:stranger,type:'private'},message_id:3,data:'r'}});
+    assert.match(sent.splice(0)[0].body.data,/^✗/);
+    assert.equal((await rpc(owner,'mora_get_household',[h])).snapshot.transactions.filter(t=>t.merchant==='Bakery').length,2);
+    await rpc(owner,'mora_revoke_phone_token',[phone.id]);
+    assert.match((await (await post('api/context',{init_data:initData(nastya)})).json()).error,/Ключ телефона отозван/);
+  });
   assert(saved.includes('-123456789012.123456'));
   await fs.mkdir(path.join(here,'fixtures'),{recursive:true});
   await fs.writeFile(path.join(here,'fixtures/backend-ledger.json'),saved+'\n');

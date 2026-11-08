@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.3 — 2026-11-08
+
+Mac 1.7.3 (build 82)
+
+- **Telegram bot for purchases.** A new optional Supabase function, `mora-telegram`, records purchases from a strict form in a Telegram Mini App: amount, currency, merchant, category, account and date, with no free-text parsing. A Telegram HTML bubble widget offers recent merchants with a keypad. Purchases in the account's currency are booked at once with their category; other currencies wait in the inbox for the Visa conversion. Setup is in `cloud/telegram/README.md`.
+
 ## 1.7.2 — 2026-11-08
 
 Mac 1.7.2 (build 81)

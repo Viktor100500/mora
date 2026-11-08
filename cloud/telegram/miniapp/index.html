@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Mora · новая трата</title>
+<!-- Telegram Mini App: a strict purchase form for Mora. The page holds no secrets:
+     it sends Telegram's signed initData to the mora-telegram function, given as
+     ?api=https://<project>.supabase.co/functions/v1/mora-telegram -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{--bg:var(--tg-theme-bg-color,#fff);--text:var(--tg-theme-text-color,#111);--hint:var(--tg-theme-hint-color,#8a8f98);
+--field:var(--tg-theme-secondary-bg-color,#f1f3f6);--accent:var(--tg-theme-button-color,#2a8bf2);--accent-text:var(--tg-theme-button-text-color,#fff);
+--danger:var(--tg-theme-destructive-text-color,#d6453d)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 -apple-system,system-ui,sans-serif;-webkit-text-size-adjust:100%}
+main{max-width:520px;margin:0 auto;padding:12px 16px 96px}
+.totals{display:flex;gap:8px;margin-bottom:14px}
+.totals div{flex:1;background:var(--field);border-radius:12px;padding:8px 10px}
+.totals small{display:block;color:var(--hint);font-size:12px}
+.totals b{font-size:15px;font-weight:600}
+label{display:block;margin:12px 0 4px;font-size:13px;color:var(--hint)}
+input,select{width:100%;font:inherit;color:var(--text);background:var(--field);border:0;border-radius:12px;padding:12px;outline:none;-webkit-appearance:none;appearance:none}
+input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
+.amount{display:grid;grid-template-columns:1fr 104px;gap:8px}
+.amount input{font-size:28px;font-weight:600;padding:10px 12px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.chips{display:flex;gap:6px;overflow-x:auto;padding:2px 0 4px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chips button{flex:none;font:inherit;font-size:14px;border:0;border-radius:16px;padding:6px 12px;background:var(--field);color:var(--text)}
+.note{margin-top:10px;font-size:13px;color:var(--hint)}
+.error{color:var(--danger)}
+.done{color:#2e9e55}
+#send{display:none;width:100%;margin-top:18px;font:inherit;font-weight:600;border:0;border-radius:12px;padding:14px;background:var(--accent);color:var(--accent-text)}
+#send:disabled{opacity:.5}
+.hidden{display:none}
+</style>
+</head>
+<body>
+<main>
+  <div class="totals"><div><small>Сегодня</small><b id="today">—</b></div><div><small>Месяц</small><b id="month">—</b></div></div>
+  <div id="loading" class="note">Загружаю счета…</div>
+  <form id="form" class="hidden" autocomplete="off" novalidate>
+    <label for="amount">Сумма</label>
+    <div class="amount">
+      <input id="amount" inputmode="decimal" placeholder="0" required>
+      <select id="currency" aria-label="Валюта"></select>
+    </div>
+    <label for="merchant">Продавец</label>
+    <input id="merchant" maxlength="120" placeholder="Например, Lidl" required>
+    <div class="chips" id="recent"></div>
+    <label for="category">Категория</label>
+    <select id="category"></select>
+    <div class="row">
+      <div><label for="account">Счёт</label><select id="account"></select></div>
+      <div><label for="date">Дата</label><input id="date" type="date" required></div>
+    </div>
+    <label for="note">Заметка (необязательно)</label>
+    <input id="note" maxlength="200" placeholder="">
+    <button id="send" type="submit">Записать</button>
+    <div id="status" class="note" role="status"></div>
+  </form>
+</main>
+<script>
+(function () {
+  var tg = window.Telegram && Telegram.WebApp;
+  var api = new URLSearchParams(location.search).get('api') || '';
+  var $ = function (id) { return document.getElementById(id); };
+  var ctx = null, eventId = newId(), busy = false;
+  var COMMON = ['EUR', 'USD', 'GBP', 'CHF', 'RSD', 'TRY', 'GEL', 'AED', 'THB', 'RUB'];
+  var DECIMALS = { JPY: 0, KRW: 0, VND: 0, ISK: 0, CLP: 0, BHD: 3, KWD: 3, OMR: 3, JOD: 3, TND: 3 };
+
+  function newId() { return (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, function () { return (Math.random() * 16 | 0).toString(16); })); }
+  function status(text, kind) { var s = $('status'); s.textContent = text || ''; s.className = 'note' + (kind ? ' ' + kind : ''); }
+  function option(select, value, text) { var o = document.createElement('option'); o.value = value; o.textContent = text; select.appendChild(o); }
+  function money(map) {
+    var parts = Object.keys(map || {}).map(function (c) { var d = DECIMALS[c] == null ? 2 : DECIMALS[c];
+      return Number(map[c]).toLocaleString('ru-RU', { minimumFractionDigits: d, maximumFractionDigits: d }) + ' ' + c; });
+    return parts.join(' + ') || '0';
+  }
+  function today() { var d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); }
+
+  function call(action, body) {
+    if (!api) return Promise.reject(new Error('В адресе формы нет ?api=. Проверьте TELEGRAM_MINIAPP_URL.'));
+    body.init_data = tg ? tg.initData : '';
+    return fetch(api.replace(/\/+$/, '') + '/api/' + action, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (v) { if (!r.ok) throw new Error(v.error || ('Ошибка ' + r.status)); return v; }); });
+  }
+
+  function account() { return ctx.accounts.find(function (a) { return a.id === $('account').value; }); }
+  function fillCurrencies(selected) {
+    var list = [];
+    ctx.accounts.forEach(function (a) { list.push(a.currency); });
+    (ctx.recent || []).forEach(function (r) { if (r.currency) list.push(r.currency); });
+    if (ctx.base_currency) list.push(ctx.base_currency);
+    list = list.concat(COMMON).filter(function (c, i, all) { return /^[A-Z]{3}$/.test(c) && all.indexOf(c) === i; });
+    var sel = $('currency'); sel.textContent = '';
+    list.forEach(function (c) { option(sel, c, c); });
+    sel.value = selected && list.indexOf(selected) >= 0 ? selected : (account() || {}).currency || list[0];
+  }
+  function hint() {
+    var a = account(), c = $('currency').value;
+    status(a && c && a.currency !== c ? 'Счёт в ' + a.currency + ': Mora пересчитает ' + c + ' по курсу Visa, когда откроется.' : '');
+  }
+  function applyRecent(r) {
+    $('merchant').value = r.merchant;
+    if (r.account_id && ctx.accounts.some(function (a) { return a.id === r.account_id; })) $('account').value = r.account_id;
+    if (r.category_id && ctx.categories.some(function (c) { return c.id === r.category_id; })) $('category').value = r.category_id;
+    fillCurrencies(r.currency);
+    hint();
+  }
+
+  function render() {
+    $('today').textContent = money(ctx.totals && ctx.totals.today);
+    $('month').textContent = money(ctx.totals && ctx.totals.month);
+    var acc = $('account'); acc.textContent = '';
+    ctx.accounts.forEach(function (a) { option(acc, a.id, a.name + ' · ' + a.currency); });
+    acc.value = ctx.accounts.some(function (a) { return a.id === ctx.default_account_id; }) ? ctx.default_account_id : (ctx.accounts[0] || {}).id;
+    var cat = $('category'); cat.textContent = '';
+    option(cat, '', 'Определить автоматически');
+    ctx.categories.forEach(function (c) { option(cat, c.id, c.name); });
+    var chips = $('recent'); chips.textContent = '';
+    (ctx.recent || []).slice(0, 12).forEach(function (r) {
+      var b = document.createElement('button'); b.type = 'button'; b.textContent = r.merchant;
+      b.onclick = function () { applyRecent(r); if (tg) tg.HapticFeedback.selectionChanged(); $('amount').focus(); };
+      chips.appendChild(b);
+    });
+    fillCurrencies();
+    $('date').value = today(); $('date').max = today();
+    // From the widget: r<index>_<amount with d for the point>.
+    var start = tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param || '';
+    var m = /^r(\d{1,2})_(\d{0,9}(?:d\d{0,3})?)$/.exec(start);
+    if (m && ctx.recent[+m[1]]) { applyRecent(ctx.recent[+m[1]]); $('amount').value = m[2].replace('d', '.'); }
+    $('loading').classList.add('hidden'); $('form').classList.remove('hidden');
+    validate();
+  }
+
+  function amountValue() {
+    var raw = $('amount').value.replace(/\s/g, '').replace(',', '.'), c = $('currency').value;
+    var d = DECIMALS[c] == null ? 2 : DECIMALS[c];
+    if (!new RegExp('^\\d{1,12}' + (d ? '(\\.\\d{1,' + d + '})?' : '') + '$').test(raw)) return null;
+    var n = Number(raw); return n > 0 ? n : null;
+  }
+  function valid() { return !!(ctx && amountValue() && $('merchant').value.trim() && $('account').value && $('date').value && $('date').value <= today()); }
+  function validate() {
+    var ok = valid();
+    if (tg && tg.MainButton) { ok ? tg.MainButton.enable() : tg.MainButton.disable(); tg.MainButton.color = ok ? tg.themeParams.button_color || '#2a8bf2' : tg.themeParams.hint_color || '#a0a4ab'; }
+    $('send').disabled = !ok;
+  }
+
+  function submit() {
+    if (busy) return;
+    if (!valid()) { status('Заполните сумму, продавца, счёт и дату.', 'error'); if (tg) tg.HapticFeedback.notificationOccurred('error'); return; }
+    busy = true; if (tg) tg.MainButton.showProgress(false); status('Записываю…');
+    var day = $('date').value;
+    var when = day === today() ? new Date() : new Date(day + 'T12:00:00');
+    call('purchase', { event_id: eventId, amount: amountValue(), currency: $('currency').value, merchant: $('merchant').value.trim(),
+      account_id: $('account').value, category_id: $('category').value || null, note: $('note').value.trim(), date: when.toISOString() })
+      .then(function (r) {
+        status(r.message, r.state === 'pending' && r.reason !== 'Валюта покупки отличается от валюты счета' ? '' : 'done');
+        if (tg) tg.HapticFeedback.notificationOccurred('success');
+        eventId = newId();
+        $('amount').value = ''; $('merchant').value = ''; $('note').value = ''; $('category').value = '';
+        return call('context', {}).then(function (c) { ctx = c; $('today').textContent = money(c.totals.today); $('month').textContent = money(c.totals.month); });
+      })
+      .catch(function (e) { status(e.message, 'error'); if (tg) tg.HapticFeedback.notificationOccurred('error'); })
+      .then(function () { busy = false; if (tg) tg.MainButton.hideProgress(); validate(); });
+  }
+
+  ['amount', 'merchant', 'date', 'account', 'currency'].forEach(function (id) { $(id).addEventListener('input', validate); $(id).addEventListener('change', validate); });
+  $('account').addEventListener('change', function () { fillCurrencies(); hint(); });
+  $('currency').addEventListener('change', hint);
+  $('form').addEventListener('submit', function (e) { e.preventDefault(); submit(); });
+
+  if (tg && tg.initData) {
+    tg.ready(); tg.expand();
+    tg.MainButton.setText('Записать'); tg.MainButton.show(); tg.MainButton.onClick(submit);
+  } else {
+    $('send').style.display = 'block';
+  }
+  call('context', {}).then(function (c) { ctx = c; if (!ctx.accounts.length) throw new Error('В общей базе нет активных счетов.'); render(); })
+    .catch(function (e) { $('loading').textContent = e.message; $('loading').className = 'note error'; });
+})();
+</script>
+</body>
+</html>
