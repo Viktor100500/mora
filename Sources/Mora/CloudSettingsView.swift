@@ -324,6 +324,7 @@ struct CloudSettingsView: View {
                             if !knownCurrency {
                                 Text("Валюта покупки не передана").font(.caption).foregroundStyle(.secondary)
                             }
+                            Text("Дата: \(capture.date.formatted(date: .abbreviated, time: .shortened))").font(.caption).foregroundStyle(.secondary)
                             Text("Источник: \(capture.label)").font(.caption).foregroundStyle(.secondary)
                             if let card = capture.card, !card.isEmpty {
                                 Text("Карта: \(card)").font(.caption).foregroundStyle(.secondary)

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.2 — 2026-11-08
+
+Mac 1.7.2 (build 81)
+
+- **Purchase review dates.** Wallet purchases awaiting review show their transaction date and time in the list.
+
 ## 1.7.1 — 2026-11-07
 
 Mac 1.7.1 (build 80)

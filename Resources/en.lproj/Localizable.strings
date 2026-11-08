@@ -117,6 +117,7 @@
 "Валюта покупки" = "Purchase currency";
 "Валюта списания" = "Debit currency";
 "Дата" = "Date";
+"Дата: %@" = "Date: %@";
 "Со счета" = "From account";
 "На счет" = "To account";
 "Сумма зачисления" = "Amount received";
