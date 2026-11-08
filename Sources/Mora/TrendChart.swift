@@ -64,7 +64,7 @@ struct TrendChart: View {
         .chartScrollPosition(x: $scrollStart)
         .chartXAxis {
             AxisMarks(values: axisDates) { value in
-                AxisValueLabel(collisionResolution: .greedy(minimumSpacing: 12)) {
+                AxisValueLabel(anchor: .topLeading, collisionResolution: .greedy(minimumSpacing: 12)) {
                     if let date = value.as(Date.self) {
                         Text(detail.axisLabel(date)).font(.system(size: 10)).fixedSize()
                     }
@@ -140,10 +140,9 @@ struct TrendChart: View {
     private var axisDates: [Date] {
         let calendar = Calendar.current
         let margin = data.visibleDuration * min(0.2, 40 / Double(max(1, plotWidth)))
-        let lower = scrollStart.addingTimeInterval(margin)
+        let lower = scrollStart
         let upper = scrollStart.addingTimeInterval(data.visibleDuration - margin)
         var date = calendar.dateInterval(of: detail == .months ? .month : .weekOfYear, for: lower)!.start
-        if detail == .months { date = calendar.date(byAdding: .day, value: 14, to: date)! }
         var result: [Date] = []
         while date <= upper {
             if date >= lower { result.append(date) }
