@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.3 — 2026-11-08
+
+Mac 1.7.3 (build 82)
+
+- **Cloud sync.** Cancelled network requests no longer appear as errors, and background sync can retry promptly.
+
 ## 1.7.2 — 2026-11-08
 
 Mac 1.7.2 (build 81)

@@ -528,6 +528,39 @@ final class CloudSyncTests: XCTestCase {
         XCTAssertFalse(store.notifications.events.contains { $0.message == "Синхронизация завершена" })
     }
 
+    func testCancelledNetworkRequestDoesNotReportAnErrorAndNextSyncSucceeds() async throws {
+        defer { try? cleanup() }
+        try await prepare()
+        SyncStubProtocol.handler = { _ in throw URLError(.cancelled) }
+        await cloud.synchronize(inBackground: true)
+        XCTAssertNil(cloud.error)
+        XCTAssertFalse(store.isDeferringUpdates)
+        XCTAssertTrue(store.notifications.events.isEmpty)
+
+        SyncStubProtocol.handler = { request in
+            (200, Data((request.url!.lastPathComponent == "mora_get_status" ? "{\"version\":1,\"pending_count\":0}" : "[]").utf8))
+        }
+        await cloud.synchronize(inBackground: true)
+        XCTAssertNil(cloud.error)
+        XCTAssertTrue(store.notifications.events.isEmpty)
+    }
+
+    func testCancelledWalletRateDoesNotMarkPurchaseForReview() async throws {
+        defer { try? cleanup() }
+        var ledger = Ledger.empty
+        ledger.accounts = [Account(name: "EUR test", currency: "EUR")]
+        try await prepare(ledger: ledger, walletRate: { _, _, _, _ in throw URLError(.cancelled) })
+        let captures = "[{\"id\":\"\(UUID())\",\"merchant\":\"Test\",\"amount\":\"$10\",\"currency\":\"USD\",\"account_id\":\"\(ledger.accounts[0].id)\",\"date\":\"2026-10-23T12:00:00Z\",\"label\":\"Test phone\"}]"
+        SyncStubProtocol.handler = { request in
+            (200, Data((request.url!.lastPathComponent == "mora_get_status" ? "{\"version\":1,\"pending_count\":1}" : captures).utf8))
+        }
+        await cloud.synchronize(inBackground: true)
+        XCTAssertNil(cloud.error)
+        XCTAssertTrue(cloud.pending.isEmpty)
+        XCTAssertFalse(store.isDeferringUpdates)
+        XCTAssertFalse(store.notifications.events.contains { $0.kind == .error || $0.kind == .review })
+    }
+
     func testDeferredPresentationPreservesConcurrentEditsAndPublishesLatestSnapshot() async throws {
         defer { try? cleanup() }
         var ledger = Ledger.empty

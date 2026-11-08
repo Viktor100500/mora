@@ -200,10 +200,11 @@ final class CloudSync: ObservableObject {
                     actions: pending.isEmpty ? [] : [.inbox])
             }
         }
-        catch is CancellationError {
-            if reportSyncResult { store?.showNotice(L("Синхронизация с облаком отменена"), kind: .warning) }
-        }
         catch {
+            if Self.isCancellation(error) {
+                if reportSyncResult { store?.showNotice(L("Синхронизация с облаком отменена"), kind: .warning) }
+                return
+            }
             if Self.isConnectionError(error) {
                 lastOperationConnectionFailure = true
                 store?.notifications.connectionLost()
@@ -220,6 +221,13 @@ final class CloudSync: ObservableObject {
                     detail: error.localizedDescription, kind: .error, actions: [.inbox])
             }
         }
+    }
+    private static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        let value = error as NSError
+        if value.domain == NSURLErrorDomain && value.code == NSURLErrorCancelled { return true }
+        if let underlying = value.userInfo[NSUnderlyingErrorKey] as? Error { return isCancellation(underlying) }
+        return false
     }
     private static func isConnectionError(_ error: Error) -> Bool {
         let value = error as NSError
@@ -426,10 +434,14 @@ final class CloudSync: ObservableObject {
                 self.failureCount = 0; self.nextAttempt = Date().addingTimeInterval(8)
             } catch {
                 failure = error
-                self.failureCount += 1
-                // Without a network the next try stays close instead of backing off for minutes.
-                let limit: Double = Self.isConnectionError(error) ? 30 : 300
-                self.nextAttempt = Date().addingTimeInterval(min(limit, 8 * pow(2, Double(min(self.failureCount, 5)))))
+                if Self.isCancellation(error) {
+                    self.nextAttempt = .distantPast
+                } else {
+                    self.failureCount += 1
+                    // Without a network the next try stays close instead of backing off for minutes.
+                    let limit: Double = Self.isConnectionError(error) ? 30 : 300
+                    self.nextAttempt = Date().addingTimeInterval(min(limit, 8 * pow(2, Double(min(self.failureCount, 5)))))
+                }
             }
             // Disk writes stay durable throughout; only their presentation waits.
             await store.endDeferredUpdates()
@@ -445,7 +457,7 @@ final class CloudSync: ObservableObject {
             self.walletProgressID = nil
             if let failure {
                 if let progressID {
-                    if failure is CancellationError || Self.isConnectionError(failure) { store.finishProgressNotice(progressID) }
+                    if Self.isCancellation(failure) || Self.isConnectionError(failure) { store.finishProgressNotice(progressID) }
                     else {
                         store.finishProgressNotice(progressID, message: L("Не удалось загрузить покупки из Wallet"),
                             detail: failure.localizedDescription, kind: .error, actions: [.inbox])
@@ -493,8 +505,8 @@ final class CloudSync: ObservableObject {
                 await store.reloadFromDisk()
                 stagedPending?.removeAll { $0.id == capture.id }
                 markSynced()
-            } catch is CancellationError { throw CancellationError() }
-            catch {
+            } catch {
+                if Self.isCancellation(error) { throw error }
                 // Only a real failure needs review; offline purchases wait for the next attempt.
                 if !Self.isConnectionError(error) { attemptedCaptures.insert(capture.id) }
                 if firstError == nil { firstError = error }
