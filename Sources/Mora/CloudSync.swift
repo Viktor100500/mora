@@ -103,6 +103,7 @@ final class CloudSync: ObservableObject {
     var publicKey: String { settings?.configuration.publicKey ?? "" }
     var captureURL: String { projectURL.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/rest/v1/rpc/mora_capture_payment" }
     private var directory: URL? { store?.fileURL.deletingLastPathComponent() }
+    private lazy var diagnostics: CloudSyncDiagnostics? = directory.map { CloudSyncDiagnostics(directory: $0) }
     private var configURL: URL? { directory?.appendingPathComponent("cloud-settings.json") }
     private var checkpointURL: URL? { directory?.appendingPathComponent("cloud-checkpoint.json") }
     private var keychainAccount: String {
@@ -111,11 +112,16 @@ final class CloudSync: ObservableObject {
 
     func prepare(store: FinanceStore) async {
         self.store = store
+        diagnostics?.record("prepare-start", taskCancelled: Task.isCancelled)
         await store.load()
         await load()
+        diagnostics?.record("prepare-loaded", taskCancelled: Task.isCancelled)
         if enabled && signedIn && !store.isDemo { await synchronize(inBackground: true) }
+        diagnostics?.record("prepare-end", taskCancelled: Task.isCancelled)
     }
     func run(store: FinanceStore) async {
+        diagnostics?.record("poll-loop-start", taskCancelled: Task.isCancelled)
+        defer { diagnostics?.record("poll-loop-end", taskCancelled: Task.isCancelled) }
         while !Task.isCancelled {
             if enabled && signedIn && !store.isDemo && Date() >= nextAttempt { await synchronize(inBackground: true) }
             do { try await Task.sleep(for: .seconds(8)) } catch { return }
@@ -239,6 +245,13 @@ final class CloudSync: ObservableObject {
         return false
     }
     private func rpc<B: Encodable & Sendable, R: Decodable & Sendable>(_ function: String, _ body: B) async throws -> R {
+        do { return try await rpcRequest(function, body) }
+        catch {
+            diagnostics?.record("rpc-\(function)-failed", error: error, taskCancelled: Task.isCancelled)
+            throw error
+        }
+    }
+    private func rpcRequest<B: Encodable & Sendable, R: Decodable & Sendable>(_ function: String, _ body: B) async throws -> R {
         guard let settings, var session else { throw CloudAPIError.unauthorized }
         let api = CloudAPI(configuration: settings.configuration, transport: transport)
         if session.expires_at < Date().timeIntervalSince1970 + 60 {
@@ -415,15 +428,20 @@ final class CloudSync: ObservableObject {
             self.importedBatchIDs = []
             self.stagedSyncDate = nil
             var failure: Error?
+            var stage = "sync"
             do {
                 while true {
                     try Task.checkCancellation()
+                    stage = "snapshot"
                     try await self.syncNow()
                     let attempted = self.stagedPending ?? []
+                    stage = "wallet"
                     try await self.bookWalletPurchases()
+                    stage = "presentation"
                     if self.walletProgressID != nil { await self.preparePresentation?(store) }
                     // Recheck both the snapshot version and capture contents. Equal
                     // counts can hide a new/corrected purchase while rates were loading.
+                    stage = "verify"
                     let saved = try await self.checkpoint().envelope
                     _ = try await self.loadPending(id)
                     let status: Status = try await self.rpc("mora_get_status", HouseholdBody(p_household_id: id))
@@ -434,6 +452,7 @@ final class CloudSync: ObservableObject {
                 self.failureCount = 0; self.nextAttempt = Date().addingTimeInterval(8)
             } catch {
                 failure = error
+                self.diagnostics?.record("sync-\(stage)-failed", error: error, taskCancelled: Task.isCancelled)
                 if Self.isCancellation(error) {
                     self.nextAttempt = .distantPast
                 } else {

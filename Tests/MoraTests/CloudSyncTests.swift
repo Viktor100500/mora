@@ -536,6 +536,12 @@ final class CloudSyncTests: XCTestCase {
         XCTAssertNil(cloud.error)
         XCTAssertFalse(store.isDeferringUpdates)
         XCTAssertTrue(store.notifications.events.isEmpty)
+        let log = try String(contentsOf: directory.appendingPathComponent("cloud-sync-diagnostics.log"), encoding: .utf8)
+        XCTAssertTrue(log.contains("event=rpc-mora_get_status-failed"))
+        XCTAssertTrue(log.contains("event=sync-snapshot-failed"))
+        XCTAssertTrue(log.contains("error=url--999"))
+        XCTAssertFalse(log.contains("test-access"))
+        XCTAssertFalse(log.contains("test@example.test"))
 
         SyncStubProtocol.handler = { request in
             (200, Data((request.url!.lastPathComponent == "mora_get_status" ? "{\"version\":1,\"pending_count\":0}" : "[]").utf8))
@@ -543,6 +549,20 @@ final class CloudSyncTests: XCTestCase {
         await cloud.synchronize(inBackground: true)
         XCTAssertNil(cloud.error)
         XCTAssertTrue(store.notifications.events.isEmpty)
+    }
+
+    func testDiagnosticsDoesNotIncludeErrorDescriptionOrGrowWithoutBound() throws {
+        directory = FileManager.default.temporaryDirectory.appendingPathComponent("MoraSyncTests-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let log = CloudSyncDiagnostics(directory: directory)
+        log.record("test", error: NSError(domain: "private-domain", code: 1, userInfo: [NSLocalizedDescriptionKey: "private transaction"]))
+        let file = directory.appendingPathComponent("cloud-sync-diagnostics.log")
+        XCTAssertFalse(try String(contentsOf: file, encoding: .utf8).contains("private transaction"))
+        try Data(repeating: 65, count: 512 * 1024).write(to: file)
+        log.record("after-limit")
+        let text = try String(contentsOf: file, encoding: .utf8)
+        XCTAssertTrue(text.contains("event=after-limit"))
+        XCTAssertLessThan(text.utf8.count, 1024)
     }
 
     func testCancelledWalletRateDoesNotMarkPurchaseForReview() async throws {

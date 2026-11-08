@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.4 — 2026-11-08
+
+Mac 1.7.4 (build 83)
+
+- **Cloud sync diagnostics.** A local, size-limited log records sync stages and cancellation codes without financial data or credentials.
+
 ## 1.7.3 — 2026-11-08
 
 Mac 1.7.3 (build 82)
