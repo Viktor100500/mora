@@ -31,6 +31,7 @@ struct BankAlertsScreen: View {
             Section {
                 NavigationLink { BankAlertSetupScreen(kind: .sms) } label: { Label(L("Банковские SMS"), systemImage: "message") }
                 NavigationLink { BankAlertSetupScreen(kind: .notification) } label: { Label(L("Уведомления приложений банков"), systemImage: "bell.badge") }
+                NavigationLink { BankAlertSetupScreen(kind: .screenshot) } label: { Label(L("Скриншоты оплаты"), systemImage: "camera.viewfinder") }
                 NavigationLink { BankAlertSampleScreen() } label: { Label(L("Проверить на примере"), systemImage: "text.magnifyingglass") }
             } header: { Text(L("Подключение")) }
             if !templates.isEmpty {
@@ -100,7 +101,8 @@ struct BankAlertsScreen: View {
         case .waiting: ("Сохранено на iPhone, уйдёт при появлении интернета", "clock", "orange")
         case .delivered: (alert.serverState == "recorded" ? "Расход записан" : "Доставлено, ждёт проверки в Mora", "checkmark", "green")
         case .failed: ("Сервер не принял покупку", "xmark", "orange")
-        case .duplicate: ("Уже пришло из Wallet: не отправлено", "square.on.square", "gray")
+        case .duplicate: (alert.sameAs == nil ? "Уже пришло из Wallet: не отправлено" : "Уже пришло другим сообщением банка",
+                          "square.on.square", "gray")
         case .skipped: ("Не учитывается", "minus", "gray")
         }
     }
@@ -109,7 +111,7 @@ struct BankAlertsScreen: View {
 /// Step-by-step automation setup. Mora cannot create automations itself, so the
 /// user builds one with a single Mora action.
 struct BankAlertSetupScreen: View {
-    enum Kind { case sms, notification }
+    enum Kind { case sms, notification, screenshot }
     let kind: Kind
 
     var body: some View {
@@ -117,7 +119,7 @@ struct BankAlertSetupScreen: View {
             switch kind {
             case .sms:
                 Section {
-                    step(1, "Откройте «Быстрые команды» → «Автоматизация» → «+» → «Сообщение».")
+                    step(1, "В «Быстрых командах» создайте автоматизацию с триггером «Сообщение». На iOS 27 триггеры добавляются в новую команду как действия.")
                     step(2, "В поле «Сообщение содержит» введите символ валюты ваших покупок, например «$», «€» или «USD». Отправителя можно не выбирать.")
                     step(3, "Выберите «Запускать сразу» и «Далее».")
                     step(4, "Добавьте действие Mora «Log Bank Message». В «Text» выберите «Входные данные команды» → «Содержимое», в «From» — «Входные данные команды» → «Отправитель».")
@@ -127,7 +129,7 @@ struct BankAlertSetupScreen: View {
                 }
             case .notification:
                 Section {
-                    step(1, "Нужна iOS 27. Откройте «Быстрые команды» → «Автоматизация» → «+» → «Уведомление».")
+                    step(1, "Нужна iOS 27. В «Быстрых командах» создайте автоматизацию с триггером «Уведомление».")
                     step(2, "Выберите приложение банка или карты, например Bybit или Chase. Фильтры по тексту можно не задавать.")
                     step(3, "Выберите «Запускать сразу» и «Далее».")
                     step(4, "Добавьте действие Mora «Log Bank Message». В «Text» выберите «Уведомление» → «Текст», в «Title» — «Уведомление» → «Заголовок», в «From» впишите название приложения.")
@@ -135,13 +137,22 @@ struct BankAlertSetupScreen: View {
                 } header: { Text(L("Автоматизация «Уведомление»")) } footer: {
                     Text(L("Так ловятся карты без SMS: Mora получает текст уведомления о покупке. Уведомления приложения должны быть включены в настройках iPhone."))
                 }
+            case .screenshot:
+                Section {
+                    step(1, "Нужна iOS 27. В «Быстрых командах» создайте автоматизацию с триггером «Скриншот».")
+                    step(2, "Выберите «Запускать сразу».")
+                    step(3, "Добавьте действие «Извлечь текст из изображения» для снятого скриншота.")
+                    step(4, "Добавьте действие Mora «Log Bank Message». В «Text» выберите извлечённый текст, в «From» впишите «Скриншот».")
+                } header: { Text(L("Автоматизация «Скриншот»")) } footer: {
+                    Text(L("Для оплат по QR-коду и в приложениях без SMS и уведомлений: сделайте скриншот экрана «Оплата прошла», и Mora прочитает сумму и получателя. Скриншоты без оплаты Mora пропускает и не сохраняет их текст."))
+                }
             }
             Section {
                 Text(L("Первое сообщение каждого банка появится в «Проверьте один раз». Проверьте сумму и продавца — следующие сообщения в том же формате запишутся сами. Если карта новая, Mora один раз спросит, к какому счёту её относить."))
                     .font(.subheadline)
             } header: { Text(L("Что будет дальше")) }
         }
-        .navigationTitle(L(kind == .sms ? "Банковские SMS" : "Уведомления банков"))
+        .navigationTitle(L(kind == .sms ? "Банковские SMS" : kind == .notification ? "Уведомления банков" : "Скриншоты оплаты"))
         .navigationBarTitleDisplayMode(.inline)
     }
 

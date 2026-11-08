@@ -40,6 +40,8 @@ struct BankAlert: Codable, Identifiable, Equatable, Sendable {
     var serverState: String?
     /// The Wallet run of the same purchase. A pair is never matched again.
     var walletRunID: UUID?
+    /// Another bank message of the same purchase, such as the app notification next to the SMS.
+    var sameAs: UUID?
 
     /// The card name sent to the shared database. Mora links it to an account
     /// the first time, like a Wallet card.
@@ -85,13 +87,48 @@ enum BankAlertLog {
             if let run = pairableRun(for: alert, in: walletRuns, pairedIn: directory) {
                 alert.state = .duplicate; alert.walletRunID = run.id
                 alert.lastError = "Эта покупка уже пришла из Wallet: сообщение не отправлено."
-            } else if value.automatic && !alert.income {
-                alert.state = sending ? .waiting : .logged
+            } else {
+                if value.automatic && !alert.income { alert.state = sending ? .waiting : .logged }
+                if var other = samePurchase(as: alert, in: directory) {
+                    // A known format wins over one still waiting for its first check.
+                    if other.state == .review && alert.state != .review {
+                        other.state = .duplicate; other.sameAs = alert.id; other.lastError = otherMessageNote
+                        try save(other, in: directory)
+                    } else {
+                        alert.state = .duplicate; alert.sameAs = other.id; alert.lastError = otherMessageNote
+                    }
+                }
             }
         }
         try save(alert, in: directory)
         prune(before: date.addingTimeInterval(-Double(keptDays) * 86_400), in: directory)
         return alert
+    }
+
+    // MARK: One purchase from several bank messages
+
+    static let otherMessageNote = "Эта покупка уже пришла другим сообщением банка: не отправлено."
+
+    /// The bank texts and notifies about the same purchase in different wordings. Two
+    /// messages in the same wording are two purchases, such as two metro rides.
+    static func samePurchase(as alert: BankAlert, in directory: URL) -> BankAlert? {
+        guard !alert.income, let amount = Money.parse(alert.amount), amount > 0 else { return nil }
+        let key = formatKey(alert.text)
+        let all = alerts(in: directory)
+        // Each message pairs once: a second ride's SMS never joins the first ride's notification.
+        let paired = Set(all.compactMap(\.sameAs)).union(all.filter { $0.sameAs != nil }.map(\.id))
+        return all.first { other in
+            other.id != alert.id && !paired.contains(other.id) && !other.income && [.review, .waiting, .logged, .delivered, .failed].contains(other.state)
+                && Money.parse(other.amount) == amount && abs(other.receivedAt.timeIntervalSince(alert.receivedAt)) < pairWindow
+                && (other.cardLast4.isEmpty || alert.cardLast4.isEmpty || other.cardLast4 == alert.cardLast4)
+                && (other.currency.isEmpty || alert.currency.isEmpty || other.currency == alert.currency)
+                && formatKey(other.text) != key
+        }
+    }
+
+    /// The letters of the first line: "Koriscenje kartice 4054**5109" and "Plaćanje karticom" differ.
+    static func formatKey(_ text: String) -> String {
+        String(text.split(separator: "\n").first ?? "").lowercased().filter(\.isLetter)
     }
 
     // MARK: Working together with the Wallet automation

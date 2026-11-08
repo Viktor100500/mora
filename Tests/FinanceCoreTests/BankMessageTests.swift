@@ -63,6 +63,36 @@ final class BankMessageTests: XCTestCase {
         XCTAssertEqual(next.cardLast4, "5109")
     }
 
+    func testRaiffeisenAppNotificationWithBarSeparatedFields() throws {
+        let value = try parsed("Plaćanje karticom\n4054**5109 | Iznos 3,00 USD | Gde: MTA*NYCT PAYGO NEW YORK US | Raspoloživo 3.141,72 EUR | Kliknite za više detalja")
+        XCTAssertEqual(value.amount, 3)
+        XCTAssertEqual(value.currency, "USD")
+        XCTAssertEqual(value.merchant, "MTA*NYCT PAYGO NEW YORK")
+        XCTAssertEqual(value.cardLast4, "5109")
+    }
+
+    func testRussianBankMessages() throws {
+        let cases: [(String, Decimal, String, String?)] = [
+            ("MIR-1234 14:35 Покупка 450р PYATEROCHKA Баланс: 12345.67р", 450, "PYATEROCHKA", "1234"),
+            ("Покупка 1 250,50 ₽ PYATEROCHKA 4512 Баланс: 12 345,67 ₽", Decimal(string: "1250.5")!, "PYATEROCHKA 4512", nil),
+            ("MIR-1234 09:12 Оплата по QR-коду СБП 780р KOFEMANIYA Баланс: 5 000р", 780, "KOFEMANIYA", "1234"),
+            ("Покупка, карта *1234. 450 RUB. PYATEROCHKA. Доступно 12345.67 RUB", 450, "PYATEROCHKA", "1234"),
+            ("Покупка на 450 ₽, карта *1234, Пятёрочка. Доступно 12 345,67 ₽", 450, "Пятёрочка", "1234"),
+            ("Оплата СБП 780 ₽, Кофемания. Доступно 5 000 ₽", 780, "Кофемания", nil),
+        ]
+        for (text, amount, merchant, card) in cases {
+            let value = try parsed(text)
+            XCTAssertEqual(value.amount, amount, text)
+            XCTAssertEqual(value.currency, "RUB", text)
+            XCTAssertEqual(value.merchant, merchant, text)
+            XCTAssertEqual(value.cardLast4, card, text)
+            XCTAssertEqual(value.direction, .expense, text)
+        }
+        let transfer = try parsed("Перевод 1000р Баланс: 4000р")
+        XCTAssertEqual(transfer.amount, 1000)
+        XCTAssertEqual(try parsed("Перевод от Ивана И. 5000р Баланс: 9000р").direction, .income)
+    }
+
     func testForeignCurrencyAfterAmount() throws {
         let value = try parsed("You spent 1,250.50 EUR at LIDL BEOGRAD with your card ending 4321.")
         XCTAssertEqual(value.amount, Decimal(string: "1250.5"))

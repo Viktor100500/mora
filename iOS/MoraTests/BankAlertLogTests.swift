@@ -81,6 +81,26 @@ final class BankAlertLogTests: XCTestCase {
         XCTAssertEqual(WalletRunLog.runs(in: wallet).first { $0.id == second.id }?.delivery, .waiting, "a pair is never matched again")
     }
 
+    func testSmsAndAppNotificationOfOnePurchaseAreSentOnce() throws {
+        let push = "Plaćanje karticom\n4054**5109 | Iznos 8,40 USD | Gde: NJT BUS MY-TIX NEWARK US | Raspoloživo 3.195,32 EUR"
+        let smsFirst = try BankAlertLog.record(text: sms, source: "Raiffeisen", sending: true, at: start, directory: directory,
+                                               templates: [], walletRuns: [])
+        let pushParsed = try XCTUnwrap(BankAlertLog.record(text: push, source: "Raiffeisen", sending: false,
+                                                           at: start.addingTimeInterval(-3600), directory: directory.appending(path: "other"),
+                                                           templates: [], walletRuns: []).parsed)
+        let template = try XCTUnwrap(BankMessageTemplate(learningFrom: BankMessage.normalized(push), sender: "Raiffeisen", parsed: pushParsed))
+        let known = try BankAlertLog.record(text: push, source: "Raiffeisen", sending: true, at: start.addingTimeInterval(4),
+                                            directory: directory, templates: [template], walletRuns: [])
+        XCTAssertEqual(known.state, .waiting, "the remembered push format is sent")
+        let alerts = BankAlertLog.alerts(in: directory)
+        XCTAssertEqual(alerts.first { $0.id == smsFirst.id }?.state, .duplicate, "the SMS still waiting for a check gives way")
+        XCTAssertEqual(alerts.first { $0.id == smsFirst.id }?.sameAs, known.id)
+
+        let secondRide = try BankAlertLog.record(text: sms.replacingOccurrences(of: "22:07:20", with: "22:09:02"), source: "Raiffeisen",
+                                                 sending: true, at: start.addingTimeInterval(120), directory: directory, templates: [], walletRuns: [])
+        XCTAssertEqual(secondRide.state, .review, "the same wording twice is two purchases")
+    }
+
     func testRequestSendsCurrencyAndCardName() throws {
         let sender = WalletSender(projectURL: URL(string: "https://example.supabase.co")!, publicKey: "sb_publishable_test",
                                   token: String(repeating: "a", count: 64), tokenID: UUID(), householdID: UUID(), label: "Test iPhone")

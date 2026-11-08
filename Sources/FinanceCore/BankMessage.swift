@@ -71,7 +71,8 @@ public enum BankMessage {
                               #"\buplata\b"#, #"\bpovra[cć]aj"#, #"\bodobrenje\b"#]
     static let expenseWords = [#"\bpurchase\b"#, #"\btransaction\b"#, #"\bcharged?\b"#, #"\bspent\b"#, #"\bpaid\b"#, #"\bpayment\b"#,
                                #"\bdebit(ed)?\b"#, #"\bwithdrawal\b"#, #"\bпокупк"#, #"\bоплат"#, #"\bсписан"#, #"\bснятие\b"#, #"\bплатеж"#, #"\bплатёж"#,
-                               #"\bkori[sš][cć]enje\b"#, #"\bpla[cć]anje\b"#, #"\bisplata\b"#, #"\bzadu[zž]enje\b"#]
+                               #"\bkori[sš][cć]enje\b"#, #"\bpla[cć]anje\b"#, #"\bisplata\b"#, #"\bzadu[zž]enje\b"#,
+                               #"\bперевод\b"#, #"\bсбп\b"#]
     static let balanceWords = #"(balance|available|avail\.?|limit|баланс|доступно|остаток|лимит|raspolo[zž]ivo|stanje|saldo)\W{0,4}$"#
 
     private static func ignoredReason(_ text: String) -> Ignored? {
@@ -88,6 +89,8 @@ public enum BankMessage {
     /// Single spaces, line breaks kept: fields such as "Mesto:" stay on their own line.
     public static func normalized(_ text: String) -> String {
         text.replacingOccurrences(of: "[\u{00a0}\u{202f}\u{2009}]", with: " ", options: .regularExpression)
+            // "4054**5109 | Iznos 3,00 USD | Gde: …": fields separated by bars read like lines.
+            .replacingOccurrences(of: "\\s*\\|\\s*", with: "\n", options: .regularExpression)
             .replacingOccurrences(of: "[ \\t]+", with: " ", options: .regularExpression)
             .replacingOccurrences(of: " ?\\n[\\s]*", with: "\n", options: .regularExpression)
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -99,13 +102,13 @@ public enum BankMessage {
 
     static let number = #"[0-9]{1,3}(?:[ ,.][0-9]{3})+(?:[.,][0-9]{1,2})?|[0-9]+(?:[.,][0-9]{1,2})?"#
     static let symbols: [String: String] = ["$": "USD", "€": "EUR", "£": "GBP", "¥": "JPY", "₽": "RUB", "₸": "KZT", "₺": "TRY", "₾": "GEL"]
-    static let words: [String: String] = ["руб": "RUB", "руб.": "RUB", "р.": "RUB", "rub": "RUB", "usd": "USD", "eur": "EUR"]
+    static let words: [String: String] = ["руб": "RUB", "руб.": "RUB", "р.": "RUB", "р": "RUB", "rub": "RUB", "usd": "USD", "eur": "EUR"]
 
     /// Every amount with a currency in reading order. A bare number is never an amount:
     /// dates, times and card numbers would look like one.
     static func amounts(in text: String) -> [Amount] {
         let symbol = "[" + symbols.keys.joined() + "]"
-        let code = "[A-Z]{3}|руб\\.?|р\\."
+        let code = "[A-Z]{3}|руб\\.?|р\\.?"
         let pattern = "(?<pre>\(symbol)|\\b(?:\(code)))\\s?(?<a>\(number))(?![0-9])|(?<![0-9.,])(?<b>\(number))\\s?(?<post>\(symbol)|(?:\(code))(?![\\p{L}]))"
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return [] }
         let range = NSRange(text.startIndex..., in: text)
@@ -145,7 +148,9 @@ public enum BankMessage {
 
     static let cardPatterns = [#"(?:[*•·xX]|\.{2,3}|…)\s?([0-9]{4})\b"#,
                                #"(?:ending(?: in)?|last 4(?: digits)?|оканчивающ\p{L}*(?: на)?)\D{0,6}([0-9]{4})\b"#,
-                               #"(?:card|карт\p{L}*|acct|account|счет\p{L}*|счёт\p{L}*)\s?#?\s?([0-9]{4})\b"#]
+                               #"(?:card|карт\p{L}*|acct|account|счет\p{L}*|счёт\p{L}*)\s?#?\s?([0-9]{4})\b"#,
+                               // Sberbank texts start with the card: "MIR-1234 14:35 Покупка …".
+                               #"\b(?:mir|visa|mc|ecmc|maes|amex|мир)[-\s]?([0-9]{4})\b"#]
 
     static func cardLast4(in text: String) -> String? {
         for pattern in cardPatterns {
@@ -161,7 +166,7 @@ public enum BankMessage {
     /// as in "Покупка 450 RUB. PYATEROCHKA. Доступно 1200 RUB".
     static func merchant(in text: String, excluding amountText: String) -> String? {
         // A field on its own line: "Mesto: TARGET STORE NEW YORK US", "Merchant: UBER".
-        let label = #"(?im)^\s*(?:mesto|prodavac|trgovac|merchant|location|место|магазин|получатель)\s*:\s*(?<m>.+?)\s*$"#
+        let label = #"(?im)^\s*(?:mesto|gde|gdje|prodavac|trgovac|merchant|location|место|магазин|получатель)\s*:\s*(?<m>.+?)\s*$"#
         if let regex = try? NSRegularExpression(pattern: label),
            let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
            let range = Range(match.range(withName: "m"), in: text) { return String(text[range]) }
@@ -173,6 +178,17 @@ public enum BankMessage {
                 let candidate = String(text[range]).trimmingCharacters(in: .whitespaces)
                 if isMerchant(candidate, amountText: amountText) { return candidate }
             }
+        }
+        // Right after the amount: "Покупка 450р PYATEROCHKA Баланс …", "Оплата СБП 780 ₽, Кофемания."
+        if let amount = text.range(of: amountText) {
+            let after = text[amount.upperBound...]
+                .replacingOccurrences(of: #"\s(баланс|доступно|остаток|balance|available|raspolo[zž]ivo)\b.*"#,
+                                      with: "", options: [.regularExpression, .caseInsensitive])
+            let chunk = after.components(separatedBy: CharacterSet(charactersIn: ",;\n"))
+                .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: " ."))  }
+                .flatMap { $0.components(separatedBy: ". ") }
+                .first { !$0.isEmpty && cardLast4(in: $0) == nil && isMerchant($0, amountText: amountText) }
+            if let chunk { return chunk }
         }
         return text.components(separatedBy: CharacterSet(charactersIn: ".;\n"))
             .map { $0.trimmingCharacters(in: .whitespaces) }

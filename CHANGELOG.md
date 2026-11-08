@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.7.2 — 2026-11-08
+
+Mac 1.7.2 (build 81) · iPhone 1.0.35 (build 36)
+
+### iPhone
+
+- **More bank formats.** Bank app notifications with fields separated by bars, such as Raiffeisen's “Plaćanje karticom … | Gde: MTA*NYCT PAYGO NEW YORK US | …”, are read with the merchant. Russian bank texts are understood out of the box: rubles written as `450р` or `₽`, the merchant right after the amount (“Покупка 450р PYATEROCHKA Баланс …”), cards such as `MIR-1234`, SBP payments and outgoing transfers.
+- **SMS and push of one purchase count once.** When a bank sends both a text and an app notification about the same purchase, Mora sends only one. A format Mora already knows wins over one still waiting for its first check, and two messages in the same wording (two metro rides) stay two purchases.
+- **Payment screenshots** (iOS 27). A new Screenshot automation passes the text of a payment confirmation screen to Log Bank Message, for QR code payments and apps without texts or notifications. Screenshots without a payment are skipped without keeping their text.
+
 ## 1.7.1 — 2026-11-07
 
 Mac 1.7.1 (build 80)
