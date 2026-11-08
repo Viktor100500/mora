@@ -333,7 +333,6 @@
   "Поле Card or Pass: свойство «Карта или пропуск»": "Card or Pass field: the Card or Pass property",
   "Поле Merchant: свойство «Продавец»": "Merchant field: the Merchant property",
   "Поле Name: свойство «Имя»": "Name field: the Name property",
-  "Поле Transaction: «Входные данные команды»": "Transaction field: Shortcut Input",
   "Последнее действие — Finish Wallet Payment": "Last action: Finish Wallet Payment",
   "Почти готово: проверьте отмеченное": "Almost there: check the marked items",
   "Проверю позже": "Check Later",
@@ -342,8 +341,6 @@
   "Сумма, продавец, карта и счёт — без ручного ввода": "Amount, merchant, card and account without typing",
   "Так покупка записывается без вопросов, даже на заблокированном iPhone.": "This way purchases are recorded without prompts, even on a locked iPhone.",
   "Транзакция": "Transaction",
-  "Транзакция целиком": "Whole transaction",
-  "Транспорт и отложенные списания иногда приходят без суммы — это нормально, покупку можно обработать": "Transit and deferred charges sometimes arrive without an amount — that’s fine, the purchase can be processed",
   "Уведомлять о запуске": "Notify When Run",
   "Шаг {0} из {1}": "Step {0} of {1}",
   "Действие «Finish Wallet Payment»: Wallet не передал сумму": "“Finish Wallet Payment” action: Wallet passed no amount",
@@ -362,8 +359,6 @@
   "В поиске действий найдите «Mora» → «Start Wallet Payment».": "In Search Actions, find Mora → “Start Wallet Payment”.",
   "Нажмите на поле Merchant, затем на «Входные данные команды» под блоком «Получить транзакцию».": "Tap the Merchant field, then tap Shortcut Input below “Receive transaction as input”.",
   "Нажмите на вставленную переменную и выберите свойство Merchant. Так же для Name и Card or Pass — у каждого поля своё свойство.": "Tap the inserted variable and choose the Merchant property. Do the same for Name and Card or Pass: each field gets its own property.",
-  "Одно поле: в транзакции уже есть сумма, продавец, карта и имя.": "One field: the transaction already holds the amount, merchant, card and name.",
-  "Нажмите на поле Transaction, затем на «Входные данные команды». Свойство менять не нужно: «Транзакция» уже выбрана.": "Tap the Transaction field, then Shortcut Input. Leave the property as is: Transaction is already selected.",
   "Получить транзакцию как входные данные": "Receive transaction as input",
   "Сумма": "Amount",
   "Продавец": "Merchant",
@@ -377,5 +372,10 @@
   "Wallet не передал сумму": "Wallet did not pass the amount",
   "Wallet не передал продавца": "Wallet did not pass the merchant",
   "Нет": "None",
-  "Полные покупки записываются автоматически. Сюда попадают покупки, которые Wallet передал не полностью.": "Complete purchases are recorded automatically. Purchases Wallet passed incompletely land here."
+  "Полные покупки записываются автоматически. Сюда попадают покупки, которые Wallet передал не полностью.": "Complete purchases are recorded automatically. Purchases Wallet passed incompletely land here.",
+  "Сумма читается последней: если iOS на ней споткнётся, покупка уже сохранена.": "The amount is read last: if iOS stumbles on it, the purchase is already saved.",
+  "Нажмите на поле Amount, затем на «Входные данные команды».": "Tap the Amount field, then Shortcut Input.",
+  "Нажмите на вставленную переменную и выберите свойство Amount. Затем «Готово».": "Tap the inserted variable and choose the Amount property. Then tap Done.",
+  "Поле Amount: свойство «Сумма». Транспорт и отложенные списания иногда приходят без суммы — такую покупку можно обработать": "Amount field: the Amount property. Transit and deferred charges sometimes arrive without an amount — such a purchase can be processed",
+  "транзакция": "transaction"
 }

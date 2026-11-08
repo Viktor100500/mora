@@ -69,25 +69,17 @@ actor WalletDelivery {
     }
 
     /// The last action of the automation: completes the newest run of the first action.
-    func addAmount(_ amount: String, transaction: String = "", now: Date = .now) {
-        let details = transaction.trimmingCharacters(in: .whitespacesAndNewlines)
-        let explicit = amount.trimmingCharacters(in: .whitespacesAndNewlines)
-        let value = explicit.isEmpty ? WalletRunLog.amount(in: details) ?? "" : explicit
+    func addAmount(_ amount: String, now: Date = .now) {
+        let value = amount.trimmingCharacters(in: .whitespacesAndNewlines)
         guard var run = WalletRunLog.runs(in: directory).first(where: {
             $0.delivery == .awaitingAmount && now.timeIntervalSince($0.receivedAt) < Self.amountGrace
         }) else {
             // The first action did not run or ran too long ago: keep the amount as its own run.
-            if var run = try? WalletRunLog.record(amount: value, merchant: nil, card: nil, action: "Finish Wallet Payment",
-                                                  sending: WalletSender.current() != nil, at: now, in: directory), !details.isEmpty {
-                run.transaction = details
-                try? WalletRunLog.save(run, in: directory)
-            }
+            try? WalletRunLog.record(amount: value, merchant: nil, card: nil, action: "Finish Wallet Payment",
+                                     sending: WalletSender.current() != nil, at: now, in: directory)
             return
         }
-        run.amount = value; run.transaction = details; run.amountActionRan = true; run.delivery = .waiting
-        if !details.isEmpty {
-            WalletRunLog.fill(&run, from: details, knownCards: WalletRunLog.runs(in: directory).map(\.card).filter { !$0.isEmpty })
-        }
+        run.amount = value; run.amountActionRan = true; run.delivery = .waiting
         run.log(value.isEmpty ? "Действие «Finish Wallet Payment»: Wallet не передал сумму" : "Сумма получена действием «Finish Wallet Payment»", at: now)
         try? WalletRunLog.save(run, in: directory)
     }

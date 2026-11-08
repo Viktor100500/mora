@@ -39,7 +39,7 @@ struct WalletRun: Codable, Identifiable, Equatable, Sendable {
     var card: String
     /// The Wallet transaction's "Name", when the automation passes it.
     var name = ""
-    /// The Wallet transaction's "Transaction" property as text, when the automation passes it.
+    /// Text of the whole transaction passed by Mora 1.0.25–1.0.32; iOS turns it into the name only.
     var transaction = ""
     /// The Mora action that saved the run.
     var action = ""
@@ -58,8 +58,13 @@ struct WalletRun: Codable, Identifiable, Equatable, Sendable {
     var isComplete: Bool { !amount.isEmpty && !merchant.isEmpty }
     /// Wallet passed nothing at all.
     var isEmpty: Bool { amount.isEmpty && merchant.isEmpty && card.isEmpty && name.isEmpty }
-    /// Sent as the merchant: Wallet sometimes fills only the transaction name.
-    var sentMerchant: String { merchant.isEmpty ? name : merchant }
+    /// Sent as the merchant: Wallet sometimes fills only the transaction name. For a transit
+    /// tap the name is the card itself or the word "Transaction", which is no merchant.
+    var sentMerchant: String {
+        if !merchant.isEmpty { return merchant }
+        let placeholder = name.caseInsensitiveCompare(card) == .orderedSame || ["transaction", "транзакция"].contains(name.lowercased())
+        return placeholder ? "" : name
+    }
 
     init(id: UUID = UUID(), receivedAt: Date, amount: String, merchant: String, card: String, name: String = "", delivery: Delivery = .logged) {
         self.id = id; self.receivedAt = receivedAt; self.amount = amount; self.merchant = merchant; self.card = card; self.name = name; self.delivery = delivery
@@ -130,29 +135,6 @@ enum WalletRunLog {
         files(in: directory)
             .compactMap { try? decoder.decode(WalletRun.self, from: Data(contentsOf: $0)) }
             .sorted { $0.receivedAt > $1.receivedAt }
-    }
-
-    /// The first money value in the text of a Wallet transaction, such as "$12.40" or "12,40 €".
-    static func amount(in text: String) -> String? {
-        let number = #"[0-9]{1,3}(?:[ ,.\u00A0\u202F][0-9]{3})*(?:[.,][0-9]{1,2})?"#
-        let symbol = #"(?:[$€£¥₽]|[A-Z]{3})"#
-        for pattern in [symbol + #"\s?"# + number, number + #"\s?"# + symbol] {
-            if let range = text.range(of: pattern, options: .regularExpression) { return String(text[range]) }
-        }
-        return nil
-    }
-
-    /// Merchant, card and name missing from the first action, taken from the whole transaction
-    /// as text. A line equal to a card already seen on this iPhone is the card; the first
-    /// other line without the amount is the merchant.
-    static func fill(_ run: inout WalletRun, from text: String, knownCards: [String]) {
-        let amount = Self.amount(in: text)
-        let lines = text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        let cards = Set(knownCards.map { $0.lowercased() })
-        let card = lines.first { cards.contains($0.lowercased()) }
-        let merchant = lines.first { $0 != card && $0 != amount && Self.amount(in: $0) == nil }
-        if run.card.isEmpty, let card { run.card = card }
-        if run.merchant.isEmpty && run.name.isEmpty, let merchant { run.name = merchant }
     }
 
     /// Every run with all fields Wallet passed, to study what the automation sends.
@@ -263,21 +245,22 @@ struct StartWalletPaymentIntent: AppIntent {
     }
 }
 
-/// Second, last action: receives the whole transaction ("Shortcut Input"), takes
-/// the amount from it and sends the purchase saved a moment ago. If iOS fails
-/// while turning the transaction into text, the purchase is already saved.
+/// Second, last action: reads the Amount property and sends the purchase saved a
+/// moment ago. iOS may stop the automation while reading an amount that is not
+/// priced yet (transit taps); the purchase is already saved by then. The whole
+/// transaction cannot replace this field: as text iOS turns it into the name only.
 struct AddWalletAmountIntent: AppIntent {
     static let title: LocalizedStringResource = "Finish Wallet Payment"
-    static let description = IntentDescription("Last action of the Wallet automation: pass Shortcut Input as is. Mora takes the amount from the transaction, completes the purchase saved by “Start Wallet Payment” and sends it.")
+    static let description = IntentDescription("Last action of the Wallet automation: pass the Amount of Shortcut Input. Mora completes the purchase saved by “Start Wallet Payment” and sends it.")
     static let openAppWhenRun = false
     static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
 
-    @Parameter(title: "Transaction") var transaction: String?
+    @Parameter(title: "Amount") var amount: String?
 
-    static var parameterSummary: some ParameterSummary { Summary("Finish payment with \(\.$transaction)") }
+    static var parameterSummary: some ParameterSummary { Summary("Finish payment of \(\.$amount)") }
 
     func perform() async throws -> some IntentResult {
-        await WalletDelivery.shared.addAmount("", transaction: transaction ?? "")
+        await WalletDelivery.shared.addAmount(amount ?? "")
         BankAlertLog.reconcileWallet()
         await WalletBackgroundDelivery.run()
         return .result()

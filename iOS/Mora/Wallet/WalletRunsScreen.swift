@@ -76,10 +76,6 @@ struct WalletRunsScreen: View {
                 Text([run.card.isEmpty ? L("Карта не передана") : run.card,
                       run.receivedAt.formatted(.dateTime.day().month(.abbreviated).hour().minute().second().locale(L10n.locale))].joined(separator: " · "))
                     .font(.caption2).foregroundStyle(.secondary)
-                if !run.transaction.isEmpty || (!run.name.isEmpty && run.name != run.sentMerchant) {
-                    Text([run.name == run.sentMerchant ? "" : run.name, run.transaction].filter { !$0.isEmpty }.joined(separator: " · "))
-                        .font(.caption2).foregroundStyle(.secondary).lineLimit(2)
-                }
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 6) {

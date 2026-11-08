@@ -95,12 +95,11 @@ final class WalletRunLogTests: XCTestCase {
         let sentEarly = await requests.all.count
         XCTAssertEqual(sentEarly, 0, "the purchase waits for its amount action")
 
-        await delivery.addAmount(" $12.40 ", transaction: " Purchase ", now: start.addingTimeInterval(6))
+        await delivery.addAmount(" $12.40 ", now: start.addingTimeInterval(6))
         await delivery.deliverWaiting(with: sender, now: start.addingTimeInterval(6))
         let runs = WalletRunLog.runs(in: directory)
         XCTAssertEqual(runs.count, 1)
         XCTAssertEqual(runs.first?.amount, "$12.40"); XCTAssertEqual(runs.first?.delivery, .delivered)
-        XCTAssertEqual(runs.first?.transaction, "Purchase")
         let sent = await requests.all
         let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(sent.first?.httpBody)) as? [String: String])
         XCTAssertEqual(body["p_amount"], "$12.40"); XCTAssertEqual(body["p_merchant"], "Target")
@@ -141,28 +140,13 @@ final class WalletRunLogTests: XCTestCase {
         XCTAssertEqual(runs.first?.delivery, .incomplete, "then the user processes it")
     }
 
-    func testAmountIsTakenFromTheWholeTransaction() async throws {
-        XCTAssertEqual(WalletRunLog.amount(in: "Target\n$1,234.56\nChase Freedom"), "$1,234.56")
-        XCTAssertEqual(WalletRunLog.amount(in: "Kafa 12,40 € Raiffeisen"), "12,40 €")
-        XCTAssertEqual(WalletRunLog.amount(in: "RSD 1.250,00"), "RSD 1.250,00")
-        XCTAssertNil(WalletRunLog.amount(in: "OMNY Visa"))
-
-        try WalletRunLog.record(amount: nil, merchant: "Target", card: "Chase", action: "Start Wallet Payment",
-                                awaitingAmount: true, sending: true, at: start, in: directory)
-        let delivery = WalletDelivery(directory: directory) { _ in throw URLError(.notConnectedToInternet) }
-        await delivery.addAmount("", transaction: "Target $12.40 Chase", now: start.addingTimeInterval(3))
-        let run = try XCTUnwrap(WalletRunLog.runs(in: directory).first)
-        XCTAssertEqual(run.amount, "$12.40"); XCTAssertEqual(run.transaction, "Target $12.40 Chase"); XCTAssertTrue(run.amountActionRan)
-    }
-
-    func testMissingFieldsAreTakenFromTheWholeTransaction() {
-        var run = WalletRun(receivedAt: start, amount: "", merchant: "", card: "")
-        WalletRunLog.fill(&run, from: "Shell Oil 5741\n$48.10\nChase Freedom", knownCards: ["Chase Freedom"])
-        XCTAssertEqual(run.card, "Chase Freedom"); XCTAssertEqual(run.sentMerchant, "Shell Oil 5741")
-
-        var known = WalletRun(receivedAt: start, amount: "", merchant: "Shell", card: "Visa")
-        WalletRunLog.fill(&known, from: "Other\nChase Freedom", knownCards: ["Chase Freedom"])
-        XCTAssertEqual(known.card, "Visa"); XCTAssertEqual(known.sentMerchant, "Shell", "fields from the first action win")
+    /// Seen on the iPhone 8 Nov 2026: for a transit tap Wallet passes no merchant and
+    /// the card (or the word "Transaction") as the Name.
+    func testCardNameIsNeverTheMerchant() {
+        XCTAssertEqual(WalletRun(receivedAt: start, amount: "", merchant: "", card: "Visa Debit for Priv Individuals",
+                                 name: "Visa Debit for Priv Individuals").sentMerchant, "")
+        XCTAssertEqual(WalletRun(receivedAt: start, amount: "", merchant: "", card: "Bybit Mastercard", name: "Transaction").sentMerchant, "")
+        XCTAssertEqual(WalletRun(receivedAt: start, amount: "", merchant: "SQ * Monoblend", card: "Visa", name: "SQ * Monoblend").sentMerchant, "SQ * Monoblend")
     }
 
     func testServerAnswersMapToRetryOrDecision() {

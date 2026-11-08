@@ -83,17 +83,18 @@ struct WalletAutomationGuide: View {
                           "Нажмите на вставленную переменную и выберите свойство Merchant. Так же для Name и Card or Pass — у каждого поля своё свойство."])
             GuideMock { PropertyListMock(selected: "Продавец") }
         case 4:
-            header(4, "Последнее действие — Finish Wallet Payment", "Одно поле: в транзакции уже есть сумма, продавец, карта и имя.")
+            header(4, "Последнее действие — Finish Wallet Payment", "Сумма читается последней: если iOS на ней споткнётся, покупка уже сохранена.")
             GuideMock {
                 VStack(spacing: 8) {
                     InputMock()
                     ActionMock(title: "Start Wallet Payment", parts: [.text("Start payment at "), .token("Продавец"), .text(" …")], dimmed: true)
-                    ActionMock(title: "Finish Wallet Payment", parts: [.text("Finish payment with "), .token("Входные данные команды")])
+                    ActionMock(title: "Finish Wallet Payment", parts: [.text("Finish payment of "), .token("Сумма")])
                 }
             }
             instructions(["Добавьте «Finish Wallet Payment» под первым действием.",
-                          "Нажмите на поле Transaction, затем на «Входные данные команды». Свойство менять не нужно: «Транзакция» уже выбрана.",
-                          "Нажмите «Готово»."])
+                          "Нажмите на поле Amount, затем на «Входные данные команды».",
+                          "Нажмите на вставленную переменную и выберите свойство Amount. Затем «Готово»."])
+            GuideMock { PropertyListMock(selected: "Сумма") }
         default:
             header(5, "Проверьте настройку", "Заплатите чем-нибудь Apple Pay — Mora покажет здесь, что передал Wallet.")
             WalletAutomationCheck(run: latest)
@@ -190,11 +191,10 @@ struct WalletAutomationCheck: View {
                     item(run.action == "Start Wallet Payment", "Первое действие — Start Wallet Payment",
                          fix: "Сейчас первым идёт «\(run.action.isEmpty ? "Log Wallet Payment" : run.action)». Замените его, шаг 3")
                     item(run.amountActionRan, "Последнее действие — Finish Wallet Payment", fix: "Добавьте его в конец автоматизации, шаг 4")
-                    item(!run.merchant.isEmpty || !run.name.isEmpty, "Продавец", fix: "Поле Merchant: свойство «Продавец»")
+                    item(!run.sentMerchant.isEmpty, "Продавец", fix: "Поле Merchant: свойство «Продавец»")
                     item(!run.card.isEmpty, "Карта", fix: "Поле Card or Pass: свойство «Карта или пропуск»")
-                    item(!run.amount.isEmpty, "Сумма", fix: "Транспорт и отложенные списания иногда приходят без суммы — это нормально, покупку можно обработать", optional: true)
+                    item(!run.amount.isEmpty, "Сумма", fix: "Поле Amount: свойство «Сумма». Транспорт и отложенные списания иногда приходят без суммы — такую покупку можно обработать", optional: true)
                     item(!run.name.isEmpty, "Имя", fix: "Поле Name: свойство «Имя»", optional: true)
-                    item(!run.transaction.isEmpty, "Транзакция целиком", fix: "Поле Transaction: «Входные данные команды»", optional: true)
                 }
             } else {
                 HStack(spacing: 12) {
