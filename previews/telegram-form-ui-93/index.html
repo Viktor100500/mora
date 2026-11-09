@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="ru" data-api="https://preview.invalid/mora" data-version="1.7.14" data-build="93">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Mora · новая трата</title>
+<!-- Telegram Mini App: a strict purchase form for Mora. The page holds no secrets:
+     it sends Telegram's signed initData to the mora-telegram function, given as
+     ?api=https://<project>.supabase.co/functions/v1/mora-telegram -->
+<script>// Offline preview only. This replaces the Telegram SDK in the generated demo;
+// production index.html never imports it and never exposes mock purchases.
+(function () {
+  var context = {
+    base_currency: 'USD', default_account_id: 'daily',
+    accounts: [{ id: 'daily', name: 'Повседневный', currency: 'USD' }, { id: 'travel', name: 'Поездки', currency: 'EUR' }],
+    categories: [{ id: 'food', name: 'Продукты' }, { id: 'coffee', name: 'Кафе' }, { id: 'transport', name: 'Транспорт' }],
+    recent: [{ merchant: 'Lidl', account_id: 'daily', category_id: 'food', currency: 'USD' }],
+    totals: { today: { USD: 12.5 }, month: { USD: 125 } }
+  };
+  var events = {};
+  var state = window.__moraPreview = { purchases: [], keyboardHides: 0, mainVisible: true, failNext: false };
+  var tg = {
+    initData: 'synthetic-preview', initDataUnsafe: {}, colorScheme: 'light',
+    MainButton: { hide: function () { state.mainVisible = false; } },
+    HapticFeedback: { selectionChanged: function () {}, notificationOccurred: function () {} },
+    isVersionAtLeast: function () { return true; },
+    hideKeyboard: function () { state.keyboardHides++; },
+    onEvent: function (name, fn) { events[name] = fn; }, ready: function () {}, expand: function () {}
+  };
+  window.Telegram = { WebApp: tg };
+  state.theme = function (dark) {
+    tg.colorScheme = dark ? 'dark' : 'light';
+    var colors = dark ? { bg: '#282828', text: '#ffffff', hint: '#b4b4b4', secondary_bg: '#1c1c1c' }
+      : { bg: '#ffffff', text: '#111111', hint: '#686d76', secondary_bg: '#f1f3f6' };
+    Object.keys(colors).forEach(function (name) {
+      document.documentElement.style.setProperty('--tg-theme-' + name.replace(/_/g, '-') + '-color', colors[name]);
+    });
+    if (events.themeChanged) events.themeChanged();
+  };
+  state.theme(new URLSearchParams(location.search).get('theme') === 'dark' ||
+    (!new URLSearchParams(location.search).has('theme') && matchMedia('(prefers-color-scheme: dark)').matches));
+  window.fetch = function (url, options) {
+    if (!url.startsWith('https://preview.invalid/mora/api/')) return Promise.reject(new Error('Offline preview'));
+    if (url.endsWith('/context')) return Promise.resolve({ ok: true, json: function () { return Promise.resolve(context); } });
+    var purchase = JSON.parse(options.body);
+    state.purchases.push(purchase);
+    return new Promise(function (done) {
+      setTimeout(function () {
+        var fail = state.failNext;
+        state.failNext = false;
+        done({ ok: !fail, status: fail ? 503 : 200, json: function () {
+          return Promise.resolve(fail ? { error: 'Тестовая ошибка: попробуйте ещё раз.' }
+            : { state: 'booked', message: 'Тестовая трата: ' + purchase.merchant + ' −' + purchase.amount + ' ' + purchase.currency + '. Ничего не сохранено.' });
+        } });
+      }, 400);
+    });
+  };
+  document.addEventListener('DOMContentLoaded', function () {
+    var note = document.createElement('p');
+    note.className = 'note';
+    note.style.marginTop = '0';
+    note.textContent = 'Предпросмотр ' + document.documentElement.dataset.version + ' (' + document.documentElement.dataset.build + ') · тестовые данные';
+    document.querySelector('main').prepend(note);
+  });
+})();
+</script>
+<style>
+:root{--bg:var(--tg-theme-bg-color,#fff);--text:var(--tg-theme-text-color,#111);--hint:var(--tg-theme-hint-color,#8a8f98);
+--field:var(--tg-theme-secondary-bg-color,#f1f3f6);--accent:#336e57;--accent-text:#fff;--done:#336e57;
+--danger:var(--tg-theme-destructive-text-color,#d6453d)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 -apple-system,system-ui,sans-serif;-webkit-text-size-adjust:100%}
+main{max-width:520px;margin:0 auto;padding:12px 16px calc(120px + env(safe-area-inset-bottom,0px))}
+.totals{display:flex;gap:8px;margin-bottom:14px}
+.totals div{flex:1;background:var(--field);border-radius:12px;padding:8px 10px}
+.totals small{display:block;color:var(--hint);font-size:12px}
+.totals b{font-size:15px;font-weight:600}
+label{display:block;margin:12px 0 4px;font-size:13px;color:var(--hint)}
+input,select{width:100%;min-width:0;font:inherit;color:var(--text);background:var(--field);border:0;border-radius:12px;padding:12px;outline:none;-webkit-appearance:none;appearance:none}
+input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
+.amount{display:grid;grid-template-columns:minmax(0,1fr) 104px;gap:8px}
+.amount input{font-size:28px;font-weight:600;padding:10px 12px}
+.row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
+.chips{display:flex;gap:6px;overflow-x:auto;padding:2px 0 4px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chips button{flex:none;font:inherit;font-size:14px;border:0;border-radius:16px;padding:6px 12px;background:var(--field);color:var(--text)}
+.note{margin-top:10px;font-size:13px;color:var(--hint)}
+.error{color:var(--danger)}
+.done{color:var(--done)}
+/* Mora green, as in the apps (moraGreen and its dark variant). */
+:root[data-scheme=dark]{--accent:#40826a;--done:#85ba99}
+/* Keep actions inside the page, with explicit colours independent of Telegram's native button. */
+#actions{position:fixed;left:0;right:0;bottom:var(--keyboard-inset,0px);z-index:5;background:var(--bg);border-top:1px solid var(--field);padding:10px 16px max(12px,env(safe-area-inset-bottom,0px),var(--tg-content-safe-area-inset-bottom,0px))}
+#actions>div{display:flex;gap:10px;max-width:488px;margin:0 auto}
+#actions button{font:inherit;font-weight:600;border:0;border-radius:12px;min-height:48px;padding:12px 16px;cursor:pointer;-webkit-appearance:none;appearance:none}
+#send{flex:1;background:var(--accent);color:#fff;-webkit-text-fill-color:#fff}
+#send:disabled{opacity:1;background:#54665d;color:#fff;cursor:default}
+#keyboard-done{background:var(--field);color:var(--text)}
+.hidden,[hidden]{display:none!important}
+#yay{position:fixed;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .25s}
+#yay.on{opacity:1}
+#yay>div{width:min(320px,86vw);background:linear-gradient(160deg,#12301f,#060e0b);color:#e6f2e0;border-radius:20px;padding:16px 16px 18px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+#yay b{display:block;font-size:17px;margin-top:4px}
+#yay small{display:block;color:rgba(230,242,224,.7);margin-top:6px;font-size:13px}
+.cat{transform-box:fill-box;transform-origin:center;animation:kiss 1.3s ease-in-out 2}
+@keyframes kiss{0%,100%{transform:none}50%{transform:translateX(30px) rotate(10deg)}}
+.ht{transform-box:fill-box;transform-origin:center;opacity:0;animation:up 1.3s ease-out .45s 2}
+@keyframes up{0%{opacity:0;transform:scale(.4)}40%{opacity:1;transform:translateY(-6px) scale(1.25)}100%{opacity:0;transform:translateY(-24px)}}
+
+</style>
+</head>
+<body>
+<main>
+  <div class="totals"><div><small>Сегодня</small><b id="today">—</b></div><div><small>Месяц</small><b id="month">—</b></div></div>
+  <div id="loading" class="note">Загружаю счета…</div>
+  <form id="form" class="hidden" autocomplete="off" novalidate>
+    <label for="amount">Сумма</label>
+    <div class="amount">
+      <input id="amount" inputmode="decimal" enterkeyhint="done" placeholder="0" required>
+      <select id="currency" aria-label="Валюта"></select>
+    </div>
+    <label for="merchant">Продавец</label>
+    <input id="merchant" maxlength="120" enterkeyhint="done" placeholder="Например, Lidl" required>
+    <div class="chips" id="recent"></div>
+    <label for="category">Категория</label>
+    <select id="category"></select>
+    <div class="row">
+      <div><label for="account">Счёт</label><select id="account"></select></div>
+      <div><label for="date">Дата</label><input id="date" type="date" required></div>
+    </div>
+    <label for="note">Заметка (необязательно)</label>
+    <input id="note" maxlength="200" enterkeyhint="done" placeholder="">
+    <div id="status" class="note" role="status"></div>
+  </form>
+</main>
+<footer id="actions" class="hidden" aria-label="Действия с тратой"><div>
+  <button id="keyboard-done" type="button" hidden>Готово</button>
+  <button id="send" type="submit" form="form" disabled>Записать</button>
+</div></footer>
+<!-- Yar the cat kisses Nastya after a purchase: the same scene as the widget (functions/mora-telegram/widget.ts). -->
+<div id="yay" aria-live="polite"><div><svg viewBox="0 0 200 110" width="100%" height="170" aria-label="Котик Яр целует Настеньку">
+<g class="nas"><path d="M110 72a28 30 0 0 1 56 0v30h-56z" fill="#1c4f3b"/><circle cx="138" cy="66" r="22" fill="#f2ead8" stroke="#336e57" stroke-width="1.5"/>
+<path d="M115 63c4-21 42-25 46 0c-11-9-32-11-46 0z" fill="#1c4f3b"/><path d="M128 66q4 3 8 0M142 66q4 3 8 0M134 78q4 4 8 0" stroke="#1c4f3b" stroke-width="2" fill="none"/>
+<circle cx="126" cy="74" r="4" fill="#70b88f" opacity=".55"/><circle cx="151" cy="74" r="4" fill="#70b88f" opacity=".55"/></g>
+<g class="cat"><path d="M45 54l5-24 15 15zM95 54l-5-24-15 15z" fill="#edf2de" stroke="#336e57" stroke-width="1.5" stroke-linejoin="round"/><ellipse cx="70" cy="67" rx="27" ry="23" fill="#edf2de" stroke="#336e57" stroke-width="1.5"/>
+<path d="M58 63q4-4 8 0M74 63q4-4 8 0M70 74q-4 5-8 2M70 74q4 5 8 2" stroke="#1c4f3b" stroke-width="2" fill="none"/><path d="M67 70h6l-3 4z" fill="#70b88f"/>
+<path d="M38 71h15M38 77h15M87 71h15M87 77h15" stroke="#40826a"/></g>
+<path class="ht" d="M108 34c-4-8-16-4-12 4l12 12 12-12c4-8-8-12-12-4z" fill="#70b88f"/></svg><b>Яр целует Настеньку · чмок!</b><small id="yay-text"></small></div></div>
+<script>
+(function () {
+  var tg = window.Telegram && Telegram.WebApp;
+  // The address the published copy carries in <html data-api> wins: a direct link
+  // whose URL lost or mistyped its query string still reaches the function.
+  var api = document.documentElement.getAttribute('data-api') || new URLSearchParams(location.search).get('api') || '';
+  var $ = function (id) { return document.getElementById(id); };
+  var ctx = null, eventId = newId(), busy = false;
+  var COMMON = ['EUR', 'USD', 'GBP', 'CHF', 'RSD', 'TRY', 'GEL', 'AED', 'THB', 'RUB'];
+  var DECIMALS = { JPY: 0, KRW: 0, VND: 0, ISK: 0, CLP: 0, BHD: 3, KWD: 3, OMR: 3, JOD: 3, TND: 3 };
+
+  function newId() { return (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, function () { return (Math.random() * 16 | 0).toString(16); })); }
+  function status(text, kind) { var s = $('status'); s.textContent = text || ''; s.className = 'note' + (kind ? ' ' + kind : ''); }
+  function option(select, value, text) { var o = document.createElement('option'); o.value = value; o.textContent = text; select.appendChild(o); }
+  function money(map) {
+    var parts = Object.keys(map || {}).map(function (c) { var d = DECIMALS[c] == null ? 2 : DECIMALS[c];
+      return Number(map[c]).toLocaleString('ru-RU', { minimumFractionDigits: d, maximumFractionDigits: d }) + ' ' + c; });
+    return parts.join(' + ') || '0';
+  }
+  function today() { var d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); }
+
+  function textInput(el) { return el && el.tagName === 'INPUT' && el.type !== 'date'; }
+  function keyboardActions() {
+    $('keyboard-done').hidden = !textInput(document.activeElement) && document.activeElement !== $('keyboard-done');
+  }
+  function dismissKeyboard() {
+    var el = document.activeElement;
+    if (el && (el.tagName === 'INPUT' || el.tagName === 'SELECT')) el.blur();
+    if (tg && typeof tg.hideKeyboard === 'function' && tg.isVersionAtLeast('9.1')) tg.hideKeyboard();
+    keyboardActions();
+  }
+  function viewportActions() {
+    var v = window.visualViewport;
+    var inset = v ? Math.max(0, window.innerHeight - v.height - v.offsetTop) : 0;
+    document.documentElement.style.setProperty('--keyboard-inset', inset + 'px');
+  }
+
+  function call(action, body) {
+    if (!api) return Promise.reject(new Error('Не задан адрес сервера Mora: добавьте ?api= к адресу формы или заполните data-api.'));
+    body.init_data = tg ? tg.initData : '';
+    return fetch(api.replace(/\/+$/, '') + '/api/' + action, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      .catch(function () { var host = ''; try { host = new URL(api).host; } catch (e) { host = api; }
+        throw new Error('Нет связи с сервером Mora (' + host + '). Проверьте интернет и откройте форму ещё раз.'); })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (v) { if (!r.ok) throw new Error(v.error || ('Ошибка ' + r.status)); return v; }); });
+  }
+
+  function account() { return ctx.accounts.find(function (a) { return a.id === $('account').value; }); }
+  function fillCurrencies(selected) {
+    var list = [];
+    ctx.accounts.forEach(function (a) { list.push(a.currency); });
+    (ctx.recent || []).forEach(function (r) { if (r.currency) list.push(r.currency); });
+    if (ctx.base_currency) list.push(ctx.base_currency);
+    list = list.concat(COMMON).filter(function (c, i, all) { return /^[A-Z]{3}$/.test(c) && all.indexOf(c) === i; });
+    var sel = $('currency'); sel.textContent = '';
+    list.forEach(function (c) { option(sel, c, c); });
+    sel.value = selected && list.indexOf(selected) >= 0 ? selected : (account() || {}).currency || list[0];
+  }
+  function hint() {
+    var a = account(), c = $('currency').value;
+    status(a && c && a.currency !== c ? 'Счёт в ' + a.currency + ': Mora пересчитает ' + c + ' по курсу Visa, когда откроется.' : '');
+  }
+  function applyRecent(r) {
+    $('merchant').value = r.merchant;
+    if (r.account_id && ctx.accounts.some(function (a) { return a.id === r.account_id; })) $('account').value = r.account_id;
+    if (r.category_id && ctx.categories.some(function (c) { return c.id === r.category_id; })) $('category').value = r.category_id;
+    fillCurrencies(r.currency);
+    hint();
+  }
+
+  function render() {
+    $('today').textContent = money(ctx.totals && ctx.totals.today);
+    $('month').textContent = money(ctx.totals && ctx.totals.month);
+    var acc = $('account'); acc.textContent = '';
+    ctx.accounts.forEach(function (a) { option(acc, a.id, a.name + ' · ' + a.currency); });
+    acc.value = ctx.accounts.some(function (a) { return a.id === ctx.default_account_id; }) ? ctx.default_account_id : (ctx.accounts[0] || {}).id;
+    var cat = $('category'); cat.textContent = '';
+    option(cat, '', 'Определить автоматически');
+    ctx.categories.forEach(function (c) { option(cat, c.id, c.name); });
+    var chips = $('recent'); chips.textContent = '';
+    (ctx.recent || []).slice(0, 12).forEach(function (r) {
+      var b = document.createElement('button'); b.type = 'button'; b.textContent = r.merchant;
+      b.onclick = function () { dismissKeyboard(); applyRecent(r); validate(); if (tg) tg.HapticFeedback.selectionChanged(); };
+      chips.appendChild(b);
+    });
+    fillCurrencies();
+    $('date').value = today(); $('date').max = today();
+    // From the widget: r<index>_<amount with d for the point>.
+    var start = tg && tg.initDataUnsafe && tg.initDataUnsafe.start_param || '';
+    var m = /^r(\d{1,2})_(\d{0,9}(?:d\d{0,3})?)$/.exec(start);
+    if (m && ctx.recent[+m[1]]) { applyRecent(ctx.recent[+m[1]]); $('amount').value = m[2].replace('d', '.'); }
+    $('loading').classList.add('hidden'); $('form').classList.remove('hidden');
+    $('actions').classList.remove('hidden');
+    validate();
+  }
+
+  function amountValue() {
+    var raw = $('amount').value.replace(/\s/g, '').replace(',', '.'), c = $('currency').value;
+    var d = DECIMALS[c] == null ? 2 : DECIMALS[c];
+    if (!new RegExp('^\\d{1,12}' + (d ? '(\\.\\d{1,' + d + '})?' : '') + '$').test(raw)) return null;
+    var n = Number(raw); return n > 0 ? n : null;
+  }
+  function valid() { return !!(ctx && amountValue() && $('merchant').value.trim() && $('account').value && $('date').value && $('date').value <= today()); }
+  function validate() {
+    var ok = valid();
+    $('send').disabled = busy || !ok;
+  }
+
+  function celebrate(text) {
+    var y = $('yay'), card = y.firstElementChild;
+    card.innerHTML = card.innerHTML; // restarts the animation
+    $('yay-text').textContent = text || '';
+    y.classList.add('on');
+    clearTimeout(celebrate.timer);
+    celebrate.timer = setTimeout(function () { y.classList.remove('on'); }, 3000);
+  }
+
+  function submit() {
+    if (busy) return;
+    if (!valid()) { status('Заполните сумму, продавца, счёт и дату.', 'error'); if (tg) tg.HapticFeedback.notificationOccurred('error'); return; }
+    dismissKeyboard();
+    busy = true; validate(); $('send').textContent = 'Записываю…'; status('Записываю…');
+    var day = $('date').value;
+    var when = day === today() ? new Date() : new Date(day + 'T12:00:00');
+    call('purchase', { event_id: eventId, amount: amountValue(), currency: $('currency').value, merchant: $('merchant').value.trim(),
+      account_id: $('account').value, category_id: $('category').value || null, note: $('note').value.trim(), date: when.toISOString() })
+      .then(function (r) {
+        status(r.message, r.state === 'pending' && r.reason !== 'Валюта покупки отличается от валюты счета' ? '' : 'done');
+        if (!r.duplicate) celebrate(r.message);
+        if (tg) tg.HapticFeedback.notificationOccurred('success');
+        eventId = newId();
+        $('amount').value = ''; $('merchant').value = ''; $('note').value = ''; $('category').value = '';
+        return call('context', {}).then(function (c) { ctx = c; $('today').textContent = money(c.totals.today); $('month').textContent = money(c.totals.month); });
+      })
+      .catch(function (e) { status(e.message, 'error'); if (tg) tg.HapticFeedback.notificationOccurred('error'); })
+      .then(function () { busy = false; $('send').textContent = 'Записать'; validate(); });
+  }
+
+  ['amount', 'merchant', 'date', 'account', 'currency'].forEach(function (id) { $(id).addEventListener('input', validate); $(id).addEventListener('change', validate); });
+  $('account').addEventListener('change', function () { fillCurrencies(); hint(); });
+  $('currency').addEventListener('change', hint);
+  $('form').addEventListener('submit', function (e) { e.preventDefault(); submit(); });
+  $('keyboard-done').addEventListener('click', dismissKeyboard);
+  document.addEventListener('focusin', keyboardActions);
+  document.addEventListener('focusout', function () { requestAnimationFrame(keyboardActions); });
+  document.addEventListener('pointerdown', function (e) {
+    if (!textInput(document.activeElement) || e.target.closest('input')) return;
+    // Blur the text field BEFORE iOS opens a native picker, so closing it cannot restore the amount keyboard.
+    if (e.target.closest('select,label')) { document.activeElement.blur(); return; }
+    // Keep Done visible until its click is handled (also when tapping its padding).
+    if (e.target.closest('#keyboard-done')) { e.preventDefault(); return; }
+    dismissKeyboard();
+  });
+  $('form').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && textInput(e.target)) { e.preventDefault(); dismissKeyboard(); }
+  });
+  ['category', 'account', 'currency', 'date'].forEach(function (id) {
+    $(id).addEventListener('change', dismissKeyboard);
+  });
+  window.addEventListener('resize', viewportActions);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', viewportActions);
+    window.visualViewport.addEventListener('scroll', viewportActions);
+  }
+  viewportActions();
+
+  if (tg) {
+    // Do this even if Telegram has not supplied initData: never leave a stale native action visible.
+    if (tg.MainButton) tg.MainButton.hide();
+    document.documentElement.dataset.scheme = tg.colorScheme || 'light';
+    tg.onEvent('themeChanged', function () { document.documentElement.dataset.scheme = tg.colorScheme; validate(); });
+    if (tg.initData) { tg.ready(); tg.expand(); }
+  }
+  call('context', {}).then(function (c) { ctx = c; if (!ctx.accounts.length) throw new Error('В общей базе нет активных счетов.'); render(); })
+    .catch(function (e) { $('loading').textContent = e.message; $('loading').className = 'note error'; });
+})();
+</script>
+</body>
+</html>
