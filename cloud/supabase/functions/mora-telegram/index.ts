@@ -16,7 +16,7 @@ export type Environment = {
   miniAppUrl: string;                  // HTTPS page of the Mini App, opened by web_app buttons
   miniAppLink?: string;                // t.me direct link (https://t.me/<bot>/<app>), for the widget
   botApi?: string;                     // https://api.telegram.org
-  widgetApi?: string;                  // Bot API 10.4 for widgets; the beta until it is released
+  widgetApi?: string;                  // another Bot API server for widget methods (Bot API 10.4), e.g. the beta
   fetch?: typeof fetch;
   now?: () => Date;
 };
@@ -63,7 +63,8 @@ async function addPurchase(env: Environment, p: Purchase): Promise<any> {
 // ---------- Telegram
 
 async function telegram(env: Environment, method: string, params: Json, widget = false): Promise<any> {
-  const base = widget ? (env.widgetApi ?? "https://api.telegram.org/beta") : (env.botApi ?? "https://api.telegram.org");
+  const stable = env.botApi ?? "https://api.telegram.org";
+  const base = widget ? (env.widgetApi ?? stable) : stable;
   const response = await (env.fetch ?? fetch)(`${base}/bot${env.botToken}/${method}`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(params),
   });

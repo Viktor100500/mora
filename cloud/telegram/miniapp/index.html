@@ -34,6 +34,16 @@ input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
 #send{display:none;width:100%;margin-top:18px;font:inherit;font-weight:600;border:0;border-radius:12px;padding:14px;background:var(--accent);color:var(--accent-text)}
 #send:disabled{opacity:.5}
 .hidden{display:none}
+#yay{position:fixed;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .25s}
+#yay.on{opacity:1}
+#yay>div{width:min(320px,86vw);background:var(--bg);border-radius:20px;padding:16px 16px 18px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+#yay b{display:block;font-size:17px;margin-top:4px}
+#yay small{display:block;color:var(--hint);margin-top:6px;font-size:13px}
+.cat{transform-box:fill-box;transform-origin:center;animation:kiss 1.3s ease-in-out 2}
+@keyframes kiss{0%,100%{transform:none}50%{transform:translateX(30px) rotate(10deg)}}
+.ht{transform-box:fill-box;transform-origin:center;opacity:0;animation:up 1.3s ease-out .45s 2}
+@keyframes up{0%{opacity:0;transform:scale(.4)}40%{opacity:1;transform:translateY(-6px) scale(1.25)}100%{opacity:0;transform:translateY(-24px)}}
+
 </style>
 </head>
 <body>
@@ -61,6 +71,15 @@ input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
     <div id="status" class="note" role="status"></div>
   </form>
 </main>
+<!-- Yar the cat kisses Nastya after a purchase: the same scene as the widget (functions/mora-telegram/widget.ts). -->
+<div id="yay" aria-live="polite"><div><svg viewBox="0 0 200 110" width="100%" height="170" aria-label="Котик Яр целует Настеньку">
+<g class="nas"><path d="M110 72a28 30 0 0 1 56 0v30h-56z" fill="#5b3a29"/><circle cx="138" cy="66" r="22" fill="#ffd9c2"/>
+<path d="M115 63c4-21 42-25 46 0c-11-9-32-11-46 0z" fill="#5b3a29"/><path d="M128 66q4 3 8 0M142 66q4 3 8 0M134 78q4 4 8 0" stroke="#5a2a2a" stroke-width="2" fill="none"/>
+<circle cx="126" cy="74" r="4" fill="#ff8fa3" opacity=".7"/><circle cx="151" cy="74" r="4" fill="#ff8fa3" opacity=".7"/></g>
+<g class="cat"><path d="M45 54l5-24 15 15zM95 54l-5-24-15 15z" fill="#f2a541"/><ellipse cx="70" cy="67" rx="27" ry="23" fill="#f2a541"/>
+<path d="M58 63q4-4 8 0M74 63q4-4 8 0M70 74q-4 5-8 2M70 74q4 5 8 2" stroke="#3b2a1a" stroke-width="2" fill="none"/><path d="M67 70h6l-3 4z" fill="#ff7b9c"/>
+<path d="M38 71h15M38 77h15M87 71h15M87 77h15" stroke="#7a4b14"/></g>
+<path class="ht" d="M108 34c-4-8-16-4-12 4l12 12 12-12c4-8-8-12-12-4z" fill="#ff5c8a"/></svg><b>Яр целует Настеньку · чмок!</b><small id="yay-text"></small></div></div>
 <script>
 (function () {
   var tg = window.Telegram && Telegram.WebApp;
@@ -148,6 +167,15 @@ input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
     $('send').disabled = !ok;
   }
 
+  function celebrate(text) {
+    var y = $('yay'), card = y.firstElementChild;
+    card.innerHTML = card.innerHTML; // restarts the animation
+    $('yay-text').textContent = text || '';
+    y.classList.add('on');
+    clearTimeout(celebrate.timer);
+    celebrate.timer = setTimeout(function () { y.classList.remove('on'); }, 3000);
+  }
+
   function submit() {
     if (busy) return;
     if (!valid()) { status('Заполните сумму, продавца, счёт и дату.', 'error'); if (tg) tg.HapticFeedback.notificationOccurred('error'); return; }
@@ -158,6 +186,7 @@ input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
       account_id: $('account').value, category_id: $('category').value || null, note: $('note').value.trim(), date: when.toISOString() })
       .then(function (r) {
         status(r.message, r.state === 'pending' && r.reason !== 'Валюта покупки отличается от валюты счета' ? '' : 'done');
+        if (!r.duplicate) celebrate(r.message);
         if (tg) tg.HapticFeedback.notificationOccurred('success');
         eventId = newId();
         $('amount').value = ''; $('merchant').value = ''; $('note').value = ''; $('category').value = '';

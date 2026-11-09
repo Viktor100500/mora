@@ -562,7 +562,7 @@ try {
     assert.match(sent.splice(0)[0].body.text,new RegExp(`Telegram ID: ${stranger}`));
     await hook({message:{chat:{id:nastya,type:'private'},from:{id:nastya},text:'/widget'}});
     const widget=sent.splice(0)[0];
-    assert.equal(widget.method,'sendWidget'); assert.equal(widget.beta,true); assert.equal(widget.body.allow_queries,true);
+    assert.equal(widget.method,'sendWidget'); assert.equal(widget.beta,false,'Bot API 10.4 is released'); assert.equal(widget.body.allow_queries,true);
     assert.equal(widget.body.html,WIDGET_HTML);
     const state=JSON.parse(widget.body.chat_data);
     assert(Buffer.byteLength(widget.body.chat_data)<=1024); assert.equal(state.l,env.miniAppLink); assert.equal(state.r[0][0],'Bakery');
