@@ -482,7 +482,7 @@ try {
     const revoked=(await mcp({jsonrpc:'2.0',id:7,method:'tools/call',params:{name:'get_mora_context',arguments:{}}})).result;
     assert.equal(revoked.isError,true); assert(revoked.content[0].text.includes('revoked'));
   });
-  await admin.query(await fs.readFile(path.join(here,'../supabase/migrations/20261109022945_same_currency_purchase_fee.sql'),'utf8'));
+  await admin.query(await fs.readFile(path.join(here,'../supabase/migrations/20261109033857_same_currency_purchase_fee.sql'),'utf8'));
   await check('same-currency fees apply once to automatic and reviewed purchases and agent imports',async()=>{
     const before=await rpc(owner,'mora_get_household',[h]);
     const next=structuredClone(before.snapshot);
