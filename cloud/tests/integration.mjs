@@ -572,23 +572,11 @@ try {
     assert.equal(answer.method,'answerWidgetQuery'); assert.equal(answer.body.widget_query_id,'wq1'); assert.match(answer.body.data,/^✓ Bakery −2,40 USD/);
     await hook({widget_query:{id:'wq1',from:{id:nastya},chat:{id:nastya,type:'private'},message_id:9,data:`q|2.40|0|${state.r[0][2]}`}});
     assert.match(sent.splice(0)[1].body.data,/Уже записано/,'a repeated widget query records nothing new');
-    // A new purchase from the widget: amount and currency, then category and account by index.
-    const cafe=state.c.indexOf('Cafe'), shared=state.a.findIndex(a=>a[0]==='Shared test account');
-    assert(cafe>=0 && shared>=0 && state.a[state.d][0]==='Shared test account' && /^[0-9a-f]{4}$/.test(state.v));
-    await hook({widget_query:{id:'wq3',from:{id:nastya},chat:{id:nastya,type:'private'},message_id:9,data:`a|3.5|USD|${cafe}|${shared}|${state.v}`}});
-    const [, newAnswer]=sent.splice(0);
-    assert.match(newAnswer.body.data,/^✓ Cafe −3,50 USD \(Shared test account · Cafe\)/);
-    await hook({widget_query:{id:'wq4',from:{id:nastya},chat:{id:nastya,type:'private'},message_id:9,data:`a|3.5|USD|${cafe}|${shared}|0000`}});
-    assert.match(sent.splice(0)[0].body.data,/изменились/,'an outdated widget records nothing');
-    // Real-size lists still fit the 1024-byte chat state, with every category and account.
-    const big={totals:{today:{USD:1234.5,EUR:20},month:{USD:99999.99,EUR:300,RSD:150000}},default_account_id:'x9',
-      categories:['Продукты','Кафе и рестораны','Транспорт','Дом','Покупки','Здоровье','Развлечения','Подписки','Путешествия','Другое','Связь','Налоги\\Legal','Аренда\\Жилье'].map((name,i)=>({id:'c'+i,name})),
-      accounts:['Raif, Viktor, RSD','Raif, Viktor, EUR','Telegram Wallet, Viktor','Telegram Wallet, Nastya','Chase, Nastya','Chase, Viktor','Наличка, баксы','Рубли','ByBit, Viktor','ByBit, Nastya'].map((name,i)=>({id:'x'+i,name,currency:'USD'})),
-      recent:Array.from({length:12},(_,i)=>({merchant:'Магазин у дома номер '+i,currency:'EUR'}))};
-    const {widgetState}=await import('../supabase/functions/mora-telegram/index.ts');
-    const packed=await widgetState(env,big), parsed=JSON.parse(packed);
-    assert(Buffer.byteLength(packed)<=1024,`chat state is ${Buffer.byteLength(packed)} bytes`);
-    assert.equal(parsed.c.length,13); assert.equal(parsed.a.length,10); assert.equal(parsed.d,9);
+    await hook({widget_query:{id:'wq3',from:{id:nastya},chat:{id:nastya,type:'private'},message_id:9,data:'n'}});
+    const [formMessage,formAnswer]=sent.splice(0);
+    assert.equal(formMessage.method,'sendMessage'); assert.equal(formMessage.body.chat_id,nastya);
+    assert.equal(formMessage.body.reply_markup.inline_keyboard[0][0].web_app.url,env.miniAppUrl,'without a t.me link the widget gets a form button');
+    assert.match(formAnswer.body.data,/Кнопка формы/);
     await hook({widget_query:{id:'wq2',from:{id:stranger},chat:{id:stranger,type:'private'},message_id:3,data:'r'}});
     assert.match(sent.splice(0)[0].body.data,/^✗/);
     assert.equal((await rpc(owner,'mora_get_household',[h])).snapshot.transactions.filter(t=>t.merchant==='Bakery').length,2);

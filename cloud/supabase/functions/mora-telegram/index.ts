@@ -120,26 +120,14 @@ const money = (amount: number, currency: string) =>
 const totals = (map: Record<string, number> | undefined) =>
   Object.entries(map ?? {}).map(([c, v]) => money(Number(v), c)).join(" + ") || "0";
 
-// The widget names categories and accounts by their index; this version says which lists it saw.
-const listsVersion = async (ctx: any) =>
-  (await sha256(JSON.stringify([(ctx.categories ?? []).map((c: any) => c.id), (ctx.accounts ?? []).map((a: any) => a.id)]))).slice(0, 4);
-
-/** The widget's chat state, at most 1024 bytes: totals, the Mini App link, recent merchants, categories and accounts. */
+/** The widget's chat state: totals, the Mini App link and recent merchants, at most 1024 bytes. */
 export async function widgetState(env: Environment, ctx: any): Promise<string> {
-  const recent = await Promise.all((ctx.recent ?? []).slice(0, 6).map(async (r: any) =>
+  const recent = await Promise.all((ctx.recent ?? []).slice(0, 8).map(async (r: any) =>
     [String(r.merchant).slice(0, 24), r.currency, await merchantHash(r.merchant)]));
-  const accounts: any[] = ctx.accounts ?? [];
-  const lists = (n: number) => ({
-    c: (ctx.categories ?? []).map((c: any) => String(c.name).slice(0, n)),
-    a: accounts.map((a) => [String(a.name).slice(0, n), a.currency]),
-  });
-  const state = { t: totals(ctx.totals?.today), m: totals(ctx.totals?.month), l: env.miniAppLink ?? "", r: recent,
-    ...lists(22), d: Math.max(0, accounts.findIndex((a) => a.id === ctx.default_account_id)), v: await listsVersion(ctx) };
-  const size = () => enc.encode(JSON.stringify(state)).length;
-  while (size() > 1024 && state.r.length) state.r.pop();
-  // Shorter names keep every category and account, so their indexes stay those of the lists.
-  for (const n of [16, 12, 8, 4]) if (size() > 1024) Object.assign(state, lists(n));
-  return JSON.stringify(state);
+  const state = { t: totals(ctx.totals?.today), m: totals(ctx.totals?.month), l: env.miniAppLink ?? "", r: recent };
+  let text = JSON.stringify(state);
+  while (enc.encode(text).length > 1024 && state.r.length) { state.r.pop(); text = JSON.stringify(state); }
+  return text;
 }
 
 function purchaseLine(p: { merchant: string; amount: number; currency: string }, result: any): string {
@@ -188,14 +176,18 @@ async function onMessage(env: Environment, message: any): Promise<void> {
   if (command === "/start") await sendWidget(env, chatId).catch((error) => console.log(`sendWidget: ${error.message}`));
 }
 
-/** A request from the HTML bubble: `r` refreshes it, `q|amount|index|hash` records a recent merchant again,
- *  `a|amount|currency|category|account|version` records a new purchase named after its category. */
+/** A request from the HTML bubble: `r` refreshes it, `n` sends the form button, `q|amount|index|hash` records a recent merchant again. */
 async function onWidgetQuery(env: Environment, q: any): Promise<void> {
   const answer = (data: string) => telegram(env, "answerWidgetQuery", { widget_query_id: q.id, data: data.slice(0, 300) }, true);
   if (!env.allowedUsers.has(q.from?.id)) return answer("✗ Этот бот записывает покупки только для своих участников.");
   try {
+    if (q.data === "n") {
+      // Without a t.me link the widget cannot open the form itself: a web_app button can.
+      await telegram(env, "sendMessage", { chat_id: q.chat?.id ?? q.from.id, reply_markup: menuButton(env),
+        text: menuButton(env) ? "Новая трата: нажмите кнопку ниже." : "Форма пока не настроена." });
+      return answer("↓ Кнопка формы — в сообщении ниже");
+    }
     let text = "↻ Обновлено";
-    const fresh = /^a\|(\d{1,9}(?:\.\d{1,3})?)\|([A-Z]{3})\|(\d{1,2})\|(\d{1,2})\|([0-9a-f]{4})$/.exec(String(q.data ?? ""));
     const quick = /^q\|(\d{1,9}(?:\.\d{1,3})?)\|(\d{1,2})\|([0-9a-f]{4})$/.exec(String(q.data ?? ""));
     if (quick) {
       const ctx = await context(env);
@@ -208,13 +200,6 @@ async function onWidgetQuery(env: Environment, q: any): Promise<void> {
       if (!account) return answer("✗ Счёт недоступен. Запишите через форму.");
       const p = { event_id: await eventId(`widget:${q.id}`), account_id: account.id, amount: Number(quick[1]),
         currency: entry.currency || account.currency, merchant: entry.merchant, category_id: entry.category_id };
-      text = purchaseLine(p, await addPurchase(env, p));
-    } else if (fresh) {
-      const ctx = await context(env);
-      const category = ctx.categories?.[Number(fresh[3])], account = ctx.accounts?.[Number(fresh[4])];
-      if (!category || !account || await listsVersion(ctx) !== fresh[5]) return answer("✗ Счета или категории изменились. Нажмите ↻ и повторите.");
-      const p = { event_id: await eventId(`widget:${q.id}`), account_id: account.id, amount: Number(fresh[1]),
-        currency: fresh[2], merchant: category.name, category_id: category.id };
       text = purchaseLine(p, await addPurchase(env, p));
     } else if (q.data !== "r") {
       return answer("✗ Неизвестная команда виджета.");
