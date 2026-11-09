@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.7.14 — 2026-11-09
+
+Mac 1.7.14 (build 93) · Telegram form 1.7.14 (93)
+
+- **Telegram purchase form.** Uses a persistent green page button with readable white text instead of Telegram's native bottom button. The action stays visible on short screens and above the on-screen keyboard.
+- A Done action, tapping outside a text field, or pressing Return dismisses the keyboard. Selecting a category, currency, account, date or recent merchant no longer returns focus to the amount. Existing amounts are preserved.
+- Retains the published form's embedded server address, network error messages and purchase celebration. Preview fixtures and browser checks use synthetic purchases only.
+
 ## 1.7.13 — 2026-11-09
 
 Mac 1.7.13 (build 92)
