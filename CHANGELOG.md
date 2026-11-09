@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.7.6 — 2026-11-08
+
+Mac 1.7.6 (build 85) · iPhone 1.0.37 (build 38)
+
+- **Purchase fees.** Accounts can set separate percentages for expenses in the account currency and for currency conversion. Changing either fee recalculates existing expenses from their recorded original amounts or saved exchange rates. New expenses include the applicable fee.
+- Legacy split foreign-currency expenses lack per-part exchange details; changing their conversion fee is blocked rather than recalculating them incorrectly.
+- Requires the `same_currency_purchase_fee` cloud migration and updated Mora versions on all shared devices before enabling the new fee.
+
 ## 1.7.5 — 2026-11-08
 
 Mac 1.7.5 (build 84)

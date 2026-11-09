@@ -84,6 +84,7 @@ private struct HistoryFormatter {
                 fields.append(L("Начальный остаток: \(formattedMoney(old.openingBalance, currency: old.currency)) → \(formattedMoney(new.openingBalance, currency: new.currency))"))
             }
             if old.bankFeePercent != new.bankFeePercent { fields.append(L("Комиссия: \(Money.plain(old.bankFeePercent))% → \(Money.plain(new.bankFeePercent))%")) }
+            if old.purchaseFeePercent != new.purchaseFeePercent { fields.append(L("Комиссия за покупки: \(Money.plain(old.purchaseFeePercent))% → \(Money.plain(new.purchaseFeePercent))%")) }
             if old.kind != new.kind { fields.append(L("Тип счета: \(L(old.kind.title)) → \(L(new.kind.title))")) }
             if old.color != new.color { fields.append(L("Цвет счета изменен")) }
             return fields.joined(separator: " · ")

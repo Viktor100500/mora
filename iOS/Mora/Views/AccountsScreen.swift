@@ -117,6 +117,9 @@ struct AccountDetailScreen: View {
                         if account.bankFeePercent > 0 {
                             Text(L("Комиссия за конвертацию: \(Money.plain(account.bankFeePercent))%")).font(.caption).foregroundStyle(.secondary)
                         }
+                        if account.purchaseFeePercent > 0 {
+                            Text(L("Комиссия за покупки: \(Money.plain(account.purchaseFeePercent))%")).font(.caption).foregroundStyle(.secondary)
+                        }
                     }.padding(.vertical, 4)
                 }
                 Section {
@@ -156,6 +159,7 @@ struct AccountEditor: View {
     @State private var kind: AccountKind
     @State private var opening: String
     @State private var fee: String
+    @State private var purchaseFee: String
     @State private var color: String
     @State private var saving = false
 
@@ -166,6 +170,7 @@ struct AccountEditor: View {
         _kind = State(initialValue: account?.kind ?? .checking)
         _opening = State(initialValue: account.map { Money.plain($0.openingBalance) } ?? "0")
         _fee = State(initialValue: Money.plain(account?.bankFeePercent ?? 0))
+        _purchaseFee = State(initialValue: Money.plain(account?.purchaseFeePercent ?? 0))
         _color = State(initialValue: account?.color ?? "green")
     }
 
@@ -177,7 +182,7 @@ struct AccountEditor: View {
     private var duplicateName: Bool {
         !normalizedName.isEmpty && store.ledger.accounts.contains { $0.id != account?.id && $0.name.trimmingCharacters(in: .whitespacesAndNewlines).localizedCaseInsensitiveCompare(normalizedName) == .orderedSame }
     }
-    private var validFee: Bool { guard let value = Money.parse(fee) else { return false }; return value >= 0 && value <= 100 }
+    private var validFee: Bool { guard let value = Money.parse(fee), let purchase = Money.parse(purchaseFee) else { return false }; return value >= 0 && value <= 100 && purchase >= 0 && purchase <= 100 }
     private var canSave: Bool { !normalizedName.isEmpty && !duplicateName && Money.parse(opening) != nil && validFee && !currency.isEmpty }
 
     var body: some View {
@@ -202,11 +207,20 @@ struct AccountEditor: View {
                     Text(L("Укажите остаток перед самой ранней операцией, которую будете добавлять или импортировать. Для учета только новых операций — текущий остаток."))
                 }
                 Section {
-                    LabeledContent(L("Комиссия, %")) {
+                    LabeledContent(L("Конвертация, %")) {
                         TextField("0", text: $fee).keyboardType(.decimalPad).multilineTextAlignment(.trailing)
                     }
+                    LabeledContent(L("Покупки, %")) {
+                        TextField("0", text: $purchaseFee).keyboardType(.decimalPad).multilineTextAlignment(.trailing)
+                    }
                 } footer: {
-                    Text(L("Добавляется к курсу Visa при расходах в другой валюте. 0 — без комиссии. Сохраненные операции не пересчитываются."))
+                    VStack(alignment: .leading) {
+                        Text(L("Комиссия за конвертацию применяется к расходам в другой валюте. Изменение пересчитывает предыдущие расходы по сохранённому курсу."))
+                        Text(L("Комиссия за покупки применяется к расходам в валюте счета. Изменение пересчитывает предыдущие расходы по исходной сумме."))
+                        if (Money.parse(purchaseFee) ?? 0) > 0 {
+                            Text(L("Перед включением обновите Mora на всех устройствах общей базы. Старые версии не смогут синхронизировать эти данные.")).foregroundStyle(.orange)
+                        }
+                    }
                 }
                 Section(L("Цвет")) { ColorPalettePicker(color: $color) }
             }
@@ -221,11 +235,11 @@ struct AccountEditor: View {
     }
 
     private func save() {
-        guard canSave, let feeValue = Money.parse(fee), let openingValue = Money.parse(opening) else { return }
+        guard canSave, let feeValue = Money.parse(fee), let purchase = Money.parse(purchaseFee), let openingValue = Money.parse(opening) else { return }
         saving = true
         var value = account ?? Account(name: normalizedName)
         value.name = normalizedName; value.currency = currency; value.kind = kind; value.openingBalance = openingValue
-        value.color = color; value.conversionFeePercent = feeValue == 0 ? nil : feeValue
+        value.color = color
         let result = value, originalID = account?.id, expected = normalizedName
         Task {
             if await store.update({ ledger in
@@ -233,6 +247,8 @@ struct AccountEditor: View {
                     throw LedgerError.invalid("Счет с таким названием уже существует.")
                 }
                 replaceOrAppend(result, in: &ledger.accounts)
+                try ledger.setConversionFee(feeValue, accountID: result.id)
+                try ledger.setPurchaseFee(purchase, accountID: result.id)
             }) { dismiss() }
             saving = false
         }

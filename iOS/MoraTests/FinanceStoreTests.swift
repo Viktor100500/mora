@@ -39,6 +39,23 @@ final class FinanceStoreTests: XCTestCase {
         XCTAssertEqual(saved.preferences.baseCurrency, "USD")
     }
 
+    func testPurchaseFeeRepricesHistoryAndNewExpensesWithoutCompounding() async throws {
+        let store = await personalStore()
+        let account = Account(name: "Card", currency: "USD", openingBalance: 100)
+        let added = await store.update { replaceOrAppend(account, in: &$0.accounts) }; XCTAssertTrue(added)
+        let old = Transaction(date: .now, merchant: "Old", amount: -3, accountID: account.id)
+        let oldSaved = await store.saveTransaction(old); XCTAssertTrue(oldSaved)
+        let changed = await store.update { try $0.setPurchaseFee(2, accountID: account.id) }; XCTAssertTrue(changed)
+        XCTAssertEqual(store.ledger.transactions.first?.amount, Decimal(string: "-3.06"))
+        let purchase = Transaction(date: .now, merchant: "New", amount: -10, accountID: account.id)
+        let savedOK = await store.saveTransaction(purchase); XCTAssertTrue(savedOK)
+        let saved = try XCTUnwrap(store.ledger.transactions.first { $0.id == purchase.id })
+        XCTAssertEqual(saved.amount, Decimal(string: "-10.20"))
+        var edited = saved; edited.merchant = "Edited"; edited.amount = try XCTUnwrap(saved.sameCurrencyFee?.originalAmount)
+        let editedOK = await store.saveTransaction(edited, original: saved); XCTAssertTrue(editedOK)
+        XCTAssertEqual(store.ledger.transactions.first { $0.id == purchase.id }?.amount, Decimal(string: "-10.20"))
+    }
+
     func testTransactionLifecycleWithUndo() async throws {
         let store = await personalStore()
         let account = Account(name: "Card", currency: "USD", openingBalance: 100)

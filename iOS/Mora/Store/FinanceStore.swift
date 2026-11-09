@@ -164,6 +164,7 @@ final class FinanceStore: ObservableObject {
             if result.categoryID == nil && result.kind != .transfer {
                 result.categoryID = ledger.suggestedCategory(merchant: result.merchant, kind: result.kind)
             }
+            result = try ledger.applyingPurchaseFee(to: result)
             replaceOrAppend(result, in: &ledger.transactions)
         }
         if saved { showToast(L("Операция сохранена"), detail: value.merchant, undoable: true) }
@@ -222,8 +223,9 @@ final class FinanceStore: ObservableObject {
             guard ledger.transactions.first(where: { $0.id == transaction.id }) == transaction else {
                 throw LedgerError.invalid("Данные изменились в другом окне или через MCP. Повторите действие с обновленными данными.")
             }
+            let (first, second) = try ledger.allocatingPurchaseFee(from: transaction, first: parts[0], second: parts[1])
             ledger.transactions.removeAll { $0.id == transaction.id }
-            ledger.transactions.append(contentsOf: parts)
+            ledger.transactions.append(contentsOf: [first, second])
         }
     }
 
@@ -251,7 +253,8 @@ final class FinanceStore: ObservableObject {
             guard ledger.account(payment.accountID)?.archived == false else { throw LedgerError.invalid("Верните счет из архива перед учетом платежа.") }
             let id = "recurring:\(payment.id):\(Dates.string(payment.nextDate))"
             guard !ledger.transactions.contains(where: { $0.externalID == id }) else { throw LedgerError.invalid("Этот платеж уже учтен.") }
-            ledger.transactions.append(Transaction(date: payment.nextDate, merchant: payment.name, amount: -payment.amount, accountID: payment.accountID, categoryID: payment.categoryID, kind: .expense, externalID: id, recurrenceID: payment.id))
+            let expense = Transaction(date: payment.nextDate, merchant: payment.name, amount: -payment.amount, accountID: payment.accountID, categoryID: payment.categoryID, kind: .expense, externalID: id, recurrenceID: payment.id)
+            ledger.transactions.append(try ledger.applyingPurchaseFee(to: expense))
             ledger.recurring[index].nextDate = payment.followingDate()
         }
         if success { showToast(L("Платеж добавлен в операции"), undoable: true) }

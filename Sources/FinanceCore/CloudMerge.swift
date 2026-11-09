@@ -5,7 +5,10 @@ import Foundation
 public enum CloudMerge {
     public static func shared(_ ledger: Ledger) -> Ledger {
         var value = ledger.withoutChangeHistory()
-        value.schemaVersion = max(4, value.schemaVersion)
+        let hasPurchaseFees = value.accounts.contains { $0.sameCurrencyFeePercent != nil }
+            || value.transactions.contains { $0.sameCurrencyFee != nil }
+            || value.importHistory.contains { $0.transactions.contains { $0.sameCurrencyFee != nil } }
+        value.schemaVersion = max(4, value.schemaVersion, hasPurchaseFees ? 5 : 4)
         value.importHistory = ledger.importHistory
         value.preferences.appearance = "system"
         value.preferences.showBudgets = false
@@ -18,6 +21,8 @@ public enum CloudMerge {
     public static func merge(base: Ledger, local: Ledger, remote: Ledger) throws -> Ledger {
         let base = try canonical(shared(base)), left = try canonical(shared(local)), right = try canonical(shared(remote))
         var merged = right
+        // A remote schema-4 snapshot must never downgrade newly added fee metadata.
+        merged.schemaVersion = max(base.schemaVersion, left.schemaVersion, right.schemaVersion)
         merged.accounts = try records(base.accounts, left.accounts, right.accounts, name: "счет")
         merged.categories = try records(base.categories, left.categories, right.categories, name: "категория")
         merged.transactions = try records(base.transactions, left.transactions, right.transactions, name: "операция", combine: walletImportProvenance)

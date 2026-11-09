@@ -273,6 +273,11 @@ struct TransactionRow: View {
                 if let conversion = transaction.conversion {
                     FinancialText("\(DisplayMoney.string(abs(conversion.originalAmount), currency: conversion.originalCurrency)) · Visa \(Money.plain(conversion.rate))\(conversion.feePercent == 0 ? "" : " + " + Money.plain(conversion.feePercent) + "%")").font(.system(size: 10)).foregroundStyle(.secondary)
                 }
+                if let fee = transaction.sameCurrencyFee {
+                    let original = DisplayMoney.string(abs(fee.originalAmount), currency: account?.currency ?? "RUB")
+                    FinancialText(L("Покупка: \(original) · комиссия \(Money.plain(fee.percent))%"))
+                        .font(.system(size: 10)).foregroundStyle(.secondary)
+                }
                 if showsNote, !transaction.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text(transaction.note).contentTransition(.opacity).font(.system(size: 10)).foregroundStyle(.secondary)
                         .lineLimit(1).truncationMode(.tail)

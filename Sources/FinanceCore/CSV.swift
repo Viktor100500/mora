@@ -65,11 +65,12 @@ public struct CSVTable: Sendable {
 }
 
 public enum CSVField: String, CaseIterable, Identifiable, Codable, Sendable {
-    case date, merchant, amount, debit, credit, currency, account, category, kind, note, tags, externalID, destination, destinationAmount
+    case date, merchant, amount, debit, credit, currency, account, category, kind, note, tags, externalID, destination, destinationAmount, feeOriginalAmount, feePercent, feeRoundingAdjustment
     public var id: String { rawValue }
     public var title: String {
         switch self {
         case .date: "Дата *"; case .merchant: "Описание *"; case .amount: "Сумма"; case .debit: "Расход (отдельная колонка)"; case .credit: "Доход (отдельная колонка)"; case .currency: "Валюта"; case .account: "Счет"; case .category: "Категория"; case .kind: "Тип операции"; case .note: "Заметка"; case .tags: "Теги"; case .externalID: "ID операции"; case .destination: "Счет назначения"; case .destinationAmount: "Сумма зачисления"
+        case .feeOriginalAmount: "Сумма покупки без комиссии"; case .feePercent: "Комиссия за покупки, %"; case .feeRoundingAdjustment: "Округление комиссии"
         }
     }
     public var aliases: [String] {
@@ -88,6 +89,9 @@ public enum CSVField: String, CaseIterable, Identifiable, Codable, Sendable {
         case .externalID: ["id", "transaction id", "идентификатор"]
         case .destination: ["to_account", "destination", "счет назначения", "счёт назначения"]
         case .destinationAmount: ["to_amount", "destination amount", "сумма зачисления"]
+        case .feeOriginalAmount: ["fee_original_amount"]
+        case .feePercent: ["fee_percent"]
+        case .feeRoundingAdjustment: ["fee_rounding_adjustment"]
         }
     }
 }
@@ -276,7 +280,25 @@ public enum CSVImporter: Sendable {
                 var t = Transaction(date: date, merchant: preview.merchant, amount: amount, accountID: account.id, categoryID: categoryID, kind: kind, note: cell(.note), tags: cell(.tags).split(separator: "|").map(String.init), destinationAccountID: destination?.id, destinationAmount: destinationAmount, externalID: externalID)
                 t.conversion = conversions[index]
                 if standalone { t.removedTransferAccountName = cell(.destination) }
-                if t.conversion == nil, let externalID, let existing = original.transactions.first(where: { ($0.externalID ?? $0.id.uuidString) == externalID && $0.accountID == t.accountID && $0.amount == t.amount && $0.date == t.date && $0.merchant == t.merchant }) { t.conversion = existing.conversion }
+                if !cell(.feeOriginalAmount).isEmpty || !cell(.feePercent).isEmpty || !cell(.feeRoundingAdjustment).isEmpty {
+                    guard kind == .expense, t.conversion == nil,
+                          let original = Money.parse(cell(.feeOriginalAmount)), let percent = Money.parse(cell(.feePercent)) else {
+                        throw LedgerError.invalid("Некорректные данные комиссии покупки.")
+                    }
+                    var fee = SameCurrencyFee(originalAmount: original, percent: percent)
+                    if !cell(.feeRoundingAdjustment).isEmpty {
+                        guard let adjustment = Money.parse(cell(.feeRoundingAdjustment)) else { throw LedgerError.invalid("Некорректное округление комиссии.") }
+                        fee.roundingAdjustment = adjustment
+                    }
+                    guard try fee.chargedAmount(currency: account.currency) == t.amount else { throw LedgerError.invalid("Комиссия не соответствует сумме операции.") }
+                    t.sameCurrencyFee = fee
+                }
+                if t.conversion == nil, let externalID, let existing = original.transactions.first(where: { ($0.externalID ?? $0.id.uuidString) == externalID && $0.accountID == t.accountID && $0.amount == t.amount && $0.date == t.date && $0.merchant == t.merchant }) {
+                    t.conversion = existing.conversion
+                    t.sameCurrencyFee = existing.sameCurrencyFee
+                }
+                t = try staged.applyingPurchaseFee(to: t)
+                preview.amount = t.amount
                 let key = fingerprint(t, ledger: staged)
                 let externalKey = externalID.map { "\(account.id)|\($0)" }
                 if preview.excluded { previews.append(preview); continue }
@@ -305,11 +327,15 @@ public enum CSVImporter: Sendable {
     }
     public static func export(_ ledger: Ledger, transactions: [Transaction]? = nil) -> String {
         func escape(_ s: String) -> String { "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\"" }
-        let header = "date,merchant,amount,currency,account,category,type,note,tags,id,to_account,to_amount"
-        let rows = (transactions ?? ledger.transactions).sorted { $0.date < $1.date }.map { t -> String in
+        let selected = transactions ?? ledger.transactions
+        let hasFees = selected.contains { $0.sameCurrencyFee != nil }
+        let header = "date,merchant,amount,currency,account,category,type,note,tags,id,to_account,to_amount" + (hasFees ? ",fee_original_amount,fee_percent,fee_rounding_adjustment" : "")
+        let rows = selected.sorted { $0.date < $1.date }.map { t -> String in
             let a = ledger.account(t.accountID)
             let kind = t.isStandaloneTransfer ? (t.amount > 0 ? "transfer_in" : "transfer_out") : t.kind.rawValue
-            return [Dates.string(t.date), t.merchant, Money.plain(t.amount), a?.currency ?? "", a?.name ?? "", ledger.category(t.categoryID)?.name ?? "", kind, t.note, t.tags.joined(separator: "|"), t.externalID ?? t.id.uuidString, t.removedTransferAccountName ?? t.destinationAccountID.flatMap { ledger.account($0)?.name } ?? "", t.destinationAmount.map(Money.plain) ?? ""].map(escape).joined(separator: ",")
+            var fields = [Dates.string(t.date), t.merchant, Money.plain(t.amount), a?.currency ?? "", a?.name ?? "", ledger.category(t.categoryID)?.name ?? "", kind, t.note, t.tags.joined(separator: "|"), t.externalID ?? t.id.uuidString, t.removedTransferAccountName ?? t.destinationAccountID.flatMap { ledger.account($0)?.name } ?? "", t.destinationAmount.map(Money.plain) ?? ""]
+            if hasFees { fields += [t.sameCurrencyFee.map { Money.plain($0.originalAmount) } ?? "", t.sameCurrencyFee.map { Money.plain($0.percent) } ?? "", t.sameCurrencyFee?.roundingAdjustment.map(Money.plain) ?? ""] }
+            return fields.map(escape).joined(separator: ",")
         }
         return ([header] + rows).joined(separator: "\r\n") + "\r\n"
     }
