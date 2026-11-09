@@ -176,11 +176,17 @@ async function onMessage(env: Environment, message: any): Promise<void> {
   if (command === "/start") await sendWidget(env, chatId).catch((error) => console.log(`sendWidget: ${error.message}`));
 }
 
-/** A request from the HTML bubble: `r` refreshes it, `q|amount|index|hash` records a recent merchant again. */
+/** A request from the HTML bubble: `r` refreshes it, `n` sends the form button, `q|amount|index|hash` records a recent merchant again. */
 async function onWidgetQuery(env: Environment, q: any): Promise<void> {
   const answer = (data: string) => telegram(env, "answerWidgetQuery", { widget_query_id: q.id, data: data.slice(0, 300) }, true);
   if (!env.allowedUsers.has(q.from?.id)) return answer("✗ Этот бот записывает покупки только для своих участников.");
   try {
+    if (q.data === "n") {
+      // Without a t.me link the widget cannot open the form itself: a web_app button can.
+      await telegram(env, "sendMessage", { chat_id: q.chat?.id ?? q.from.id, reply_markup: menuButton(env),
+        text: menuButton(env) ? "Новая трата: нажмите кнопку ниже." : "Форма пока не настроена." });
+      return answer("↓ Кнопка формы — в сообщении ниже");
+    }
     let text = "↻ Обновлено";
     const quick = /^q\|(\d{1,9}(?:\.\d{1,3})?)\|(\d{1,2})\|([0-9a-f]{4})$/.exec(String(q.data ?? ""));
     if (quick) {

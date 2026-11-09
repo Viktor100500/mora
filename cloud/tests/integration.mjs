@@ -572,6 +572,11 @@ try {
     assert.equal(answer.method,'answerWidgetQuery'); assert.equal(answer.body.widget_query_id,'wq1'); assert.match(answer.body.data,/^✓ Bakery −2,40 USD/);
     await hook({widget_query:{id:'wq1',from:{id:nastya},chat:{id:nastya,type:'private'},message_id:9,data:`q|2.40|0|${state.r[0][2]}`}});
     assert.match(sent.splice(0)[1].body.data,/Уже записано/,'a repeated widget query records nothing new');
+    await hook({widget_query:{id:'wq3',from:{id:nastya},chat:{id:nastya,type:'private'},message_id:9,data:'n'}});
+    const [formMessage,formAnswer]=sent.splice(0);
+    assert.equal(formMessage.method,'sendMessage'); assert.equal(formMessage.body.chat_id,nastya);
+    assert.equal(formMessage.body.reply_markup.inline_keyboard[0][0].web_app.url,env.miniAppUrl,'without a t.me link the widget gets a form button');
+    assert.match(formAnswer.body.data,/Кнопка формы/);
     await hook({widget_query:{id:'wq2',from:{id:stranger},chat:{id:stranger,type:'private'},message_id:3,data:'r'}});
     assert.match(sent.splice(0)[0].body.data,/^✗/);
     assert.equal((await rpc(owner,'mora_get_household',[h])).snapshot.transactions.filter(t=>t.merchant==='Bakery').length,2);

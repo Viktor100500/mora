@@ -2,7 +2,8 @@
 // github.com/TelegramMessenger/widget-sandbox). Widgets get no keyboard, so it
 // only offers taps: the bot's recent merchants and a keypad for the amount.
 // "Записать" sends `q|<amount>|<index>|<merchant hash>` (at most 64 bytes) to
-// the bot. Everything else opens the Mini App. The bot writes chatData (1024
+// the bot. Everything else opens the Mini App: by its t.me link when the bot
+// has one, otherwise `n` asks the bot for a message with the form button. The bot writes chatData (1024
 // bytes at most): {t: today, m: month, l: Mini App link, r: [[merchant,
 // currency, hash]]}. The server limits the HTML to 4096 bytes after zlib level 9.
 export const WIDGET_HTML = `<!doctype html><html><head><meta charset="utf-8"><style>
@@ -38,8 +39,8 @@ function ask(d,done){if(busy||!TW)return;busy=1;$('msg').textContent='Отпра
 TW.request(d).then(function(x){busy=0;var t=x&&x.result||'';$('msg').textContent=t;done&&done(t)},
 function(e){busy=0;$('msg').textContent='Ошибка: '+(e&&e.code||e)})}
 '123456789.0⌫'.split('').forEach(function(k){var b=document.createElement('button');b.textContent=k;b.onclick=function(){key(k)};$('keys').appendChild(b)});
-$('more').onclick=function(){link('')};
-$('det').onclick=function(){link('r'+cur+'_'+a.replace('.','d'))};
+$('more').onclick=function(){if(S.l)link('');else ask('n')};
+$('det').onclick=function(){if(S.l)link('r'+cur+'_'+a.replace('.','d'));else ask('n')};
 $('back').onclick=function(){$('msg').textContent='';show('home')};
 $('ref').onclick=function(){ask('r')};
 $('ok').onclick=function(){if(!(+a>0))return;ask('q|'+a+'|'+cur+'|'+S.r[cur][2],function(t){if(t.charAt(0)=='✓')show('home')})};
