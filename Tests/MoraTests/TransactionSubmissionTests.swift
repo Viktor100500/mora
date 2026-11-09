@@ -17,6 +17,23 @@ final class TransactionSubmissionTests: XCTestCase {
         return (store, directory)
     }
 
+    func testManualExpenseAndEditApplyPurchaseFeeOnce() async throws {
+        let (store, directory) = try await fixture()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let account = try XCTUnwrap(store.ledger.accounts.first)
+        let old = FinanceCore.Transaction(date: .now, merchant: "Old", amount: -3, accountID: account.id)
+        expectTrue(await store.saveTransaction(old))
+        expectTrue(await store.update { try $0.setPurchaseFee(2, accountID: account.id) })
+        XCTAssertEqual(store.ledger.transactions[0].amount, Decimal(string: "-3.06"))
+        let new = FinanceCore.Transaction(date: .now, merchant: "New", amount: -10, accountID: account.id)
+        expectTrue(await store.saveTransaction(new))
+        let saved = try XCTUnwrap(store.ledger.transactions.first { $0.id == new.id })
+        XCTAssertEqual(saved.amount, Decimal(string: "-10.20"))
+        var edited = saved; edited.merchant = "New name"; edited.amount = try XCTUnwrap(saved.sameCurrencyFee?.originalAmount)
+        expectTrue(await store.saveTransaction(edited, replacing: saved.id, original: saved))
+        XCTAssertEqual(store.ledger.transactions.first { $0.id == new.id }?.amount, Decimal(string: "-10.20"))
+    }
+
     func testSubmissionReturnsBeforeRateLoadsAndTerminationDrainsAcceptedSave() async throws {
         let (store, directory) = try await fixture()
         defer { try? FileManager.default.removeItem(at: directory) }

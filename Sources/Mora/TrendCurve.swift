@@ -46,8 +46,14 @@ struct TrendCurveGeometry: Equatable {
     /// Monotone cubic Hermite interpolation retains the real bucket values
     /// without introducing peaks or negative spending between neighboring points.
     static func sample(x: [Double], y: [Double]) -> TrendCurveVector {
-        guard !y.isEmpty else { return .zero }
-        guard y.count > 1 else { return TrendCurveVector(Array(repeating: y[0], count: TrendCurveVector.count)) }
+        TrendCurveVector(interpolate(x: x, y: y, at: (0..<TrendCurveVector.count).map {
+            Double($0) / Double(TrendCurveVector.count - 1)
+        }))
+    }
+
+    static func interpolate(x: [Double], y: [Double], at positions: [Double]) -> [Double] {
+        guard !y.isEmpty else { return Array(repeating: 0, count: positions.count) }
+        guard y.count > 1 else { return Array(repeating: y[0], count: positions.count) }
         let widths = zip(x, x.dropFirst()).map { max($1 - $0, Double.ulpOfOne) }
         let slopes = y.indices.dropLast().map { (y[$0 + 1] - y[$0]) / widths[$0] }
         var tangents = Array(repeating: 0.0, count: y.count)
@@ -67,8 +73,8 @@ struct TrendCurveGeometry: Equatable {
             }
         }
         var segment = 0
-        let samples = (0..<TrendCurveVector.count).map { index -> Double in
-            let position = Double(index) / Double(TrendCurveVector.count - 1)
+        return positions.map { position -> Double in
+            if position < x[segment] { segment = 0 }
             while segment < y.count - 2 && position > x[segment + 1] { segment += 1 }
             let t = max(0, min(1, (position - x[segment]) / widths[segment]))
             let t2 = t * t, t3 = t2 * t
@@ -78,7 +84,6 @@ struct TrendCurveGeometry: Equatable {
                 + (t3 - t2) * widths[segment] * tangents[segment + 1]
             return min(max(y[segment], y[segment + 1]), max(min(y[segment], y[segment + 1]), value))
         }
-        return TrendCurveVector(samples)
     }
 }
 

@@ -25,6 +25,12 @@ struct TransactionDetailsView: View {
                     LabeledContent(L("Сумма")) {
                         FinancialText(DisplayMoney.string(transaction.amount, currency: ledger.account(transaction.accountID)?.currency ?? ledger.preferences.baseCurrency))
                     }
+                    if let fee = transaction.sameCurrencyFee {
+                        LabeledContent(L("Сумма покупки")) {
+                            FinancialText(DisplayMoney.string(fee.originalAmount, currency: ledger.account(transaction.accountID)?.currency ?? ledger.preferences.baseCurrency))
+                        }
+                        LabeledContent(L("Комиссия за покупки"), value: "\(Money.plain(fee.percent))%")
+                    }
                     Divider()
                     Text(L("Описание")).font(.headline)
                     Text(transaction.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? L("Нет заметки") : transaction.note)

@@ -117,6 +117,11 @@
 "Валюта покупки" = "Purchase currency";
 "Валюта списания" = "Debit currency";
 "Дата" = "Date";
+"Конвертация, %" = "Conversion, %";
+"Покупки, %" = "Purchases, %";
+"Комиссия за покупки, %" = "Purchase fee, %";
+"Комиссия за покупки" = "Purchase fee";
+"Сумма покупки" = "Purchase amount";
 "Дата: %@" = "Date: %@";
 "Со счета" = "From account";
 "На счет" = "To account";

@@ -56,6 +56,24 @@ final class WalletReviewTests: XCTestCase {
         XCTAssertEqual(WalletReviewDraft(capture: try capture(account: account, currency: "CAD"), ledger: ledger).currency, "CAD")
     }
 
+    func testWalletSameCurrencyFeeIsAppliedOnceAndLastAmountUsesPurchasePrice() async throws {
+        var ledger = Ledger.empty
+        var account = Account(name: "USD", currency: "USD"); account.sameCurrencyFeePercent = 2
+        ledger.accounts = [account]
+        let item = try capture(account: account.id, amount: "$3.00", merchant: "Metro")
+        let candidate = try await WalletReviewDraft.automaticTransaction(for: item, in: ledger) { _, _, _, _ in
+            XCTFail("Same currency must not fetch a rate"); throw CancellationError()
+        }
+        let value = try XCTUnwrap(candidate)
+        XCTAssertEqual(value.amount, Decimal(string: "-3.06"))
+        XCTAssertEqual(value.sameCurrencyFee?.originalAmount, -3)
+        XCTAssertEqual(try WalletReviewDraft.transaction(value, for: item, in: ledger).amount, value.amount)
+        ledger.transactions.append(value)
+        XCTAssertEqual(WalletReviewDraft.lastAmount(merchant: "Metro", in: ledger)?.amount, "3")
+        let retry = try await WalletReviewDraft.automaticTransaction(for: item, in: ledger) { _, _, _, _ in throw CancellationError() }
+        XCTAssertEqual(retry, value)
+    }
+
     func testDinarPurchaseOfAMultiCurrencyCardIsBookedToItsDinarAccount() async throws {
         var ledger = Ledger.empty; ledger.accounts = [Account(name: "Raif RSD", currency: "RSD")]
         for amount in ["RSD 1,234.00", "1.234,00 RSD", "RSD\u{00A0}1,234.00"] {

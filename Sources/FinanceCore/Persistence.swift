@@ -6,6 +6,7 @@ public enum LedgerFile {
         var ledger = ledger
         if ledger.transactions.contains(where: { $0.conversion != nil }) || ledger.importHistory.contains(where: { $0.transactions.contains(where: { $0.conversion != nil }) }) { ledger.schemaVersion = max(ledger.schemaVersion, 3) }
         if ledger.changeHistory != nil { ledger.schemaVersion = max(ledger.schemaVersion, 4) }
+        if ledger.accounts.contains(where: { $0.sameCurrencyFeePercent != nil }) || ledger.transactions.contains(where: { $0.sameCurrencyFee != nil }) || ledger.importHistory.contains(where: { $0.transactions.contains(where: { $0.sameCurrencyFee != nil }) }) { ledger.schemaVersion = max(ledger.schemaVersion, 5) }
         try ledger.validate()
         let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]; encoder.dateEncodingStrategy = .iso8601
         return try encoder.encode(ledger)

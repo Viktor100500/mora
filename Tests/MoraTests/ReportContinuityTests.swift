@@ -36,6 +36,7 @@ final class ReportContinuityTests: XCTestCase {
         XCTAssertEqual(store.reportBalance(account), 80, "Initial loading ends only after the first report is ready")
         XCTAssertEqual(store.reportSummary(in: month).expense, 20)
         _ = store.reportTrend(ending: month, detail: .days)
+        _ = store.reportCashFlow(in: month, detail: .days)
         _ = store.reportAnalytics(in: month, detail: .days, selectedDays: [])
         try await finishReports(store)
         let value = Transaction(date: Date(), merchant: "Second purchase", amount: -5, accountID: account.id,
@@ -50,6 +51,7 @@ final class ReportContinuityTests: XCTestCase {
         XCTAssertEqual(store.reportCategories(in: month).first?.amount, 20)
         XCTAssertEqual(store.reportTrend(ending: month).last?.expense, 20)
         XCTAssertEqual(store.reportTrend(ending: month, detail: .days).reduce(Decimal(0)) { $0 + $1.expense }, 20)
+        XCTAssertEqual(store.reportCashFlow(in: month, detail: .days)?.visibleBuckets(from: month).reduce(Decimal(0)) { $0 + $1.expense }, 20)
         XCTAssertEqual(store.reportAnalytics(in: month, detail: .days, selectedDays: []).summary.expense, 20)
         try await finishReports(store)
         XCTAssertEqual(store.reportBalance(account), 75)
@@ -60,6 +62,7 @@ final class ReportContinuityTests: XCTestCase {
         XCTAssertEqual(store.reportCategories(in: month).first?.amount, 25)
         XCTAssertEqual(store.reportTrend(ending: month).last?.expense, 25)
         XCTAssertEqual(store.reportTrend(ending: month, detail: .days).reduce(Decimal(0)) { $0 + $1.expense }, 25)
+        XCTAssertEqual(store.reportCashFlow(in: month, detail: .days)?.visibleBuckets(from: month).reduce(Decimal(0)) { $0 + $1.expense }, 25)
         XCTAssertEqual(store.reportAnalytics(in: month, detail: .days, selectedDays: []).summary.expense, 25)
         XCTAssertTrue(store.reports.pending.isEmpty, "Cached completed results must not recalculate on every view redraw")
     }

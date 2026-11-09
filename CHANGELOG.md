@@ -1,5 +1,31 @@
 # Changelog
 
+## 1.7.6 — 2026-11-08
+
+Mac 1.7.6 (build 85) · iPhone 1.0.37 (build 38)
+
+- **Purchase fees.** Accounts can set separate percentages for expenses in the account currency and for currency conversion. Changing either fee recalculates existing expenses from their recorded original amounts or saved exchange rates. New expenses include the applicable fee.
+- Legacy split foreign-currency expenses lack per-part exchange details; changing their conversion fee is blocked rather than recalculating them incorrectly.
+- Requires the `same_currency_purchase_fee` cloud migration and updated Mora versions on all shared devices before enabling the new fee.
+
+## 1.7.5 — 2026-11-08
+
+Mac 1.7.5 (build 84)
+
+- **Transaction diagnostics.** The local diagnostic log records data refreshes and filtered-list updates to help investigate intermittent freezes.
+
+## 1.7.4 — 2026-11-08
+
+Mac 1.7.4 (build 83)
+
+- **Cloud sync diagnostics.** A local, size-limited log records sync stages and cancellation codes without financial data or credentials.
+
+## 1.7.3 — 2026-11-08
+
+Mac 1.7.3 (build 82)
+
+- **Cloud sync.** Cancelled network requests no longer appear as errors, and background sync can retry promptly.
+
 ## 1.7.2 — 2026-11-08
 
 Mac 1.7.2 (build 81)

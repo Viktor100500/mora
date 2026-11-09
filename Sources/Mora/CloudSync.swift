@@ -103,6 +103,7 @@ final class CloudSync: ObservableObject {
     var publicKey: String { settings?.configuration.publicKey ?? "" }
     var captureURL: String { projectURL.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/rest/v1/rpc/mora_capture_payment" }
     private var directory: URL? { store?.fileURL.deletingLastPathComponent() }
+    private lazy var diagnostics: CloudSyncDiagnostics? = directory.map { CloudSyncDiagnostics(directory: $0) }
     private var configURL: URL? { directory?.appendingPathComponent("cloud-settings.json") }
     private var checkpointURL: URL? { directory?.appendingPathComponent("cloud-checkpoint.json") }
     private var keychainAccount: String {
@@ -111,11 +112,16 @@ final class CloudSync: ObservableObject {
 
     func prepare(store: FinanceStore) async {
         self.store = store
+        diagnostics?.record("prepare-start", taskCancelled: Task.isCancelled)
         await store.load()
         await load()
+        diagnostics?.record("prepare-loaded", taskCancelled: Task.isCancelled)
         if enabled && signedIn && !store.isDemo { await synchronize(inBackground: true) }
+        diagnostics?.record("prepare-end", taskCancelled: Task.isCancelled)
     }
     func run(store: FinanceStore) async {
+        diagnostics?.record("poll-loop-start", taskCancelled: Task.isCancelled)
+        defer { diagnostics?.record("poll-loop-end", taskCancelled: Task.isCancelled) }
         while !Task.isCancelled {
             if enabled && signedIn && !store.isDemo && Date() >= nextAttempt { await synchronize(inBackground: true) }
             do { try await Task.sleep(for: .seconds(8)) } catch { return }
@@ -200,10 +206,11 @@ final class CloudSync: ObservableObject {
                     actions: pending.isEmpty ? [] : [.inbox])
             }
         }
-        catch is CancellationError {
-            if reportSyncResult { store?.showNotice(L("Синхронизация с облаком отменена"), kind: .warning) }
-        }
         catch {
+            if Self.isCancellation(error) {
+                if reportSyncResult { store?.showNotice(L("Синхронизация с облаком отменена"), kind: .warning) }
+                return
+            }
             if Self.isConnectionError(error) {
                 lastOperationConnectionFailure = true
                 store?.notifications.connectionLost()
@@ -221,6 +228,13 @@ final class CloudSync: ObservableObject {
             }
         }
     }
+    private static func isCancellation(_ error: Error) -> Bool {
+        if error is CancellationError { return true }
+        let value = error as NSError
+        if value.domain == NSURLErrorDomain && value.code == NSURLErrorCancelled { return true }
+        if let underlying = value.userInfo[NSUnderlyingErrorKey] as? Error { return isCancellation(underlying) }
+        return false
+    }
     private static func isConnectionError(_ error: Error) -> Bool {
         let value = error as NSError
         if value.domain == NSURLErrorDomain {
@@ -231,6 +245,13 @@ final class CloudSync: ObservableObject {
         return false
     }
     private func rpc<B: Encodable & Sendable, R: Decodable & Sendable>(_ function: String, _ body: B) async throws -> R {
+        do { return try await rpcRequest(function, body) }
+        catch {
+            diagnostics?.record("rpc-\(function)-failed", error: error, taskCancelled: Task.isCancelled)
+            throw error
+        }
+    }
+    private func rpcRequest<B: Encodable & Sendable, R: Decodable & Sendable>(_ function: String, _ body: B) async throws -> R {
         guard let settings, var session else { throw CloudAPIError.unauthorized }
         let api = CloudAPI(configuration: settings.configuration, transport: transport)
         if session.expires_at < Date().timeIntervalSince1970 + 60 {
@@ -401,21 +422,27 @@ final class CloudSync: ObservableObject {
         guard enabled, householdID != nil else { return }
         await operation(inBackground: inBackground, reportSyncResult: notifyResult) {
             guard let store = self.store, let id = self.householdID else { return }
+            self.diagnostics?.record("sync-start-revision-\(store.revision)", taskCancelled: Task.isCancelled)
             let originalIDs = Set(store.ledger.transactions.map(\.id))
             store.beginDeferredUpdates()
             self.stagedPending = self.inbox
             self.importedBatchIDs = []
             self.stagedSyncDate = nil
             var failure: Error?
+            var stage = "sync"
             do {
                 while true {
                     try Task.checkCancellation()
+                    stage = "snapshot"
                     try await self.syncNow()
                     let attempted = self.stagedPending ?? []
+                    stage = "wallet"
                     try await self.bookWalletPurchases()
+                    stage = "presentation"
                     if self.walletProgressID != nil { await self.preparePresentation?(store) }
                     // Recheck both the snapshot version and capture contents. Equal
                     // counts can hide a new/corrected purchase while rates were loading.
+                    stage = "verify"
                     let saved = try await self.checkpoint().envelope
                     _ = try await self.loadPending(id)
                     let status: Status = try await self.rpc("mora_get_status", HouseholdBody(p_household_id: id))
@@ -426,10 +453,15 @@ final class CloudSync: ObservableObject {
                 self.failureCount = 0; self.nextAttempt = Date().addingTimeInterval(8)
             } catch {
                 failure = error
-                self.failureCount += 1
-                // Without a network the next try stays close instead of backing off for minutes.
-                let limit: Double = Self.isConnectionError(error) ? 30 : 300
-                self.nextAttempt = Date().addingTimeInterval(min(limit, 8 * pow(2, Double(min(self.failureCount, 5)))))
+                self.diagnostics?.record("sync-\(stage)-failed", error: error, taskCancelled: Task.isCancelled)
+                if Self.isCancellation(error) {
+                    self.nextAttempt = .distantPast
+                } else {
+                    self.failureCount += 1
+                    // Without a network the next try stays close instead of backing off for minutes.
+                    let limit: Double = Self.isConnectionError(error) ? 30 : 300
+                    self.nextAttempt = Date().addingTimeInterval(min(limit, 8 * pow(2, Double(min(self.failureCount, 5)))))
+                }
             }
             // Disk writes stay durable throughout; only their presentation waits.
             await store.endDeferredUpdates()
@@ -445,7 +477,7 @@ final class CloudSync: ObservableObject {
             self.walletProgressID = nil
             if let failure {
                 if let progressID {
-                    if failure is CancellationError || Self.isConnectionError(failure) { store.finishProgressNotice(progressID) }
+                    if Self.isCancellation(failure) || Self.isConnectionError(failure) { store.finishProgressNotice(progressID) }
                     else {
                         store.finishProgressNotice(progressID, message: L("Не удалось загрузить покупки из Wallet"),
                             detail: failure.localizedDescription, kind: .error, actions: [.inbox])
@@ -464,6 +496,7 @@ final class CloudSync: ObservableObject {
                     detail: captures.isEmpty ? nil : L("Покупок на проверке: \(captures.count)"),
                     kind: captures.isEmpty ? .success : .warning, actions: actions)
             }
+            self.diagnostics?.record("sync-end-revision-\(store.revision)", taskCancelled: Task.isCancelled)
         }
     }
     private func bookWalletPurchases() async throws {
@@ -493,8 +526,8 @@ final class CloudSync: ObservableObject {
                 await store.reloadFromDisk()
                 stagedPending?.removeAll { $0.id == capture.id }
                 markSynced()
-            } catch is CancellationError { throw CancellationError() }
-            catch {
+            } catch {
+                if Self.isCancellation(error) { throw error }
                 // Only a real failure needs review; offline purchases wait for the next attempt.
                 if !Self.isConnectionError(error) { attemptedCaptures.insert(capture.id) }
                 if firstError == nil { firstError = error }

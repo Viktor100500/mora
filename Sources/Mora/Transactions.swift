@@ -79,13 +79,23 @@ struct TransactionsView: View {
         })
         .task(id: searchRequest) {
             let request = searchRequest, snapshot = store.ledger.withoutChangeHistory()
+            store.diagnostics.record("list-start-revision-\(request.revision)-accounts-\(request.query.accountIDs?.count ?? -1)", taskCancelled: Task.isCancelled)
             do {
                 if !request.query.text.isEmpty { try await Task.sleep(for: .milliseconds(150)) }
                 let result = try await BackgroundWork.shared.perform { try request.query.prepare(in: snapshot) }
-                guard !Task.isCancelled, request == searchRequest else { return }
+                guard !Task.isCancelled, request == searchRequest else {
+                    store.diagnostics.record("list-discarded-revision-\(request.revision)", taskCancelled: Task.isCancelled)
+                    return
+                }
+                store.diagnostics.record("list-apply-revision-\(request.revision)-rows-\(result.rows.count)", taskCancelled: Task.isCancelled)
                 AppMotion.update(using: AppMotion.list) { presentation.apply(result) }
-            } catch is CancellationError { }
-            catch { presentation.failedRefresh(); store.error = error.localizedDescription }
+                store.diagnostics.record("list-applied-revision-\(request.revision)", taskCancelled: Task.isCancelled)
+            } catch is CancellationError {
+                store.diagnostics.record("list-cancelled-revision-\(request.revision)", taskCancelled: Task.isCancelled)
+            } catch {
+                store.diagnostics.record("list-failed-revision-\(request.revision)", error: error, taskCancelled: Task.isCancelled)
+                presentation.failedRefresh(); store.error = error.localizedDescription
+            }
         }
         .confirmationDialog(L("Удалить \(selection.count) операций?"), isPresented: $confirmDelete, titleVisibility: .visible) { Button(L("Удалить операции"), role: .destructive) { Task { @MainActor in
             let result = await store.change { [selection] ledger -> (Bool, ChangeDescription) in
@@ -321,10 +331,11 @@ struct TransactionEditor: View {
         guard !needsConversion || converted != nil else { return nil }
         var signedAmount = kind == .income ? amount : -amount
         if standaloneTransfer { signedAmount = (transaction?.amount ?? 0) > 0 ? amount : -amount }
-        return Transaction(id: newTransactionID, date: date,
+        let draft = Transaction(id: newTransactionID, date: date,
                            merchant: "", amount: converted ?? signedAmount, accountID: accountID, kind: kind,
                            destinationAccountID: kind == .transfer && !standaloneTransfer ? destinationID : nil,
                            destinationAmount: kind == .transfer && !standaloneTransfer ? (sameCurrency ? amount : AmountInput.parse(destinationAmount)) : nil)
+        return needsConversion ? draft : (try? store.ledger.applyingPurchaseFee(to: draft))
     }
     init(transaction: Transaction? = nil, template: Transaction? = nil, walletCapture: CloudCapture? = nil, ledger: Ledger? = nil,
          rateClient: VisaRateClient = .shared) {
@@ -336,7 +347,7 @@ struct TransactionEditor: View {
         amountSuggestion = draft?.amount.isEmpty == true ? draft?.suggestion : nil
         newWalletCard = walletCapture.flatMap { $0.awaitsCardLink ? ($0.card ?? "") : nil }
         let dateReference = transaction?.date ?? draft?.date ?? Date()
-        _merchant = State(initialValue: transaction?.merchant ?? draft?.merchant ?? ""); _amount = State(initialValue: transaction.map { Money.plain(abs($0.conversion?.originalAmount ?? $0.amount)) } ?? draft?.prefillAmount ?? "")
+        _merchant = State(initialValue: transaction?.merchant ?? draft?.merchant ?? ""); _amount = State(initialValue: transaction.map { Money.plain(abs($0.conversion?.originalAmount ?? $0.sameCurrencyFee?.originalAmount ?? $0.amount)) } ?? draft?.prefillAmount ?? "")
         _kind = State(initialValue: transaction?.kind ?? .expense); _date = State(initialValue: dateReference)
         _accountID = State(initialValue: transaction?.accountID ?? (walletCapture == nil ? ledger?.suggestedTransactionAccountID : draft?.accountID)); _categoryID = State(initialValue: transaction?.categoryID)
         _destinationID = State(initialValue: transaction?.destinationAccountID); _destinationAmount = State(initialValue: transaction?.destinationAmount.map(Money.plain) ?? "")
@@ -551,6 +562,10 @@ struct TransactionEditor: View {
                                       account: account, destination: kind == .transfer && !standaloneTransfer ? destination : nil,
                                       kind: kind)
             if needsConversion { conversionPreview }
+            if !needsConversion, let draft = balanceDraft, let fee = draft.sameCurrencyFee, let account {
+                FinancialText(L("Будет списано с комиссией \(Money.plain(fee.percent))%: \(DisplayMoney.string(abs(draft.amount), currency: account.currency))"))
+                    .font(.caption).foregroundStyle(.secondary)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -749,6 +764,7 @@ struct SplitEditor: View {
         }
         if await store.update({ [first, second, transaction] ledger in
             guard ledger.transactions.first(where: { $0.id == transaction.id }) == transaction else { throw LedgerError.invalid(L("Данные изменились в другом окне или через MCP. Повторите действие с обновленными данными.")) }
+            let (first, second) = try ledger.allocatingPurchaseFee(from: transaction, first: first, second: second)
             ledger.transactions.removeAll { $0.id == transaction.id }; ledger.transactions.append(contentsOf: [first, second]) }) { dismiss() }
      } }
 }
