@@ -29,6 +29,20 @@ struct SectionScrollAnchor: NSViewRepresentable {
         var request: UUID?
         var onScroll: (UUID) -> Void = { _ in }
         private var scheduled = false
+        private weak var observedDocument: NSView?
+
+        @objc private func documentFrameChanged(_ notification: Notification) { scheduleScroll() }
+
+        private func observeDocument(_ document: NSView) {
+            guard observedDocument !== document else { return }
+            if let observedDocument {
+                NotificationCenter.default.removeObserver(self, name: NSView.frameDidChangeNotification, object: observedDocument)
+            }
+            observedDocument = document
+            document.postsFrameChangedNotifications = true
+            NotificationCenter.default.addObserver(self, selector: #selector(documentFrameChanged(_:)),
+                                                  name: NSView.frameDidChangeNotification, object: document)
+        }
 
         override func hitTest(_ point: NSPoint) -> NSView? { nil }
         override func viewDidMoveToWindow() {
@@ -57,15 +71,37 @@ struct SectionScrollAnchor: NSViewRepresentable {
             window.contentView?.layoutSubtreeIfNeeded()
             guard let scroll = enclosingScrollView, let document = scroll.documentView,
                   bounds.height > 0, scroll.contentView.bounds.height > 0 else { return }
+            observeDocument(document)
             let section = convert(bounds, to: document)
+            // SwiftUI can place the section before expanding the scroll document.
+            // Keep the request pending until that document frame change arrives;
+            // otherwise scrolling is clamped to the previous page's short height.
+            guard section.minY >= document.bounds.minY - 1,
+                  section.maxY <= document.bounds.maxY + 1 else { return }
             let clip = scroll.contentView
             let desiredY = document.isFlipped ? section.minY - 16 : section.maxY + 16 - clip.bounds.height
             let maximumY = max(document.bounds.minY, document.bounds.maxY - clip.bounds.height)
             let y = min(max(document.bounds.minY, desiredY), maximumY)
             clip.scroll(to: NSPoint(x: clip.bounds.minX, y: y))
             scroll.reflectScrolledClipView(clip)
-            self.request = nil
-            onScroll(request)
+            // Confirm after the next display pass: the scroll document and the
+            // section can finish changing in separate SwiftUI layout passes.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0 / 60.0) { [weak self] in
+                guard let self, self.request == request, self.window != nil else { return }
+                self.window?.contentView?.layoutSubtreeIfNeeded()
+                let currentSection = self.convert(self.bounds, to: document)
+                let visible = scroll.documentVisibleRect
+                let heading = NSRect(x: currentSection.minX, y: currentSection.minY,
+                                     width: min(currentSection.width, visible.width),
+                                     height: min(currentSection.height, 200))
+                guard currentSection == section, document.bounds.contains(currentSection),
+                      visible.insetBy(dx: -1, dy: -1).contains(heading) else {
+                    self.scheduleScroll()
+                    return
+                }
+                self.request = nil
+                self.onScroll(request)
+            }
         }
     }
 }

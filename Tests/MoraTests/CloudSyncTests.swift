@@ -74,6 +74,31 @@ final class CloudSyncTests: XCTestCase {
         XCTAssertGreaterThan(host.fittingSize.width, 0)
     }
 
+    func testReviewScrollWaitsForTheSettingsDocumentToGrow() async throws {
+        _ = NSApplication.shared
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
+        let document = FlippedReviewDocument(frame: NSRect(x: 0, y: 0, width: 800, height: 800))
+        let section = SectionScrollAnchor.AnchorView(frame: NSRect(x: 0, y: 1500, width: 800, height: 300))
+        document.addSubview(section)
+        scroll.documentView = document
+        let window = NSWindow(contentRect: scroll.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = scroll
+        defer { window.contentView = nil }
+        let request = UUID()
+        var completed: UUID?
+        section.onScroll = { completed = $0 }
+        section.request = request
+        section.scheduleScroll()
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertNil(completed, "Do not consume the request against the previous page's height")
+        XCTAssertEqual(scroll.documentVisibleRect.minY, 0, accuracy: 1)
+        document.setFrameSize(NSSize(width: 800, height: 2200))
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(completed, request)
+        XCTAssertLessThanOrEqual(scroll.documentVisibleRect.minY, section.frame.minY)
+        XCTAssertGreaterThanOrEqual(scroll.documentVisibleRect.maxY, section.frame.maxY)
+    }
+
     func testWalletReviewNotificationsScrollMainSettingsAndRepeatFromTransactions() async throws {
         defer { try? cleanup() }
         var ledger = Ledger.empty
@@ -758,4 +783,9 @@ private struct WalletSettingsNavigationHarness: View {
             .onChange(of: navigation.page) { _, value in page = value }
             .onChange(of: page) { _, value in navigation.page = value }
     }
+}
+
+@MainActor
+private final class FlippedReviewDocument: NSView {
+    override var isFlipped: Bool { true }
 }

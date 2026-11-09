@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.11 — 2026-11-09
+
+Mac 1.7.11 (build 90)
+
+- **First review navigation.** Keep the scroll request pending while Settings expands the scroll document, so the first click from a shorter page reaches Apple Pay too.
+
 ## 1.7.10 — 2026-11-09
 
 Mac 1.7.10 (build 89)
