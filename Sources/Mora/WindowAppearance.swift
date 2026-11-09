@@ -15,12 +15,16 @@ struct ConsistentScrollEdges: ViewModifier {
 /// target geometry from the page that occupied this scroll view previously.
 struct SectionScrollAnchor: NSViewRepresentable {
     @Binding var request: UUID?
+    var onArrival: (UUID) -> Void = { _ in }
 
     func makeNSView(context: Context) -> AnchorView { AnchorView() }
     func updateNSView(_ view: AnchorView, context: Context) {
         view.request = request
         view.onScroll = { id in
-            if request == id { request = nil }
+            if request == id {
+                request = nil
+                onArrival(id)
+            }
         }
         view.scheduleScroll()
     }

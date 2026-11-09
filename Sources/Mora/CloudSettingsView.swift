@@ -3,6 +3,7 @@ import FinanceCore
 import AppKit
 
 struct CloudSettingsCard: View {
+    var reviewHighlight: UUID? = nil
     @EnvironmentObject private var cloud: CloudSync
     @Environment(\.openWindow) private var openWindow
     var body: some View {
@@ -17,7 +18,7 @@ struct CloudSettingsCard: View {
                 if let error = cloud.error { Text(error).font(.caption).foregroundStyle(.orange) }
                 if !cloud.pending.isEmpty {
                     Divider()
-                    WalletInboxView()
+                    WalletInboxView(highlightTrigger: reviewHighlight)
                 }
             }
         }
@@ -296,6 +297,9 @@ struct CloudSettingsView: View {
 
 /// Shared review controls appear directly in Settings and in cloud configuration.
 private struct WalletInboxView: View {
+    var highlightTrigger: UUID? = nil
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var highlighted = false
     @EnvironmentObject private var cloud: CloudSync
     @EnvironmentObject private var store: FinanceStore
     @State private var selectedCapture: CloudCapture?
@@ -307,9 +311,11 @@ private struct WalletInboxView: View {
                 let currency = WalletReviewDraft(capture: capture, ledger: store.ledger).currency
                 let knownCurrency = currency != WalletReviewDraft.unknownCurrency
                 let waiting = knownCurrency && ["Не получена валюта покупки", "Валюта покупки отличается от валюты счета"].contains(capture.reason ?? "")
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(capture.merchant.isEmpty ? "Продавец не получен" : capture.merchant)
+                HStack(alignment: .center, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label(capture.merchant.isEmpty ? L("Продавец не получен") : capture.merchant,
+                              systemImage: "creditcard")
+                            .font(.callout.weight(.semibold))
                         FinancialText("\(capture.amount) \(knownCurrency ? currency : "")").font(.caption).foregroundStyle(.secondary)
                         if !knownCurrency {
                             Text("Валюта покупки не передана").font(.caption).foregroundStyle(.secondary)
@@ -322,25 +328,50 @@ private struct WalletInboxView: View {
                         Text(L(waiting ? "Ожидает автоматической записи" : capture.reason ?? "Проверьте покупку")).font(.caption).foregroundStyle(.orange)
                     }
                     Spacer()
-                    HStack(spacing: 8) {
-                        Button("Проверить…") { selectedCapture = capture }
-                        Button(role: .destructive) {
-                            Task {
-                                await cloud.resolve(capture, account: capture.account_id,
-                                                    amount: "", merchant: capture.merchant, dismiss: true)
-                            }
-                        } label: {
-                            Image(systemName: "trash")
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundStyle(Color.red.opacity(0.8))
-                                .frame(width: 28, height: 28)
-                                .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
-                        }.buttonStyle(.plain)
-                            .help(L("Удалить покупку без возможности восстановления"))
-                            .accessibilityLabel(L("Удалить покупку из Wallet"))
-                    }.disabled(cloud.busy)
+                    VStack(alignment: .trailing, spacing: 10) {
+                        if !waiting {
+                            Label(L("Уточните данные покупки"), systemImage: "pencil.line")
+                                .font(.caption).foregroundStyle(.orange)
+                        }
+                        HStack(spacing: 8) {
+                            Button("Проверить…") { selectedCapture = capture }
+                                .buttonStyle(.borderedProminent).tint(.orange).controlSize(.regular)
+                            Button(role: .destructive) {
+                                Task {
+                                    await cloud.resolve(capture, account: capture.account_id,
+                                                        amount: "", merchant: capture.merchant, dismiss: true)
+                                }
+                            } label: {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 12, weight: .medium))
+                                    .foregroundStyle(Color.red.opacity(0.8))
+                                    .frame(width: 28, height: 28)
+                                    .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 7))
+                            }.buttonStyle(.plain)
+                                .help(L("Удалить покупку без возможности восстановления"))
+                                .accessibilityLabel(L("Удалить покупку из Wallet"))
+                        }.disabled(cloud.busy)
+                    }
                 }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.orange.opacity(highlighted ? 0.14 : 0.035),
+                            in: RoundedRectangle(cornerRadius: 12))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(Color.orange.opacity(highlighted ? 0.85 : 0.24),
+                                      lineWidth: highlighted ? 2 : 1)
+                }
+                .shadow(color: .orange.opacity(highlighted ? 0.16 : 0), radius: 10)
+                .accessibilityElement(children: .contain)
             }
+        }
+        .task(id: highlightTrigger) {
+            guard highlightTrigger != nil else { highlighted = false; return }
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) { highlighted = true }
+            do { try await Task.sleep(for: .milliseconds(650)) }
+            catch { return }
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.9)) { highlighted = false }
         }
         .sheet(item: $selectedCapture) { capture in
             WalletReviewForm(capture: capture)

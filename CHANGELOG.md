@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.12 — 2026-11-09
+
+Mac 1.7.12 (build 91)
+
+- **Clearer purchase review.** Each pending purchase has its own outlined card and a prominent orange review action. After notification navigation finishes scrolling, the cards briefly glow orange to draw attention to the required input.
+
 ## 1.7.11 — 2026-11-09
 
 Mac 1.7.11 (build 90)
