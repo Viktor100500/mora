@@ -1,13 +1,14 @@
 // Yar the cat kisses Nastya after a purchase is recorded: in the widget and in
 // the Mini App form (cloud/telegram/miniapp keeps its own copy of the scene).
+// Drawn in Mora's palette: leaf ivory, the icon's greens and the launch mint.
 export const YAR_SCENE = `<svg viewBox="0 0 200 110" width="100%" height="120" aria-label="Котик Яр целует Настеньку">
-<g class="nas"><path d="M110 72a28 30 0 0 1 56 0v30h-56z" fill="#5b3a29"/><circle cx="138" cy="66" r="22" fill="#ffd9c2"/>
-<path d="M115 63c4-21 42-25 46 0c-11-9-32-11-46 0z" fill="#5b3a29"/><path d="M128 66q4 3 8 0M142 66q4 3 8 0M134 78q4 4 8 0" stroke="#5a2a2a" stroke-width="2" fill="none"/>
-<circle cx="126" cy="74" r="4" fill="#ff8fa3" opacity=".7"/><circle cx="151" cy="74" r="4" fill="#ff8fa3" opacity=".7"/></g>
-<g class="cat"><path d="M45 54l5-24 15 15zM95 54l-5-24-15 15z" fill="#f2a541"/><ellipse cx="70" cy="67" rx="27" ry="23" fill="#f2a541"/>
-<path d="M58 63q4-4 8 0M74 63q4-4 8 0M70 74q-4 5-8 2M70 74q4 5 8 2" stroke="#3b2a1a" stroke-width="2" fill="none"/><path d="M67 70h6l-3 4z" fill="#ff7b9c"/>
-<path d="M38 71h15M38 77h15M87 71h15M87 77h15" stroke="#7a4b14"/></g>
-<path class="ht" d="M108 34c-4-8-16-4-12 4l12 12 12-12c4-8-8-12-12-4z" fill="#ff5c8a"/></svg>`;
+<g class="nas"><path d="M110 72a28 30 0 0 1 56 0v30h-56z" fill="#1c4f3b"/><circle cx="138" cy="66" r="22" fill="#f2ead8" stroke="#336e57" stroke-width="1.5"/>
+<path d="M115 63c4-21 42-25 46 0c-11-9-32-11-46 0z" fill="#1c4f3b"/><path d="M128 66q4 3 8 0M142 66q4 3 8 0M134 78q4 4 8 0" stroke="#1c4f3b" stroke-width="2" fill="none"/>
+<circle cx="126" cy="74" r="4" fill="#70b88f" opacity=".55"/><circle cx="151" cy="74" r="4" fill="#70b88f" opacity=".55"/></g>
+<g class="cat"><path d="M45 54l5-24 15 15zM95 54l-5-24-15 15z" fill="#edf2de" stroke="#336e57" stroke-width="1.5" stroke-linejoin="round"/><ellipse cx="70" cy="67" rx="27" ry="23" fill="#edf2de" stroke="#336e57" stroke-width="1.5"/>
+<path d="M58 63q4-4 8 0M74 63q4-4 8 0M70 74q-4 5-8 2M70 74q4 5 8 2" stroke="#1c4f3b" stroke-width="2" fill="none"/><path d="M67 70h6l-3 4z" fill="#70b88f"/>
+<path d="M38 71h15M38 77h15M87 71h15M87 77h15" stroke="#40826a"/></g>
+<path class="ht" d="M108 34c-4-8-16-4-12 4l12 12 12-12c4-8-8-12-12-4z" fill="#70b88f"/></svg>`;
 export const YAR_STYLE = `.cat{transform-box:fill-box;transform-origin:center;animation:kiss 1.3s ease-in-out 2}
 @keyframes kiss{0%,100%{transform:none}50%{transform:translateX(30px) rotate(10deg)}}
 .ht{transform-box:fill-box;transform-origin:center;opacity:0;animation:up 1.3s ease-out .45s 2}
@@ -29,7 +30,7 @@ body{margin:0;font:14px/1.35 system-ui,sans-serif;color:var(--tg-theme-text-colo
 .t{font-size:19px;font-weight:600;margin:2px 0 10px}.a{font-size:28px;font-weight:600;margin:4px 0 6px}
 .c{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 button{font:inherit;border:0;border-radius:10px;padding:8px 11px;background:var(--tg-theme-secondary-bg-color,#eef1f5);color:inherit}
-button.p{background:var(--tg-theme-button-color,#2a8bf2);color:var(--tg-theme-button-text-color,#fff)}
+button.p{background:#336e57;color:#fff}@media(prefers-color-scheme:dark){button.p{background:#40826a}}
 .k{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px}.k button{padding:11px 0;font-size:18px}
 .h{display:none}#msg{margin-top:8px}#yay{text-align:center}
 ${YAR_STYLE}
