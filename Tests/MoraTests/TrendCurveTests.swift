@@ -69,9 +69,10 @@ final class TrendCurveTests: XCTestCase {
                 accountID: account.id, kind: amount > 0 ? .income : .expense))
         }
         var inset: CGFloat?
-        func chart(_ detail: TrendDetail) -> some View {
-            TrendChart(ledger: ledger, month: month, cachedTrend: ledger.trend(ending: month, detail: detail), detail: detail)
-                .frame(width: 700, height: 280).padding(20)
+        func chart(_ detail: TrendDetail, width: CGFloat = 700) -> some View {
+            TrendChart(ledger: ledger, month: month, cachedTrend: ledger.trend(ending: month, detail: detail), detail: detail,
+                timeline: CashFlowTimeline(ledger: ledger, month: month, detail: detail))
+                .frame(width: width, height: 280).padding(20)
                 .onPreferenceChange(ChartPlotInsetKey.self) { inset = $0 }
                 .background(Color(nsColor: .windowBackgroundColor)).preferredColorScheme(.light)
                 .transaction { $0.disablesAnimations = true; $0.animation = nil }
@@ -82,7 +83,17 @@ final class TrendCurveTests: XCTestCase {
         defer { window.contentView = nil }
         for _ in 0..<40 where inset == nil { try await Task.sleep(for: .milliseconds(5)) }
         host.layoutSubtreeIfNeeded()
+        func inputViews(in view: NSView) -> [CashFlowInteractionLayer.InputView] {
+            (view as? CashFlowInteractionLayer.InputView).map { [$0] } ?? view.subviews.flatMap { inputViews(in: $0) }
+        }
+        let input = try XCTUnwrap(inputViews(in: host).first)
+        XCTAssertGreaterThan(input.bounds.width, 500)
+        XCTAssertGreaterThan(input.bounds.height, 200)
+        XCTAssertFalse(input.trackingAreas.isEmpty)
+        let hitPoint = input.convert(NSPoint(x: input.bounds.midX, y: input.bounds.midY), to: host)
+        XCTAssertTrue(host.hitTest(hitPoint) === input, "The chart must deliver hover and wheel events to the plot input surface")
         let dailyInset = try XCTUnwrap(inset), dailySize = host.fittingSize
+        XCTAssertGreaterThan(dailyInset, 30)
         if let prefix = ProcessInfo.processInfo.environment["MORA_CURVE_SNAPSHOT"] {
             try snapshot(host, path: prefix + "-days.png")
         }
@@ -92,6 +103,16 @@ final class TrendCurveTests: XCTestCase {
         XCTAssertEqual(host.fittingSize, dailySize)
         if let prefix = ProcessInfo.processInfo.environment["MORA_CURVE_SNAPSHOT"] {
             try snapshot(host, path: prefix + "-weeks.png")
+        }
+        for detail: TrendDetail in [.months, .days, .weeks] {
+            host.rootView = chart(detail, width: 360)
+            window.setContentSize(NSSize(width: 400, height: 320))
+            try await Task.sleep(for: .milliseconds(100)); host.layoutSubtreeIfNeeded()
+            XCTAssertEqual(host.fittingSize.width, 400, accuracy: 0.5)
+            XCTAssertEqual(try XCTUnwrap(inset), dailyInset, accuracy: 0.5)
+            if let prefix = ProcessInfo.processInfo.environment["MORA_CURVE_SNAPSHOT"] {
+                try snapshot(host, path: prefix + "-narrow-" + detail.rawValue + ".png")
+            }
         }
     }
 

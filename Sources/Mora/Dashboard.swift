@@ -81,9 +81,9 @@ struct DashboardView: View {
         BalancedColumns {
             Card(fillsHeight: true) {
                 VStack(alignment: .leading, spacing: 20) {
-                    HStack { SectionHeading(title: L("Денежный поток"), subtitle: trendDetail == .months ? L("Доходы и расходы за 6 месяцев") : L("Доходы и расходы за выбранный месяц")); Spacer(); IconTile(icon: "chart.xyaxis.line", color: "green", size: 29) }
+                    HStack { SectionHeading(title: L("Денежный поток"), subtitle: L("Доходы и расходы")); Spacer(); IconTile(icon: "chart.xyaxis.line", color: "green", size: 29) }
                     TrendDetailPicker(selection: trendSelection)
-                    TrendChart(ledger: ledger, month: month, cachedTrend: store.reportTrend(ending: month, detail: trendDetail), detail: trendDetail).frame(minHeight: 250, maxHeight: .infinity)
+                    TrendChart(ledger: ledger, month: month, cachedTrend: store.reportTrend(ending: month, detail: trendDetail), detail: trendDetail, timeline: store.reportCashFlow(in: month, detail: trendDetail)).frame(minHeight: 250, maxHeight: .infinity)
                         .onPreferenceChange(ChartPlotInsetKey.self) { if abs(trendPlotInset - $0) > 0.5 { trendPlotInset = $0 } }
                     HStack(spacing: 18) { ChartLegend(color: .moraGreen, title: L("Доходы")); ChartLegend(color: .token("orange"), title: L("Расходы")); Spacer(); Text(currency).font(.caption).foregroundStyle(.secondary) }.padding(.leading, trendPlotInset)
                 }
@@ -150,68 +150,6 @@ struct ChartLegend: View {
     var body: some View { HStack(spacing: 6) { Circle().fill(color).frame(width: 7, height: 7); Text(title).font(.caption).foregroundStyle(.secondary) } }
 }
 
-struct TrendChart: View {
-    var ledger: Ledger; var month: Date
-    var cachedTrend: [MonthTotal]
-    var detail: TrendDetail = .months
-    var body: some View {
-        let trend = cachedTrend
-        let curve = TrendCurveGeometry(trend)
-        let axisDates = detail.axisDates(trend)
-        Chart {
-            // Invisible data marks retain the actual bucket values for VoiceOver;
-            // the persistent, animatable paths below own all visible line geometry.
-            ForEach(trend) { item in
-                PointMark(x: .value(L("Период"), curve.position(item.date)), y: .value(L("Доход"), item.income.double))
-                    .foregroundStyle(Color.clear).symbolSize(0)
-                    .accessibilityLabel(detail.axisLabel(item.date) + " · " + L("Доход"))
-                    .accessibilityValue(DisplayMoney.string(item.income, currency: ledger.preferences.baseCurrency))
-                PointMark(x: .value(L("Период"), curve.position(item.date)), y: .value(L("Расход"), item.expense.double))
-                    .foregroundStyle(Color.clear).symbolSize(0)
-                    .accessibilityLabel(detail.axisLabel(item.date) + " · " + L("Расход"))
-                    .accessibilityValue(DisplayMoney.string(item.expense, currency: ledger.preferences.baseCurrency))
-            }
-        }
-        .chartXScale(domain: 0.0...1.0)
-        .chartYScale(domain: curve.domain)
-        .chartLegend(.hidden)
-        .chartXAxis {
-            AxisMarks(values: axisDates.map(curve.position)) { value in
-                AxisValueLabel {
-                    if let position = value.as(Double.self),
-                       let date = axisDates.min(by: { abs(curve.position($0) - position) < abs(curve.position($1) - position) }) {
-                        Text(detail.axisLabel(date)).font(.system(size: 10)).contentTransition(.opacity)
-                    }
-                }
-            }
-        }
-        .chartYAxis {
-            AxisMarks(position: .leading) { value in
-                AxisGridLine(stroke: StrokeStyle(lineWidth: 0.5, dash: [4, 4])).foregroundStyle(Color.secondary.opacity(0.16))
-                AxisValueLabel {
-                    if let amount = value.as(Double.self) {
-                        FinancialText(amount.formatted(.number.notation(.compactName))).font(.system(size: 9))
-                            .frame(width: 38, alignment: .trailing)
-                    }
-                }
-            }
-        }
-        .chartOverlay { proxy in
-            GeometryReader { geometry in
-                if let anchor = proxy.plotFrame,
-                   let left = proxy.position(forX: 0.0), let right = proxy.position(forX: 1.0),
-                   let bottom = proxy.position(forY: curve.lower), let top = proxy.position(forY: curve.upper) {
-                    let frame = geometry[anchor]
-                    TrendLinePlot(geometry: curve).frame(width: max(0, right - left), height: max(0, bottom - top))
-                        .clipped().position(x: frame.minX + (left + right) / 2, y: frame.minY + (top + bottom) / 2)
-                    Color.clear.preference(key: ChartPlotInsetKey.self, value: frame.minX).allowsHitTesting(false)
-                }
-            }
-        }
-
-        .accessibilityLabel(detail == .months ? L("Доходы и расходы за последние шесть месяцев") : L("Доходы и расходы за выбранный месяц") + " · " + detail.title).financialChart()
-    }
-}
 
 struct CategoryChart: View {
     var ledger: Ledger; var month: Date

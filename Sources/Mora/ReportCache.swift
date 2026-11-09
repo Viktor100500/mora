@@ -7,6 +7,7 @@ import FinanceCore
     var summaries: [Date: Summary] = [:]
     var categories: [Date: [CategoryTotal]] = [:]
     var trends: [String: [MonthTotal]] = [:]
+    var cashFlows: [String: CashFlowTimeline] = [:]
     var analytics: [String: AnalyticsReport] = [:]
     var insights: [Date: [String]] = [:]
     var transactions: [Date: [Transaction]] = [:]
@@ -23,6 +24,7 @@ import FinanceCore
         guard let previous else { return }
         summaries = previous.summaries; categories = previous.categories; trends = previous.trends
         analytics = previous.analytics; insights = previous.insights; transactions = previous.transactions
+        cashFlows = previous.cashFlows
         balances = previous.balances; spending = previous.spending; recent = previous.recent
         netWorth = previous.netWorth; monthlyRecurring = previous.monthlyRecurring
     }
@@ -70,6 +72,7 @@ extension FinanceStore {
         while !Task.isCancelled {
             let cache = reports
             _ = reportTrend(ending: month, detail: detail)
+            _ = reportCashFlow(in: month, detail: detail)
             for task in Array(cache.tasks.values) { await task.value }
             if reports === cache { return }
         }
@@ -118,6 +121,23 @@ extension FinanceStore {
     func reportRecentTransactions(in month: Date) -> [Transaction] {
         prepareReports(in: month); return reports.recent[Dates.month(month)] ?? []
     }
+    func reportCashFlow(in month: Date, detail: TrendDetail) -> CashFlowTimeline? {
+        let cache = reports, month = Dates.month(month)
+        let key = "cash-flow-\(month.timeIntervalSince1970)-\(detail.rawValue)"
+        if cache.completed.contains(key) { return cache.cashFlows[key] }
+        if cache.pending.insert(key).inserted {
+            let snapshot = ledger.withoutChangeHistory()
+            cache.tasks[key] = Task { @MainActor [weak self] in
+                let timeline = await BackgroundWork.shared.perform { CashFlowTimeline(ledger: snapshot, month: month, detail: detail) }
+                guard let self, self.reports === cache, !Task.isCancelled else { return }
+                self.objectWillChange.send()
+                cache.cashFlows[key] = timeline
+                cache.completed.insert(key); cache.pending.remove(key); cache.tasks[key] = nil
+            }
+        }
+        return cache.cashFlows[key]
+    }
+
     func reportTrend(ending month: Date, count: Int = 6, detail: TrendDetail = .months, selectedDays: Set<Int> = []) -> [MonthTotal] {
         if detail == .months {
             prepareReports(in: month, count: count)
