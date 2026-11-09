@@ -12,23 +12,56 @@ struct TrendChart: View {
     var month: Date
     var cachedTrend: [MonthTotal]
     var detail: TrendDetail = .months
+    var timeline: CashFlowTimeline? = nil
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private struct Scope: Hashable {
+        var month: Date
+        var detail: String
+    }
+    private var scope: Scope { Scope(month: Dates.month(month), detail: detail.rawValue) }
+
+    var body: some View {
+        ZStack {
+            TrendChartContent(ledger: ledger, month: month, cachedTrend: cachedTrend, detail: detail, timeline: timeline)
+                .id(scope)
+                .transition(.opacity)
+        }
+        .animation(reduceMotion ? nil : AppMotion.content, value: scope)
+    }
+}
+
+/// Each scope starts with its own viewport and exact bucket scale. Only scrolling
+/// that scope enables the boundary-curve approximation and animated Y adjustment.
+private struct TrendChartContent: View {
+    var ledger: Ledger
+    var month: Date
+    var cachedTrend: [MonthTotal]
+    var detail: TrendDetail = .months
     var timeline: CashFlowTimeline?
     @State private var selectedDate: Date?
     @State private var scrollStart: Date
     @State private var plotWidth: CGFloat = 600
+    @State private var displayedScale: CashFlowScale
+    @State private var hasScrolled = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(ledger: Ledger, month: Date, cachedTrend: [MonthTotal], detail: TrendDetail = .months, timeline: CashFlowTimeline? = nil) {
         self.ledger = ledger; self.month = month; self.cachedTrend = cachedTrend
         self.detail = detail; self.timeline = timeline
         _scrollStart = State(initialValue: CashFlowTimeline(month: month, detail: detail).initialStart)
+        let data = timeline ?? CashFlowTimeline(month: month, detail: detail, buckets: cachedTrend)
+        _displayedScale = State(initialValue: CashFlowScale(buckets: data.visibleBuckets(from: data.initialStart)))
     }
 
     private var data: CashFlowTimeline { timeline ?? CashFlowTimeline(month: month, detail: detail, buckets: cachedTrend) }
     private var selection: MonthTotal? { selectedDate.flatMap { data.nearest(to: $0, from: scrollStart) } }
     private var currency: String { ledger.preferences.baseCurrency }
-    private var yDomain: ClosedRange<Double> {
-        let values = data.visibleBuckets(from: scrollStart).flatMap { [$0.income.double, $0.expense.double] }
-        return min(0, values.min() ?? 0)...max(1, (values.max() ?? 0) * 1.1)
+    private var targetScale: CashFlowScale {
+        if hasScrolled {
+            return CashFlowScale(buckets: data.plotBuckets(from: scrollStart), start: scrollStart, duration: data.visibleDuration)
+        }
+        return CashFlowScale(buckets: data.visibleBuckets(from: scrollStart))
     }
 
     var body: some View {
@@ -57,7 +90,7 @@ struct TrendChart: View {
             }
         }
         .chartXScale(domain: data.domain, range: .plotDimension(startPadding: 24, endPadding: 24))
-        .chartYScale(domain: yDomain)
+        .modifier(CashFlowScaleModifier(scale: displayedScale))
         .chartLegend(.hidden)
         .chartScrollableAxes(.horizontal)
         .chartXVisibleDomain(length: data.visibleDuration)
@@ -91,6 +124,7 @@ struct TrendChart: View {
                         selectedDate = date.flatMap { data.nearest(to: $0, from: scrollStart)?.date }
                     }, onScroll: { delta in
                         selectedDate = nil
+                        hasScrolled = true
                         scrollStart = data.scrolledStart(from: scrollStart, horizontalDelta: Double(delta), width: Double(frame.width))
                     })
                     .frame(width: frame.width, height: frame.height)
@@ -123,16 +157,12 @@ struct TrendChart: View {
                 .padding(8).allowsHitTesting(false).accessibilityHidden(true)
             }
         }
-        .onChange(of: month) { _, _ in resetPosition() }
-        .onChange(of: detail) { _, _ in resetPosition() }
         .onChange(of: scrollStart) { _, _ in selectedDate = nil }
+        .onChange(of: targetScale) { _, target in
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.45)) { displayedScale = target }
+        }
         .accessibilityLabel(L("Денежный поток") + " · " + detail.title)
         .financialChart()
-    }
-
-    private func resetPosition() {
-        selectedDate = nil
-        scrollStart = CashFlowTimeline(month: month, detail: detail).initialStart
     }
 
     /// Keep entire labels inside the visible window. Offscreen axis marks would

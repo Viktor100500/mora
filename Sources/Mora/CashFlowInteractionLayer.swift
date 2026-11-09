@@ -37,14 +37,13 @@ struct CashFlowInteractionLayer: NSViewRepresentable {
 
         override func scrollWheel(with event: NSEvent) {
             let horizontal = event.scrollingDeltaX
-            if abs(horizontal) > abs(event.scrollingDeltaY) {
+            if horizontal != 0 {
                 onScroll(horizontal * (event.hasPreciseScrollingDeltas ? 1 : 10))
             } else if event.modifierFlags.contains(.shift), event.scrollingDeltaY != 0 {
                 onScroll(event.scrollingDeltaY * (event.hasPreciseScrollingDeltas ? 1 : 10))
-            } else {
-                // Vertical gestures continue scrolling the Overview page.
-                nextResponder?.scrollWheel(with: event)
             }
+            // Consume all wheel events over the plot, including vertical jitter
+            // and momentum. Outside this view, Overview scrolls normally.
         }
     }
 }
