@@ -34,6 +34,9 @@ public struct MonthTotal: Identifiable, Sendable {
     public var date: Date
     public var income: Decimal
     public var expense: Decimal
+    public init(date: Date, income: Decimal, expense: Decimal) {
+        self.date = date; self.income = income; self.expense = expense
+    }
 }
 
 public struct Summary: Sendable {
