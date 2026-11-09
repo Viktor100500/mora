@@ -3,39 +3,54 @@
 <head>
 <meta charset="utf-8">
 <title>Mora · обложка Mini App</title>
-<!-- Cover for the Mini App direct link in @BotFather (640x360). Render with:
+<!-- Cover for the Mini App direct link in @BotFather (640x360), in Mora's colours
+     (scripts/GenerateIcon.swift, Sources/Mora/LaunchScreen.swift). Render with:
      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless --hide-scrollbars \
-       --window-size=640,360 --screenshot=cover.png cover.html -->
+       --force-device-scale-factor=1 --window-size=640,360 --screenshot=cover.png cover.html -->
 <style>
+:root{--green:#336e57;--deep:#060e0b;--ivory:#e6f2e0;--leaf:#edf2de;--mint:#70b88f}
 html,body{margin:0;width:640px;height:360px;overflow:hidden}
-body{display:flex;align-items:center;gap:26px;padding:0 36px;box-sizing:border-box;
-  font-family:-apple-system,"SF Pro Display",system-ui,sans-serif;color:#fff;
-  background:radial-gradient(120% 140% at 85% 20%,#ff8fb1 0%,#f06b9a 28%,#7b5cff 70%,#4a3fd1 100%)}
+body{display:flex;align-items:center;gap:30px;padding:0 40px;box-sizing:border-box;color:var(--ivory);
+  font-family:-apple-system,"SF Pro Display",system-ui,sans-serif;
+  background:radial-gradient(90% 120% at 78% 30%,#12301f 0%,#0b1d15 45%,var(--deep) 100%)}
 .text{flex:1}
-.brand{font-size:20px;font-weight:600;letter-spacing:.5px;opacity:.9}
-h1{margin:6px 0 12px;font-size:38px;line-height:1.02;font-weight:800;letter-spacing:-.5px}
-p{margin:0;font-size:19px;line-height:1.3;opacity:.95}
-.pill{display:inline-block;margin-top:18px;padding:8px 14px;border-radius:999px;background:rgba(255,255,255,.22);font-size:17px;font-weight:600}
-.art{width:230px;height:230px;flex:none;border-radius:32px;background:rgba(255,255,255,.92);display:flex;align-items:center;justify-content:center;box-shadow:0 18px 50px rgba(40,20,90,.35)}
+.brand{display:flex;align-items:center;gap:12px;font-size:24px;font-weight:700;letter-spacing:.2px}
+h1{margin:22px 0 10px;font-size:36px;line-height:1.08;font-weight:700;letter-spacing:-.4px}
+p{margin:0;font-size:17px;line-height:1.4;color:rgba(230,242,224,.72)}
+.card{width:218px;flex:none;padding:18px 16px 16px;border-radius:20px;box-sizing:border-box;
+  background:linear-gradient(160deg,rgba(237,242,222,.10),rgba(237,242,222,.04));
+  border:1px solid rgba(112,184,143,.28);box-shadow:0 24px 60px rgba(0,0,0,.45)}
+.label{font-size:11px;letter-spacing:.6px;text-transform:uppercase;color:rgba(230,242,224,.55)}
+.amount{margin:4px 0 14px;font-size:30px;font-weight:700;font-variant-numeric:tabular-nums}
+.amount span{font-size:17px;font-weight:600;color:var(--mint);margin-left:4px}
+.row{display:flex;justify-content:space-between;padding:9px 0;border-top:1px solid rgba(230,242,224,.10);font-size:14px}
+.row b{font-weight:600}
+.row i{font-style:normal;color:rgba(230,242,224,.6)}
+.button{margin-top:12px;padding:10px 0;border-radius:12px;text-align:center;font-size:15px;font-weight:600;
+  background:linear-gradient(135deg,#40826a,#2a5f4a);color:#fff}
 </style>
 </head>
 <body>
 <div class="text">
-  <div class="brand">Mora</div>
+  <div class="brand">
+    <svg viewBox="0 0 100 100" width="44" height="44" aria-hidden="true">
+      <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#40826a"/><stop offset="1" stop-color="#1c4f3b"/></linearGradient></defs>
+      <rect x="6" y="6" width="88" height="88" rx="20" fill="url(#g)"/>
+      <path d="M30 69C18 32 54 22 74 27C80 58 61 79 30 69Z" fill="#edf2de"/>
+      <path d="M28 73C43 57 53 50 63 38" stroke="#336e57" stroke-width="2.7" stroke-linecap="round" fill="none"/>
+    </svg>
+    Mora
+  </div>
   <h1>Новая трата<br>за пару касаний</h1>
-  <p>Сумма, продавец, категория — и котик Яр целует Настеньку.</p>
-  <div class="pill">💋 чмок за каждую трату</div>
+  <p>Сумма, продавец и категория сразу попадают в общую базу Mora.</p>
 </div>
-<div class="art">
-<svg viewBox="0 0 200 110" width="216" height="120" aria-label="Котик Яр целует Настеньку">
-<g><path d="M110 72a28 30 0 0 1 56 0v30h-56z" fill="#5b3a29"/><circle cx="138" cy="66" r="22" fill="#ffd9c2"/>
-<path d="M115 63c4-21 42-25 46 0c-11-9-32-11-46 0z" fill="#5b3a29"/><path d="M128 66q4 3 8 0M142 66q4 3 8 0M134 78q4 4 8 0" stroke="#5a2a2a" stroke-width="2" fill="none"/>
-<circle cx="126" cy="74" r="4" fill="#ff8fa3" opacity=".7"/><circle cx="151" cy="74" r="4" fill="#ff8fa3" opacity=".7"/></g>
-<g transform="translate(22 0) rotate(8 70 67)"><path d="M45 54l5-24 15 15zM95 54l-5-24-15 15z" fill="#f2a541"/><ellipse cx="70" cy="67" rx="27" ry="23" fill="#f2a541"/>
-<path d="M58 63q4-4 8 0M74 63q4-4 8 0M70 74q-4 5-8 2M70 74q4 5 8 2" stroke="#3b2a1a" stroke-width="2" fill="none"/><path d="M67 70h6l-3 4z" fill="#ff7b9c"/>
-<path d="M38 71h15M38 77h15M87 71h15M87 77h15" stroke="#7a4b14"/></g>
-<path d="M118 26c-4-8-16-4-12 4l12 12 12-12c4-8-8-12-12-4z" fill="#ff5c8a"/>
-<path d="M150 18c-2-4-8-2-6 2l6 6 6-6c2-4-4-6-6-2z" fill="#ff8fb1"/></svg>
+<div class="card" aria-hidden="true">
+  <div class="label">Сумма</div>
+  <div class="amount">12,50<span>EUR</span></div>
+  <div class="row"><i>Продавец</i><b>Lidl</b></div>
+  <div class="row"><i>Категория</i><b>Продукты</b></div>
+  <div class="row"><i>Счёт</i><b>Карта</b></div>
+  <div class="button">Записать</div>
 </div>
 </body>
 </html>
