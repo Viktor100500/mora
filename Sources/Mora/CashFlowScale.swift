@@ -13,6 +13,11 @@ struct CashFlowScale: Equatable {
         self.lower = lower; self.upper = upper
     }
 
+    init(buckets: [MonthTotal]) {
+        let values = buckets.flatMap { [$0.income.double, $0.expense.double] }
+        self.init(lower: min(0, values.min() ?? 0), upper: max(1, (values.max() ?? 0) * 1.1))
+    }
+
     init(buckets: [MonthTotal], start: Date, duration: TimeInterval) {
         guard let first = buckets.first, let last = buckets.last else {
             self.init(); return
