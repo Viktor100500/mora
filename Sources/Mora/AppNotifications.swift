@@ -52,7 +52,23 @@ struct AppNotification: Codable, Equatable, Identifiable, Sendable {
 }
 
 struct NotificationNavigation: Identifiable {
-    enum Destination { case page(Page), inbox, capture(UUID) }
+    enum Destination {
+        case page(Page), inbox, capture(UUID)
+
+        var page: Page {
+            switch self {
+            case .page(let page): return page
+            case .inbox, .capture: return .settings
+            }
+        }
+
+        var showsWalletInbox: Bool {
+            switch self {
+            case .page: return false
+            case .inbox, .capture: return true
+            }
+        }
+    }
     let id = UUID()
     let destination: Destination
 }

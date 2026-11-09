@@ -118,6 +118,7 @@ struct ContentView: View {
     @State private var confirmStart = false
     @State private var rollbackRequest: UUID?
     @State private var reloadingCloud = false
+    @State private var walletSettingsRequestID: UUID?
     @State private var showingLaunchScreen = true
     @AppStorage("mora.hideAmounts") private var hideAmounts = false
     @State private var sidebarWidth = SidebarLayout.idealWidth
@@ -169,7 +170,8 @@ struct ContentView: View {
                                 case .analytics: AnalyticsView(month: month)
                                 case .categories: CategoriesView(sheet: $sheet)
                                 case .imports: ImportHistoryView(onRollback: requestRollback)
-                                case .settings: SettingsView()
+                                case .settings:
+                                    SettingsView(walletReviewScrollRequest: $walletSettingsRequestID)
                                 }
                                 HStack(spacing: 5) {
                                     Image(systemName: "lock.shield")
@@ -214,7 +216,15 @@ struct ContentView: View {
         }
         .onReceive(dataRefresh) { _ in Task { @MainActor in  await store.reloadFromDisk()  } }
         .onReceive(store.notifications.$navigation) { request in
-            if case .page(let destination) = request?.destination { page = destination }
+            if let request {
+                // Resolve the destination layout before scrolling to a section on that page.
+                var transaction = SwiftUI.Transaction(animation: nil)
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    walletSettingsRequestID = request.destination.showsWalletInbox ? request.id : nil
+                    page = request.destination.page
+                }
+            }
         }
         .task(id: "\(store.ledger.preferences.automaticRates)-\(store.isDemo)") {
             guard store.ledger.preferences.automaticRates else { return }

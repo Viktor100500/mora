@@ -74,6 +74,108 @@ final class CloudSyncTests: XCTestCase {
         XCTAssertGreaterThan(host.fittingSize.width, 0)
     }
 
+    func testReviewScrollWaitsForTheSettingsDocumentToGrow() async throws {
+        _ = NSApplication.shared
+        let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
+        let document = FlippedReviewDocument(frame: NSRect(x: 0, y: 0, width: 800, height: 800))
+        let section = SectionScrollAnchor.AnchorView(frame: NSRect(x: 0, y: 1500, width: 800, height: 300))
+        document.addSubview(section)
+        scroll.documentView = document
+        let window = NSWindow(contentRect: scroll.frame, styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = scroll
+        defer { window.contentView = nil }
+        let request = UUID()
+        var completed: UUID?
+        section.onScroll = { completed = $0 }
+        section.request = request
+        section.scheduleScroll()
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertNil(completed, "Do not consume the request against the previous page's height")
+        XCTAssertEqual(scroll.documentVisibleRect.minY, 0, accuracy: 1)
+        document.setFrameSize(NSSize(width: 800, height: 2200))
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(completed, request)
+        XCTAssertLessThanOrEqual(scroll.documentVisibleRect.minY, section.frame.minY)
+        XCTAssertGreaterThanOrEqual(scroll.documentVisibleRect.maxY, section.frame.maxY)
+    }
+
+    func testWalletReviewNotificationsScrollMainSettingsAndRepeatFromTransactions() async throws {
+        defer { try? cleanup() }
+        var ledger = Ledger.empty
+        ledger.preferences.automaticRates = false
+        ledger.preferences.baseCurrency = "USD"
+        ledger.accounts = ["USD", "EUR", "RUB", "RSD"].map { Account(name: "Review \($0)", currency: $0) }
+        ledger.preferences.rates = ["USD": 1, "EUR": Decimal(string: "1.1")!, "RUB": Decimal(string: "0.012")!, "RSD": Decimal(string: "0.0095")!]
+        try await prepare(ledger: ledger)
+        let purchaseID = UUID()
+        let captures = """
+        [{"id":"\(purchaseID)","merchant":"Review cafe","amount":"","currency":"USD",
+          "account_id":"\(ledger.accounts[0].id)","date":"2026-11-09T12:00:00Z",
+          "reason":"Не получена положительная сумма","label":"Test iPhone"}]
+        """
+        SyncStubProtocol.handler = { request in
+            (200, Data((request.url!.lastPathComponent == "mora_list_pending" ? captures : "[]").utf8))
+        }
+        await cloud.refreshLists()
+        XCTAssertEqual(cloud.pending.count, 1)
+        _ = NSApplication.shared
+        let navigation = WalletSettingsNavigationState()
+        let host = NSHostingView(rootView: WalletSettingsNavigationHarness(navigation: navigation,
+            store: store, cloud: cloud))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 900),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = host
+        defer { window.contentView = nil }
+        try await Task.sleep(for: .seconds(1))
+        host.layoutSubtreeIfNeeded()
+
+        func sectionAnchor(_ view: NSView) -> SectionScrollAnchor.AnchorView? {
+            if let anchor = view as? SectionScrollAnchor.AnchorView { return anchor }
+            return view.subviews.lazy.compactMap(sectionAnchor).first
+        }
+        for size in [NSSize(width: 1180, height: 900), NSSize(width: 1728, height: 1008), NSSize(width: 1040, height: 700)] {
+            window.setContentSize(size)
+            for destination in [NotificationNavigation.Destination.inbox, .inbox, .capture(purchaseID)] {
+                if case .capture = destination { navigation.page = .transactions }
+                else { navigation.page = .overview }
+                try await Task.sleep(for: .milliseconds(300))
+                host.layoutSubtreeIfNeeded()
+                store.notifications.request(destination)
+                try await Task.sleep(for: .milliseconds(300))
+                host.layoutSubtreeIfNeeded()
+                XCTAssertEqual(navigation.page, .settings)
+                let anchor = try XCTUnwrap(sectionAnchor(host))
+                let scroll = try XCTUnwrap(anchor.enclosingScrollView)
+                let document = try XCTUnwrap(scroll.documentView)
+                let section = anchor.convert(anchor.bounds, to: document)
+                let visible = scroll.documentVisibleRect
+                // An arbitrary offset > 500 can still leave Apple Pay off-screen.
+                // Its heading and the first purchase must actually be in view.
+                XCTAssertGreaterThan(visible.minY, 500)
+                XCTAssertGreaterThanOrEqual(section.minY, visible.minY - 1)
+                XCTAssertLessThanOrEqual(section.minY + min(section.height, 200), visible.maxY + 1,
+                                         "Apple Pay must be visible at \(size), from \(destination)")
+                XCTAssertTrue(window.sheets.isEmpty)
+
+                // Repeating the action while Settings is already open must scroll again.
+                scroll.contentView.scroll(to: .zero)
+                scroll.reflectScrolledClipView(scroll.contentView)
+                store.notifications.request(destination)
+                try await Task.sleep(for: .milliseconds(100))
+                host.layoutSubtreeIfNeeded()
+                XCTAssertGreaterThan(scroll.documentVisibleRect.minY, 500)
+                XCTAssertLessThanOrEqual(anchor.convert(anchor.bounds, to: document).minY + 100,
+                                         scroll.documentVisibleRect.maxY + 1)
+            }
+        }
+        if let path = ProcessInfo.processInfo.environment["MORA_WALLET_SETTINGS_SNAPSHOT"],
+           let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            try bitmap.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+        }
+        await store.notifications.flush()
+    }
+
     func testConnectionOutageIsReportedOnceAndRecoveryOnce() async throws {
         defer { try? cleanup() }
         try await prepare()
@@ -661,4 +763,29 @@ final class CloudSyncTests: XCTestCase {
         XCTAssertFalse(result); XCTAssertEqual(store.ledger,before); XCTAssertEqual(cloud.pending,[capture])
         XCTAssertNotNil(store.error)
     }
+}
+
+@MainActor
+private final class WalletSettingsNavigationState: ObservableObject {
+    @Published var page: Page = .overview
+}
+
+@MainActor
+private struct WalletSettingsNavigationHarness: View {
+    @ObservedObject var navigation: WalletSettingsNavigationState
+    let store: FinanceStore
+    let cloud: CloudSync
+    @State private var page: Page = .overview
+    var body: some View {
+        ContentView(page: $page, sheet: .constant(nil))
+            .environmentObject(store).environmentObject(cloud).environmentObject(MerchantCategorizer())
+            .preferredColorScheme(.dark).tint(.moraGreen)
+            .onChange(of: navigation.page) { _, value in page = value }
+            .onChange(of: page) { _, value in navigation.page = value }
+    }
+}
+
+@MainActor
+private final class FlippedReviewDocument: NSView {
+    override var isFlipped: Bool { true }
 }

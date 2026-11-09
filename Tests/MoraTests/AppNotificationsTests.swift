@@ -27,6 +27,24 @@ final class AppNotificationsTests: XCTestCase {
         return try decoder.decode(CloudCapture.self, from: JSONSerialization.data(withJSONObject: object))
     }
 
+    func testWalletNotificationsNavigateToSettingsForEveryRequest() throws {
+        let history = AppNotifications()
+        for destination in [NotificationNavigation.Destination.inbox, .capture(UUID())] {
+            history.request(destination)
+            let first = try XCTUnwrap(history.navigation)
+            XCTAssertEqual(first.destination.page, .settings)
+            XCTAssertTrue(first.destination.showsWalletInbox)
+            history.request(destination)
+            XCTAssertNotEqual(history.navigation?.id, first.id, "Repeated clicks must scroll again")
+        }
+        history.request(.page(.imports))
+        XCTAssertEqual(history.navigation?.destination.page, .imports)
+        XCTAssertFalse(try XCTUnwrap(history.navigation).destination.showsWalletInbox)
+        history.request(.page(.settings))
+        XCTAssertFalse(try XCTUnwrap(history.navigation).destination.showsWalletInbox,
+                       "Ordinary settings navigation must not scroll to Apple Pay")
+    }
+
     func testNewWalletCardAsksForAnAccountAndShowsTheCard() throws {
         let history = AppNotifications(), household = UUID(), id = UUID(), card = UUID()
         func purchase(linked: Bool) throws -> CloudCapture {

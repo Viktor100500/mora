@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.7.13 — 2026-11-09
+
+Mac 1.7.13 (build 92)
+
+- **Apple Pay review in Settings.** Purchases awaiting review appear directly in the Shared Database and Apple Pay block, without opening cloud configuration.
+- Review notifications open the main window's Settings and scroll reliably to the review block, including first-time and repeated navigation.
+- Each pending purchase has its own outlined card, a clear prompt and a prominent review action. After scrolling finishes, the cards briefly glow orange to draw attention to the required input.
+
 ## 1.7.9 — 2026-11-09
 
 Mac 1.7.9 (build 88) · iPhone 1.0.38 (build 39)
