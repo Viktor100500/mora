@@ -118,6 +118,8 @@ struct ContentView: View {
     @State private var confirmStart = false
     @State private var rollbackRequest: UUID?
     @State private var reloadingCloud = false
+    @State private var handledSettingsNavigation: UUID?
+    @State private var walletSettingsRequestID: UUID?
     @State private var showingLaunchScreen = true
     @AppStorage("mora.hideAmounts") private var hideAmounts = false
     @State private var sidebarWidth = SidebarLayout.idealWidth
@@ -156,31 +158,42 @@ struct ContentView: View {
                             TransactionsView(sheet: $sheet, filters: $transactionFilters)
                         }.padding(24).frame(maxWidth: 1320).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                     } else {
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 20) {
-                                header
-                                switch page {
-                                case .overview: DashboardView(month: month, page: $page, sheet: $sheet)
-                                case .transactions: EmptyView() // This screen owns its scrolling above.
-                                case .accounts: AccountsView(sheet: $sheet)
-                                case .budgets: BudgetsView(month: month, sheet: $sheet)
-                                case .goals: GoalsView(sheet: $sheet)
-                                case .recurring: RecurringView(sheet: $sheet)
-                                case .analytics: AnalyticsView(month: month)
-                                case .categories: CategoriesView(sheet: $sheet)
-                                case .imports: ImportHistoryView(onRollback: requestRollback)
-                                case .settings: SettingsView()
-                                }
-                                HStack(spacing: 5) {
-                                    Image(systemName: "lock.shield")
-                                    Text(store.isDemo ? L("Демонстрационный режим · изменения не сохраняются") : cloud.householdID == nil ? L("Данные хранятся на вашем Mac") : L("Локальная копия общей базы · \(cloud.enabled ? L("синхронизация включена") : L("синхронизация на паузе"))"))
-                                    if !store.isDemo, store.ledger.preferences.exchangeRateSnapshot != nil {
-                                        Text("·")
-                                        Link(L("Курсы: ExchangeRate-API"), destination: ExchangeRateSnapshot.providerURL).foregroundStyle(.tertiary)
+                        ScrollViewReader { scrollProxy in
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 20) {
+                                    header
+                                    switch page {
+                                    case .overview: DashboardView(month: month, page: $page, sheet: $sheet)
+                                    case .transactions: EmptyView() // This screen owns its scrolling above.
+                                    case .accounts: AccountsView(sheet: $sheet)
+                                    case .budgets: BudgetsView(month: month, sheet: $sheet)
+                                    case .goals: GoalsView(sheet: $sheet)
+                                    case .recurring: RecurringView(sheet: $sheet)
+                                    case .analytics: AnalyticsView(month: month)
+                                    case .categories: CategoriesView(sheet: $sheet)
+                                    case .imports: ImportHistoryView(onRollback: requestRollback)
+                                    case .settings:
+                                        SettingsView()
+                                            .task(id: walletSettingsNavigationID) {
+                                                guard let id = walletSettingsNavigationID, id != handledSettingsNavigation else { return }
+                                                // Wait for Settings and its inline inbox to enter the scroll view.
+                                                await Task.yield()
+                                                guard !Task.isCancelled else { return }
+                                                scrollProxy.scrollTo(CloudSettingsCard.scrollID, anchor: .top)
+                                                handledSettingsNavigation = id
+                                            }
                                     }
-                                }.font(.caption).foregroundStyle(.tertiary).lineLimit(1).frame(maxWidth: .infinity).padding(.top, 4)
-                            }.padding(24).frame(maxWidth: 1320).frame(maxWidth: .infinity)
-                        }.modifier(ConsistentScrollEdges())
+                                    HStack(spacing: 5) {
+                                        Image(systemName: "lock.shield")
+                                        Text(store.isDemo ? L("Демонстрационный режим · изменения не сохраняются") : cloud.householdID == nil ? L("Данные хранятся на вашем Mac") : L("Локальная копия общей базы · \(cloud.enabled ? L("синхронизация включена") : L("синхронизация на паузе"))"))
+                                        if !store.isDemo, store.ledger.preferences.exchangeRateSnapshot != nil {
+                                            Text("·")
+                                            Link(L("Курсы: ExchangeRate-API"), destination: ExchangeRateSnapshot.providerURL).foregroundStyle(.tertiary)
+                                        }
+                                    }.font(.caption).foregroundStyle(.tertiary).lineLimit(1).frame(maxWidth: .infinity).padding(.top, 4)
+                                }.padding(24).frame(maxWidth: 1320).frame(maxWidth: .infinity)
+                            }.modifier(ConsistentScrollEdges())
+                        }
                     }
                 }
                 .id(language)
@@ -214,7 +227,15 @@ struct ContentView: View {
         }
         .onReceive(dataRefresh) { _ in Task { @MainActor in  await store.reloadFromDisk()  } }
         .onReceive(store.notifications.$navigation) { request in
-            if case .page(let destination) = request?.destination { page = destination }
+            if let request {
+                // Resolve the destination layout before scrolling to a section on that page.
+                var transaction = SwiftUI.Transaction(animation: nil)
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    walletSettingsRequestID = request.destination.showsWalletInbox ? request.id : nil
+                    page = request.destination.page
+                }
+            }
         }
         .task(id: "\(store.ledger.preferences.automaticRates)-\(store.isDemo)") {
             guard store.ledger.preferences.automaticRates else { return }
@@ -290,6 +311,10 @@ struct ContentView: View {
                 Text(L("Будет удалено операций: \(preview.remaining). Из них изменено или создано разделением: \(preview.modified). Остальные операции, счета и категории сохранятся. Отмену можно вернуть через меню «Финансы»."))
             }
         }
+    }
+
+    private var walletSettingsNavigationID: UUID? {
+        page == .settings ? walletSettingsRequestID : nil
     }
 
     private func requestRollback(_ id: UUID) { Task { @MainActor in

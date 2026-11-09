@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.9 — 2026-11-09
+
+Mac 1.7.9 (build 88)
+
+- **Apple Pay review in Settings.** Purchases awaiting review appear directly in the Shared Database and Apple Pay block. Review notifications open Settings and scroll to that block in the main window.
+
 ## 1.7.8 — 2026-11-09
 
 Mac 1.7.8 (build 87)

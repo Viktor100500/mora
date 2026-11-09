@@ -232,7 +232,7 @@ struct SettingsView: View {
             }
             ChangeHistoryCard()
             MerchantSettingsCard()
-            CloudSettingsCard()
+            CloudSettingsCard().id(CloudSettingsCard.scrollID)
             SupportSettingsCard()
             Card {
                 HStack { Image(systemName: "leaf.fill").font(.system(size: 32)).foregroundStyle(Color.moraGreen); VStack(alignment: .leading, spacing: 6) { Text("Mora \(version)").font(.headline); Text(L("Личный учет финансов на Mac.")).font(.caption).foregroundStyle(.secondary) }; Spacer() }

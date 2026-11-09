@@ -74,6 +74,63 @@ final class CloudSyncTests: XCTestCase {
         XCTAssertGreaterThan(host.fittingSize.width, 0)
     }
 
+    func testWalletReviewNotificationsScrollMainSettingsAndRepeatFromTransactions() async throws {
+        defer { try? cleanup() }
+        var ledger = Ledger.empty
+        ledger.preferences.automaticRates = false
+        ledger.accounts = [Account(name: "Review account", currency: "USD")]
+        try await prepare(ledger: ledger)
+        let purchaseID = UUID()
+        let captures = """
+        [{"id":"\(purchaseID)","merchant":"Review cafe","amount":"","currency":"USD",
+          "account_id":"\(ledger.accounts[0].id)","date":"2026-11-09T12:00:00Z",
+          "reason":"Не получена положительная сумма","label":"Test iPhone"}]
+        """
+        SyncStubProtocol.handler = { request in
+            (200, Data((request.url!.lastPathComponent == "mora_list_pending" ? captures : "[]").utf8))
+        }
+        await cloud.refreshLists()
+        XCTAssertEqual(cloud.pending.count, 1)
+        _ = NSApplication.shared
+        let navigation = WalletSettingsNavigationState()
+        let host = NSHostingView(rootView: WalletSettingsNavigationHarness(navigation: navigation,
+            store: store, cloud: cloud))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1180, height: 900),
+                              styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = host
+        defer { window.contentView = nil }
+        try await Task.sleep(for: .seconds(1))
+        host.layoutSubtreeIfNeeded()
+
+        func settingsScroll() throws -> NSScrollView {
+            func scrolls(_ view: NSView) -> [NSScrollView] {
+                (view as? NSScrollView).map { [$0] } ?? view.subviews.flatMap(scrolls)
+            }
+            return try XCTUnwrap(scrolls(host).max { ($0.documentView?.bounds.height ?? 0) < ($1.documentView?.bounds.height ?? 0) })
+        }
+        for (index, destination) in [NotificationNavigation.Destination.inbox, .inbox, .capture(purchaseID)].enumerated() {
+            if case .capture = destination { navigation.page = .transactions }
+            else if navigation.page == .settings {
+                let scroll = try settingsScroll()
+                scroll.contentView.scroll(to: .zero)
+                scroll.reflectScrolledClipView(scroll.contentView)
+            }
+            store.notifications.request(destination)
+            try await Task.sleep(for: .milliseconds(300))
+            host.layoutSubtreeIfNeeded()
+            XCTAssertEqual(navigation.page, .settings)
+            let scroll = try settingsScroll()
+            XCTAssertGreaterThan(scroll.documentVisibleRect.minY, 500, "Review navigation must scroll down to Apple Pay: \(index) \(destination)")
+            XCTAssertTrue(window.sheets.isEmpty, "Notifications should show the inline review list first")
+        }
+        if let path = ProcessInfo.processInfo.environment["MORA_WALLET_SETTINGS_SNAPSHOT"],
+           let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            try bitmap.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+        }
+        await store.notifications.flush()
+    }
+
     func testConnectionOutageIsReportedOnceAndRecoveryOnce() async throws {
         defer { try? cleanup() }
         try await prepare()
@@ -660,5 +717,22 @@ final class CloudSyncTests: XCTestCase {
         let result=await cloud.review(capture,transaction:value)
         XCTAssertFalse(result); XCTAssertEqual(store.ledger,before); XCTAssertEqual(cloud.pending,[capture])
         XCTAssertNotNil(store.error)
+    }
+}
+
+@MainActor
+private final class WalletSettingsNavigationState: ObservableObject {
+    @Published var page: Page = .overview
+}
+
+@MainActor
+private struct WalletSettingsNavigationHarness: View {
+    @ObservedObject var navigation: WalletSettingsNavigationState
+    let store: FinanceStore
+    let cloud: CloudSync
+    var body: some View {
+        ContentView(page: $navigation.page, sheet: .constant(nil))
+            .environmentObject(store).environmentObject(cloud).environmentObject(MerchantCategorizer())
+            .preferredColorScheme(.dark).tint(.moraGreen)
     }
 }

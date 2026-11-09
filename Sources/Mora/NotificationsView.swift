@@ -78,7 +78,7 @@ private struct NotificationsPanel: View {
                 Button {
                     close()
                     store.notifications.request(.inbox)
-                    openWindow(id: "cloud")
+                    openWindow(id: "main")
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "exclamationmark.circle.fill").font(.title2)
@@ -208,8 +208,8 @@ struct NotificationActionButton: View {
             } catch { store.error = error.localizedDescription }
         case .imports: navigate(.page(.imports), window: "main")
         case .settings: navigate(.page(.settings), window: "main")
-        case .inbox: navigate(.inbox, window: "cloud")
-        case .review(let id): navigate(.capture(id), window: "cloud")
+        case .inbox: navigate(.inbox, window: "main")
+        case .review(let id): navigate(.capture(id), window: "main")
         case .retryTransaction(let id): store.retryTransactionSave(id)
         }
      } }
