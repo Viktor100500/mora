@@ -33,7 +33,8 @@ input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
 .done{color:var(--done)}
 /* Mora green, as in the apps (moraGreen and its dark variant). */
 :root[data-scheme=dark]{--accent:#40826a;--done:#85ba99}
-#send{display:none;width:100%;margin-top:18px;font:inherit;font-weight:600;border:0;border-radius:12px;padding:14px;background:var(--accent);color:var(--accent-text)}
+/* Our own button: Telegram's MainButton ignores the page's colours on some clients (white on white on macOS). */
+#send{position:sticky;bottom:12px;z-index:5;display:block;width:100%;margin-top:18px;box-shadow:0 6px 18px rgba(0,0,0,.18);font:inherit;font-weight:600;border:0;border-radius:12px;padding:14px;background:var(--accent);color:var(--accent-text)}
 #send:disabled{opacity:.5}
 .hidden{display:none}
 #yay{position:fixed;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .25s}
@@ -166,11 +167,9 @@ input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
     if (!new RegExp('^\\d{1,12}' + (d ? '(\\.\\d{1,' + d + '})?' : '') + '$').test(raw)) return null;
     var n = Number(raw); return n > 0 ? n : null;
   }
-  function accent() { return getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#336e57'; }
   function valid() { return !!(ctx && amountValue() && $('merchant').value.trim() && $('account').value && $('date').value && $('date').value <= today()); }
   function validate() {
     var ok = valid();
-    if (tg && tg.MainButton) { ok ? tg.MainButton.enable() : tg.MainButton.disable(); tg.MainButton.color = ok ? accent() : tg.themeParams.hint_color || '#a0a4ab'; tg.MainButton.textColor = '#ffffff'; }
     $('send').disabled = !ok;
   }
 
@@ -186,7 +185,7 @@ input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
   function submit() {
     if (busy) return;
     if (!valid()) { status('Заполните сумму, продавца, счёт и дату.', 'error'); if (tg) tg.HapticFeedback.notificationOccurred('error'); return; }
-    busy = true; if (tg) tg.MainButton.showProgress(false); status('Записываю…');
+    busy = true; $('send').textContent = 'Записываю…'; status('Записываю…');
     var day = $('date').value;
     var when = day === today() ? new Date() : new Date(day + 'T12:00:00');
     call('purchase', { event_id: eventId, amount: amountValue(), currency: $('currency').value, merchant: $('merchant').value.trim(),
@@ -200,7 +199,7 @@ input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
         return call('context', {}).then(function (c) { ctx = c; $('today').textContent = money(c.totals.today); $('month').textContent = money(c.totals.month); });
       })
       .catch(function (e) { status(e.message, 'error'); if (tg) tg.HapticFeedback.notificationOccurred('error'); })
-      .then(function () { busy = false; if (tg) tg.MainButton.hideProgress(); validate(); });
+      .then(function () { busy = false; $('send').textContent = 'Записать'; validate(); });
   }
 
   ['amount', 'merchant', 'date', 'account', 'currency'].forEach(function (id) { $(id).addEventListener('input', validate); $(id).addEventListener('change', validate); });
@@ -212,10 +211,7 @@ input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
     document.documentElement.dataset.scheme = tg.colorScheme || 'light';
     tg.onEvent('themeChanged', function () { document.documentElement.dataset.scheme = tg.colorScheme; validate(); });
     tg.ready(); tg.expand();
-    tg.MainButton.setParams({ text: 'Записать', color: accent(), text_color: '#ffffff', is_active: false });
-    tg.MainButton.show(); tg.MainButton.onClick(submit);
-  } else {
-    $('send').style.display = 'block';
+    if (tg.MainButton) tg.MainButton.hide();
   }
   call('context', {}).then(function (c) { ctx = c; if (!ctx.accounts.length) throw new Error('В общей базе нет активных счетов.'); render(); })
     .catch(function (e) { $('loading').textContent = e.message; $('loading').className = 'note error'; });
