@@ -142,7 +142,9 @@ function purchaseLine(p: { merchant: string; amount: number; currency: string },
 
 // ---------- the bot
 
-const menuButton = (env: Environment) => ({ inline_keyboard: [[{ text: "＋ Добавить трату", web_app: { url: env.miniAppUrl } }]] });
+// Without a Mini App address yet, messages go without the button (Telegram refuses an empty web_app URL).
+const menuButton = (env: Environment) => env.miniAppUrl.startsWith("https://")
+  ? { inline_keyboard: [[{ text: "＋ Добавить трату", web_app: { url: env.miniAppUrl } }]] } : undefined;
 
 async function sendWidget(env: Environment, chatId: number): Promise<void> {
   await telegram(env, "sendWidget", {
@@ -269,18 +271,43 @@ export async function handle(request: Request, env: Environment): Promise<Respon
   }
 }
 
+/** Settings from function secrets, else from Vault (mora_telegram_*), read with the service role. */
+export async function loadEnvironment(get: (name: string) => string, fetcher: typeof fetch = fetch): Promise<Environment> {
+  const firstKey = (json: string) => { try { return Object.values(JSON.parse(json || "{}"))[0] as string || ""; } catch { return ""; } };
+  const url = get("SUPABASE_URL");
+  const key = firstKey(get("SUPABASE_PUBLISHABLE_KEYS")) || get("SUPABASE_ANON_KEY");
+  let vault: Record<string, string> = {};
+  const service = firstKey(get("SUPABASE_SECRET_KEYS")) || get("SUPABASE_SERVICE_ROLE_KEY");
+  if (service && !get("TELEGRAM_BOT_TOKEN")) {
+    const headers: Record<string, string> = { "content-type": "application/json", apikey: service };
+    if (service.startsWith("eyJ")) headers.authorization = `Bearer ${service}`;
+    const response = await fetcher(`${url}/rest/v1/rpc/mora_telegram_settings`, { method: "POST", headers, body: "{}" });
+    if (response.ok) vault = await response.json() ?? {};
+    else console.error(`mora_telegram_settings: HTTP ${response.status}`);
+  }
+  const setting = (secret: string, name: string) => get(secret) || vault[name] || "";
+  return {
+    url, key,
+    botToken: setting("TELEGRAM_BOT_TOKEN", "bot_token"), phoneToken: setting("MORA_PHONE_TOKEN", "phone_token"),
+    webhookSecret: setting("TELEGRAM_WEBHOOK_SECRET", "webhook_secret"),
+    allowedUsers: new Set(setting("TELEGRAM_ALLOWED_USERS", "allowed_users").split(/[\s,]+/).filter(Boolean).map(Number)),
+    miniAppUrl: setting("TELEGRAM_MINIAPP_URL", "miniapp_url"), miniAppLink: setting("TELEGRAM_MINIAPP_LINK", "miniapp_link") || undefined,
+    widgetApi: setting("TELEGRAM_WIDGET_API", "widget_api") || undefined,
+  };
+}
+
 // Deno runs this file in Supabase; tests import handle() without it.
 const deno = (globalThis as { Deno?: { env: { get(name: string): string | undefined }; serve(handler: (request: Request) => Promise<Response>): void } }).Deno;
 if (deno) {
-  const get = (name: string) => deno.env.get(name) ?? "";
-  let key = get("SUPABASE_ANON_KEY");
-  try { key = Object.values(JSON.parse(get("SUPABASE_PUBLISHABLE_KEYS") || "{}"))[0] as string || key; } catch { /* keep the anon key */ }
-  const env: Environment = {
-    url: get("SUPABASE_URL"), key,
-    botToken: get("TELEGRAM_BOT_TOKEN"), phoneToken: get("MORA_PHONE_TOKEN"), webhookSecret: get("TELEGRAM_WEBHOOK_SECRET"),
-    allowedUsers: new Set(get("TELEGRAM_ALLOWED_USERS").split(/[\s,]+/).filter(Boolean).map(Number)),
-    miniAppUrl: get("TELEGRAM_MINIAPP_URL"), miniAppLink: get("TELEGRAM_MINIAPP_LINK") || undefined,
-    widgetApi: get("TELEGRAM_WIDGET_API") || undefined,
+  // Vault changes (a new participant, a new key) apply within a minute.
+  let cached: { env: Promise<Environment>; at: number } | null = null;
+  const environment = () => {
+    if (!cached || Date.now() - cached.at > 60_000) {
+      const env = loadEnvironment((name) => deno.env.get(name) ?? "");
+      cached = { env, at: Date.now() };
+      env.catch(() => { cached = null; });
+    }
+    return cached.env;
   };
-  deno.serve((request) => handle(request, env));
+  deno.serve(async (request) => handle(request, await environment()));
 }

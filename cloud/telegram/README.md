@@ -13,7 +13,7 @@
 
 | Часть | Где | Что делает |
 |---|---|---|
-| Миграция `supabase/migrations/20261109120000_telegram_bot.sql` | Supabase | `mora_phone_context` отдаёт форме счета, категории, недавних продавцов и итоги. `mora_phone_add_purchase` записывает покупку. |
+| Миграция `supabase/migrations/20261109052051_telegram_bot.sql` | Supabase | `mora_phone_context` отдаёт форме счета, категории, недавних продавцов и итоги. `mora_phone_add_purchase` записывает покупку. |
 | Функция `supabase/functions/mora-telegram` | Supabase Edge Functions | Принимает webhook бота, проверяет подпись Telegram у формы, отвечает виджету. |
 | Форма `telegram/miniapp/index.html` | Любой статический HTTPS-хостинг | Одна страница без секретов. Адрес функции передаётся параметром `?api=`. |
 | `telegram/setup.mjs` | Ваш Mac | Настраивает webhook, команды и кнопку «Добавить». |
@@ -31,7 +31,7 @@ Supabase не отдаёт HTML-страницы из функций, поэто
 ## Установка
 
 1. **Бот.** В Telegram откройте @BotFather → `/newbot`. Сохраните токен: это пароль бота.
-2. **Миграция.** Выполните `supabase/migrations/20261109120000_telegram_bot.sql` в SQL Editor после остальных миграций.
+2. **Миграция.** Выполните `supabase/migrations/20261109052051_telegram_bot.sql` в SQL Editor после остальных миграций.
 3. **Ключ телефона.** В Mora на Mac: **Настройки → Общая база и Apple Pay**. Создайте ключ телефона с меткой, например «Telegram · Настя», и счётом по умолчанию. Скопируйте ключ.
 4. **Форма.** Опубликуйте папку `telegram/miniapp` на статическом хостинге с HTTPS. Адрес формы будет таким:
    `https://<хостинг>/miniapp/?api=https://<проект>.supabase.co/functions/v1/mora-telegram`
@@ -56,6 +56,21 @@ Supabase не отдаёт HTML-страницы из функций, поэто
 8. **Ссылка для виджета (необязательно).** В @BotFather выполните `/newapp` для этого бота, укажите тот же адрес формы и короткое имя, например `add`. Получится ссылка `https://t.me/<бот>/add`. Добавьте её в секрет `TELEGRAM_MINIAPP_LINK`, чтобы кнопки «Новая трата» и «Подробнее» в виджете открывали форму с подставленными данными.
 
 Команды бота: `/start` присылает кнопку формы и виджет, `/widget` присылает свежий виджет.
+
+### Настройки в Vault вместо секретов функции
+
+Без Supabase CLI (например, при развёртывании через Supabase MCP или в панели) настройки можно хранить в Supabase Vault. Нужна миграция `20261109052052_telegram_bot_settings.sql`. Функция читает секреты с именами `mora_telegram_<настройка>` служебной ролью и применяет изменения в течение минуты. Секреты функции с тем же смыслом имеют приоритет.
+
+| Секрет функции | Секрет Vault |
+|---|---|
+| `TELEGRAM_BOT_TOKEN` | `mora_telegram_bot_token` |
+| `MORA_PHONE_TOKEN` | `mora_telegram_phone_token` |
+| `TELEGRAM_WEBHOOK_SECRET` | `mora_telegram_webhook_secret` |
+| `TELEGRAM_ALLOWED_USERS` | `mora_telegram_allowed_users` |
+| `TELEGRAM_MINIAPP_URL` | `mora_telegram_miniapp_url` |
+| `TELEGRAM_MINIAPP_LINK` | `mora_telegram_miniapp_link` |
+
+Создать секрет: `select vault.create_secret('<значение>', 'mora_telegram_bot_token');`. Изменить: `select vault.update_secret(id, '<новое значение>') from vault.secrets where name = 'mora_telegram_allowed_users';`.
 
 ## Ограничения
 

@@ -49,6 +49,7 @@ try {
   }
   const admin = await connect(null,null);
   await admin.query(`create role anon nologin; create role authenticated nologin;
+    create role service_role nologin; create schema vault; create table vault.decrypted_secrets(name text, decrypted_secret text);
     create schema auth; create table auth.users(id uuid primary key);
     create function auth.uid() returns uuid language sql stable as
       $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
@@ -576,6 +577,20 @@ try {
     assert.equal((await rpc(owner,'mora_get_household',[h])).snapshot.transactions.filter(t=>t.merchant==='Bakery').length,2);
     await rpc(owner,'mora_revoke_phone_token',[phone.id]);
     assert.match((await (await post('api/context',{init_data:initData(nastya)})).json()).error,/Ключ телефона отозван/);
+    // Settings from Vault, read only by the service role.
+    await admin.query(`insert into vault.decrypted_secrets values ('mora_telegram_bot_token','vault-bot'),('mora_telegram_allowed_users','1, 2'),('other_secret','x')`);
+    await denied(()=>rpc(anon,'mora_telegram_settings'));
+    const service=await connect(null,'service_role');
+    const settings=await rpc(service,'mora_telegram_settings');
+    assert.deepEqual(settings,{bot_token:'vault-bot',allowed_users:'1, 2'});
+    const {loadEnvironment}=await import('../supabase/functions/mora-telegram/index.ts');
+    const vars={SUPABASE_URL:'https://example-project.supabase.co',SUPABASE_SECRET_KEYS:'{"default":"sb_secret_test"}',SUPABASE_PUBLISHABLE_KEYS:'{"default":"sb_publishable_test"}',TELEGRAM_MINIAPP_URL:'https://from-secret/'};
+    const loaded=await loadEnvironment(n=>vars[n]??'',async(url,init)=>{
+      assert(url.endsWith('/rest/v1/rpc/mora_telegram_settings')); assert.equal(init.headers.apikey,'sb_secret_test');
+      return new Response(JSON.stringify(settings));
+    });
+    assert.equal(loaded.botToken,'vault-bot'); assert.deepEqual([...loaded.allowedUsers],[1,2]);
+    assert.equal(loaded.miniAppUrl,'https://from-secret/','function secrets take precedence'); assert.equal(loaded.key,'sb_publishable_test');
   });
   await admin.query(await fs.readFile(path.join(here,'../supabase/migrations/20261109033857_same_currency_purchase_fee.sql'),'utf8'));
   await check('same-currency fees apply once to automatic and reviewed purchases and agent imports',async()=>{
