@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.10 — 2026-11-09
+
+Mac 1.7.10 (build 89)
+
+- **Reliable review navigation.** Review notifications scroll to the actual laid-out Apple Pay section, avoiding an early scroll based on the previous page’s geometry.
+
 ## 1.7.9 — 2026-11-09
 
 Mac 1.7.9 (build 88)

@@ -78,7 +78,9 @@ final class CloudSyncTests: XCTestCase {
         defer { try? cleanup() }
         var ledger = Ledger.empty
         ledger.preferences.automaticRates = false
-        ledger.accounts = [Account(name: "Review account", currency: "USD")]
+        ledger.preferences.baseCurrency = "USD"
+        ledger.accounts = ["USD", "EUR", "RUB", "RSD"].map { Account(name: "Review \($0)", currency: $0) }
+        ledger.preferences.rates = ["USD": 1, "EUR": Decimal(string: "1.1")!, "RUB": Decimal(string: "0.012")!, "RSD": Decimal(string: "0.0095")!]
         try await prepare(ledger: ledger)
         let purchaseID = UUID()
         let captures = """
@@ -102,26 +104,44 @@ final class CloudSyncTests: XCTestCase {
         try await Task.sleep(for: .seconds(1))
         host.layoutSubtreeIfNeeded()
 
-        func settingsScroll() throws -> NSScrollView {
-            func scrolls(_ view: NSView) -> [NSScrollView] {
-                (view as? NSScrollView).map { [$0] } ?? view.subviews.flatMap(scrolls)
-            }
-            return try XCTUnwrap(scrolls(host).max { ($0.documentView?.bounds.height ?? 0) < ($1.documentView?.bounds.height ?? 0) })
+        func sectionAnchor(_ view: NSView) -> SectionScrollAnchor.AnchorView? {
+            if let anchor = view as? SectionScrollAnchor.AnchorView { return anchor }
+            return view.subviews.lazy.compactMap(sectionAnchor).first
         }
-        for (index, destination) in [NotificationNavigation.Destination.inbox, .inbox, .capture(purchaseID)].enumerated() {
-            if case .capture = destination { navigation.page = .transactions }
-            else if navigation.page == .settings {
-                let scroll = try settingsScroll()
+        for size in [NSSize(width: 1180, height: 900), NSSize(width: 1728, height: 1008), NSSize(width: 1040, height: 700)] {
+            window.setContentSize(size)
+            for destination in [NotificationNavigation.Destination.inbox, .inbox, .capture(purchaseID)] {
+                if case .capture = destination { navigation.page = .transactions }
+                else { navigation.page = .overview }
+                try await Task.sleep(for: .milliseconds(300))
+                host.layoutSubtreeIfNeeded()
+                store.notifications.request(destination)
+                try await Task.sleep(for: .milliseconds(300))
+                host.layoutSubtreeIfNeeded()
+                XCTAssertEqual(navigation.page, .settings)
+                let anchor = try XCTUnwrap(sectionAnchor(host))
+                let scroll = try XCTUnwrap(anchor.enclosingScrollView)
+                let document = try XCTUnwrap(scroll.documentView)
+                let section = anchor.convert(anchor.bounds, to: document)
+                let visible = scroll.documentVisibleRect
+                // An arbitrary offset > 500 can still leave Apple Pay off-screen.
+                // Its heading and the first purchase must actually be in view.
+                XCTAssertGreaterThan(visible.minY, 500)
+                XCTAssertGreaterThanOrEqual(section.minY, visible.minY - 1)
+                XCTAssertLessThanOrEqual(section.minY + min(section.height, 200), visible.maxY + 1,
+                                         "Apple Pay must be visible at \(size), from \(destination)")
+                XCTAssertTrue(window.sheets.isEmpty)
+
+                // Repeating the action while Settings is already open must scroll again.
                 scroll.contentView.scroll(to: .zero)
                 scroll.reflectScrolledClipView(scroll.contentView)
+                store.notifications.request(destination)
+                try await Task.sleep(for: .milliseconds(100))
+                host.layoutSubtreeIfNeeded()
+                XCTAssertGreaterThan(scroll.documentVisibleRect.minY, 500)
+                XCTAssertLessThanOrEqual(anchor.convert(anchor.bounds, to: document).minY + 100,
+                                         scroll.documentVisibleRect.maxY + 1)
             }
-            store.notifications.request(destination)
-            try await Task.sleep(for: .milliseconds(300))
-            host.layoutSubtreeIfNeeded()
-            XCTAssertEqual(navigation.page, .settings)
-            let scroll = try settingsScroll()
-            XCTAssertGreaterThan(scroll.documentVisibleRect.minY, 500, "Review navigation must scroll down to Apple Pay: \(index) \(destination)")
-            XCTAssertTrue(window.sheets.isEmpty, "Notifications should show the inline review list first")
         }
         if let path = ProcessInfo.processInfo.environment["MORA_WALLET_SETTINGS_SNAPSHOT"],
            let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
@@ -730,9 +750,12 @@ private struct WalletSettingsNavigationHarness: View {
     @ObservedObject var navigation: WalletSettingsNavigationState
     let store: FinanceStore
     let cloud: CloudSync
+    @State private var page: Page = .overview
     var body: some View {
-        ContentView(page: $navigation.page, sheet: .constant(nil))
+        ContentView(page: $page, sheet: .constant(nil))
             .environmentObject(store).environmentObject(cloud).environmentObject(MerchantCategorizer())
             .preferredColorScheme(.dark).tint(.moraGreen)
+            .onChange(of: navigation.page) { _, value in page = value }
+            .onChange(of: page) { _, value in navigation.page = value }
     }
 }

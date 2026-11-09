@@ -3,7 +3,6 @@ import FinanceCore
 import AppKit
 
 struct CloudSettingsCard: View {
-    static let scrollID = "cloud-settings"
     @EnvironmentObject private var cloud: CloudSync
     @Environment(\.openWindow) private var openWindow
     var body: some View {

@@ -115,6 +115,7 @@ struct ImportView: View {
 }
 
 struct SettingsView: View {
+    @Binding var walletReviewScrollRequest: UUID?
     @EnvironmentObject private var cloud: CloudSync
     @EnvironmentObject var store: FinanceStore
     @State private var rateCurrency = "USD"
@@ -232,7 +233,8 @@ struct SettingsView: View {
             }
             ChangeHistoryCard()
             MerchantSettingsCard()
-            CloudSettingsCard().id(CloudSettingsCard.scrollID)
+            CloudSettingsCard()
+                .background(SectionScrollAnchor(request: $walletReviewScrollRequest))
             SupportSettingsCard()
             Card {
                 HStack { Image(systemName: "leaf.fill").font(.system(size: 32)).foregroundStyle(Color.moraGreen); VStack(alignment: .leading, spacing: 6) { Text("Mora \(version)").font(.headline); Text(L("Личный учет финансов на Mac.")).font(.caption).foregroundStyle(.secondary) }; Spacer() }
