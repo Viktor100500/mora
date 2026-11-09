@@ -26,6 +26,9 @@ public struct Account: Identifiable, Codable, Equatable, Sendable {
     /// Percentage added to foreign-currency debits; nil keeps legacy accounts fee-free.
     public var conversionFeePercent: Decimal?
     public var bankFeePercent: Decimal { conversionFeePercent ?? 0 }
+    /// Fee charged on expenses in the account's own currency; absent on older accounts.
+    public var sameCurrencyFeePercent: Decimal? = nil
+    public var purchaseFeePercent: Decimal { sameCurrencyFeePercent ?? 0 }
     public init(id: UUID = UUID(), name: String, currency: String = "RUB", kind: AccountKind = .checking, openingBalance: Decimal = 0, color: String = "green", archived: Bool = false, conversionFeePercent: Decimal? = nil) {
         self.id = id; self.name = name; self.currency = currency; self.kind = kind; self.openingBalance = openingBalance; self.color = color; self.archived = archived; self.conversionFeePercent = conversionFeePercent
     }
@@ -58,6 +61,8 @@ public struct Transaction: Identifiable, Codable, Equatable, Sendable {
     public var recurrenceID: UUID?
     public var importBatchID: UUID?
     public var conversion: CardConversion?
+    /// The purchase amount and fee used to calculate a same-currency debit.
+    public var sameCurrencyFee: SameCurrencyFee? = nil
     /// A transfer's remaining leg after the other account was deleted.
     public var removedTransferAccountName: String?
     public var isStandaloneTransfer: Bool { kind == .transfer && removedTransferAccountName != nil }
@@ -235,7 +240,7 @@ public struct Ledger: Codable, Equatable, Sendable {
         preferences.exchangeRateSnapshot = snapshot
     }
     public func validate() throws {
-        guard (1...4).contains(schemaVersion) else { throw LedgerError.invalid("Эта версия резервной копии не поддерживается.") }
+        guard (1...5).contains(schemaVersion) else { throw LedgerError.invalid("Эта версия резервной копии не поддерживается.") }
         if let history = changeHistory {
             guard history.undo.count + history.redo.count <= 20,
                   (history.undo + history.redo).allSatisfy({ $0.changeHistory == nil }) else {
@@ -249,7 +254,7 @@ public struct Ledger: Codable, Equatable, Sendable {
         guard currencies.contains(preferences.baseCurrency), preferences.rates[preferences.baseCurrency] == 1, preferences.rates.keys.allSatisfy({ currencies.contains($0) }), preferences.rates.values.allSatisfy({ $0 > 0 && !$0.isNaN }) else { throw LedgerError.invalid("Некорректные курсы валют.") }
         try preferences.exchangeRateSnapshot?.validate()
         guard accounts.allSatisfy({ currencies.contains($0.currency) && !$0.openingBalance.isNaN && !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }) else { throw LedgerError.invalid("Проверьте названия и валюты счетов.") }
-        guard accounts.allSatisfy({ !$0.bankFeePercent.isNaN && $0.bankFeePercent >= 0 && $0.bankFeePercent <= 100 }) else { throw LedgerError.invalid("Комиссия за конвертацию должна быть от 0 до 100%.") }
+        guard accounts.allSatisfy({ !$0.bankFeePercent.isNaN && $0.bankFeePercent >= 0 && $0.bankFeePercent <= 100 && !$0.purchaseFeePercent.isNaN && $0.purchaseFeePercent >= 0 && $0.purchaseFeePercent <= 100 }) else { throw LedgerError.invalid("Комиссия должна быть от 0 до 100%.") }
         guard categories.allSatisfy({ !$0.name.trimmingCharacters(in: .whitespaces).isEmpty && $0.kind != .transfer }) else { throw LedgerError.invalid("Некорректная категория.") }
         for t in transactions {
             guard account(t.accountID) != nil, !t.merchant.trimmingCharacters(in: .whitespaces).isEmpty, !t.amount.isNaN, t.date.timeIntervalSince1970.isFinite else { throw LedgerError.invalid("Некорректная операция.") }
@@ -265,6 +270,12 @@ public struct Ledger: Codable, Equatable, Sendable {
                 guard t.kind != .transfer, conversion.accountCurrency == account(t.accountID)?.currency,
                       Dates.string(conversion.date) == Dates.string(t.date), try conversion.convertedAmount() == t.amount else {
                     throw LedgerError.invalid("Пересчет не соответствует сумме, дате или валюте счета.")
+                }
+            }
+            if let fee = t.sameCurrencyFee {
+                guard t.kind == .expense, t.conversion == nil, let account = account(t.accountID),
+                      try fee.chargedAmount(currency: account.currency) == t.amount else {
+                    throw LedgerError.invalid("Комиссия не соответствует сумме или валюте счета.")
                 }
             }
             if t.kind == .transfer && !t.isStandaloneTransfer {

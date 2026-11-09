@@ -5,7 +5,7 @@ import Foundation
 public enum CloudMerge {
     public static func shared(_ ledger: Ledger) -> Ledger {
         var value = ledger.withoutChangeHistory()
-        value.schemaVersion = 4
+        value.schemaVersion = max(4, value.schemaVersion)
         value.importHistory = ledger.importHistory
         value.preferences.appearance = "system"
         value.preferences.showBudgets = false
