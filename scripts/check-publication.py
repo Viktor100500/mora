@@ -17,7 +17,7 @@ PUBLIC_FILES = {'.gitignore', '.gitattributes', 'README.md', 'CHANGELOG.md', 'CO
 PUBLIC_DIRS = {'.github', '.githooks', 'Examples', 'Prompts', 'Resources', 'Sources', 'Tests', 'cloud', 'docs', 'iOS', 'mcp', 'plugins', 'scripts'}
 PRIVATE_NAMES = {'ledger.json', 'notification-history.json', 'cloud-settings.json', 'cloud-checkpoint.json', 'cloud-project.json', 'MoraCloud.json', 'client-config.json', 'runtime.sh', 'mcp-http-token', '.DS_Store'}
 PRIVATE_PARTS = {'outputs', 'build', '.build', '.venv', '.swiftpm', 'node_modules', '__pycache__', 'private-notes', '.env'}
-# Signed by the Mora service Apple ID; no key or personal data (cloud/shortcuts/build_wallet_automation.py --verify).
+# Publicly signed automation; no phone key or selected cards (cloud/shortcuts/build_wallet_automation.py --verify).
 PUBLIC_SHORTCUTS = {'iOS/Mora/Resources/Mora Apple Pay.shortcut'}
 PRIVATE_DOCS = {'cloud/VERIFICATION.md', 'docs/localization-and-navigation.md', 'docs/scrolling-regression.md'}
 RULES = {

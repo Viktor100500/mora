@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.8 — 2026-11-08
+
+Mac 1.7.8 (build 87) · iPhone 1.0.38 (build 39)
+
+- iPhone: bundles the signed Mora Apple Pay automation for iOS 27, with its Transaction trigger and both Mora actions already connected. Select your Wallet cards, enable the automation, and check the first payment in Mora. The template has no phone key or selected cards; its signing certificate expires on 8 December 2027.
+
 ## 1.7.6 — 2026-11-08
 
 Mac 1.7.6 (build 85) · iPhone 1.0.37 (build 38)

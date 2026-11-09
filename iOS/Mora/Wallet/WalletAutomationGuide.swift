@@ -15,7 +15,7 @@ struct WalletAutomationGuide: View {
     /// Built by cloud/shortcuts/build_wallet_automation.py and signed on an iOS 27 iPhone
     /// (macOS 26 drops the trigger when signing): the Transaction trigger, then Start
     /// Wallet Payment and Finish Wallet Payment wired to its Merchant, Name, Card or
-    /// Pass and Amount. No key or personal data. The signature expires on 7 Dec 2027.
+    /// Pass and Amount. No key or personal data. The signature expires on 8 Dec 2027.
     static let templateFile = Bundle.main.url(forResource: "Mora Apple Pay", withExtension: "shortcut")
     /// Undocumented, checked on iOS 26 and 27: opens the Automation tab of Shortcuts.
     static let automationsURL = URL(string: "shortcuts://automations")!
@@ -117,6 +117,7 @@ struct WalletAutomationGuide: View {
                 .background(Color.moraCard, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
             instructions(["Нажмите «Открыть автоматизации».",
+                          "Откройте триггер «Транзакция» в Mora Apple Pay и отметьте карты, которыми платите.",
                           "Включите переключатель у «Когда я прикладываю карту Wallet» (Mora Apple Pay).",
                           "Если iOS спросит, выберите «Запускать сразу». Вернитесь в Mora."])
         } else {

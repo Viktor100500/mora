@@ -392,5 +392,6 @@
   "Нажмите «Открыть автоматизации».": "Tap Open Automations.",
   "Включите переключатель у «Когда я прикладываю карту Wallet» (Mora Apple Pay).": "Turn on the switch next to “When I tap a Wallet card” (Mora Apple Pay).",
   "Если iOS спросит, выберите «Запускать сразу». Вернитесь в Mora.": "If iOS asks, choose Run Immediately. Come back to Mora.",
-  "Открыть автоматизации": "Open Automations"
+  "Открыть автоматизации": "Open Automations",
+  "Откройте триггер «Транзакция» в Mora Apple Pay и отметьте карты, которыми платите.": "Open the Transaction trigger in Mora Apple Pay and select the cards you pay with."
 }
