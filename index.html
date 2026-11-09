@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru" data-api="https://zpyxmhxuivehdfbzvrcn.supabase.co/functions/v1/mora-telegram">
+<html lang="ru" data-api="https://zpyxmhxuivehdfbzvrcn.supabase.co/functions/v1/mora-telegram" data-version="1.7.14" data-build="93">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
@@ -14,17 +14,17 @@
 --danger:var(--tg-theme-destructive-text-color,#d6453d)}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 -apple-system,system-ui,sans-serif;-webkit-text-size-adjust:100%}
-main{max-width:520px;margin:0 auto;padding:12px 16px 96px}
+main{max-width:520px;margin:0 auto;padding:12px 16px calc(120px + env(safe-area-inset-bottom,0px))}
 .totals{display:flex;gap:8px;margin-bottom:14px}
 .totals div{flex:1;background:var(--field);border-radius:12px;padding:8px 10px}
 .totals small{display:block;color:var(--hint);font-size:12px}
 .totals b{font-size:15px;font-weight:600}
 label{display:block;margin:12px 0 4px;font-size:13px;color:var(--hint)}
-input,select{width:100%;font:inherit;color:var(--text);background:var(--field);border:0;border-radius:12px;padding:12px;outline:none;-webkit-appearance:none;appearance:none}
+input,select{width:100%;min-width:0;font:inherit;color:var(--text);background:var(--field);border:0;border-radius:12px;padding:12px;outline:none;-webkit-appearance:none;appearance:none}
 input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
-.amount{display:grid;grid-template-columns:1fr 104px;gap:8px}
+.amount{display:grid;grid-template-columns:minmax(0,1fr) 104px;gap:8px}
 .amount input{font-size:28px;font-weight:600;padding:10px 12px}
-.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px}
 .chips{display:flex;gap:6px;overflow-x:auto;padding:2px 0 4px;scrollbar-width:none}
 .chips::-webkit-scrollbar{display:none}
 .chips button{flex:none;font:inherit;font-size:14px;border:0;border-radius:16px;padding:6px 12px;background:var(--field);color:var(--text)}
@@ -33,10 +33,14 @@ input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
 .done{color:var(--done)}
 /* Mora green, as in the apps (moraGreen and its dark variant). */
 :root[data-scheme=dark]{--accent:#40826a;--done:#85ba99}
-/* Our own button: Telegram's MainButton ignores the page's colours on some clients (white on white on macOS). */
-#send{position:sticky;bottom:12px;z-index:5;display:block;width:100%;margin-top:18px;box-shadow:0 6px 18px rgba(0,0,0,.18);font:inherit;font-weight:600;border:0;border-radius:12px;padding:14px;background:var(--accent);color:var(--accent-text)}
-#send:disabled{opacity:.5}
-.hidden{display:none}
+/* Keep actions inside the page, with explicit colours independent of Telegram's native button. */
+#actions{position:fixed;left:0;right:0;bottom:var(--keyboard-inset,0px);z-index:5;background:var(--bg);border-top:1px solid var(--field);padding:10px 16px max(12px,env(safe-area-inset-bottom,0px),var(--tg-content-safe-area-inset-bottom,0px))}
+#actions>div{display:flex;gap:10px;max-width:488px;margin:0 auto}
+#actions button{font:inherit;font-weight:600;border:0;border-radius:12px;min-height:48px;padding:12px 16px;cursor:pointer;-webkit-appearance:none;appearance:none}
+#send{flex:1;background:var(--accent);color:#fff;-webkit-text-fill-color:#fff}
+#send:disabled{opacity:1;background:#54665d;color:#fff;cursor:default}
+#keyboard-done{background:var(--field);color:var(--text)}
+.hidden,[hidden]{display:none!important}
 #yay{position:fixed;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .25s}
 #yay.on{opacity:1}
 #yay>div{width:min(320px,86vw);background:linear-gradient(160deg,#12301f,#060e0b);color:#e6f2e0;border-radius:20px;padding:16px 16px 18px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.25)}
@@ -56,11 +60,11 @@ input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
   <form id="form" class="hidden" autocomplete="off" novalidate>
     <label for="amount">Сумма</label>
     <div class="amount">
-      <input id="amount" inputmode="decimal" placeholder="0" required>
+      <input id="amount" inputmode="decimal" enterkeyhint="done" placeholder="0" required>
       <select id="currency" aria-label="Валюта"></select>
     </div>
     <label for="merchant">Продавец</label>
-    <input id="merchant" maxlength="120" placeholder="Например, Lidl" required>
+    <input id="merchant" maxlength="120" enterkeyhint="done" placeholder="Например, Lidl" required>
     <div class="chips" id="recent"></div>
     <label for="category">Категория</label>
     <select id="category"></select>
@@ -69,11 +73,14 @@ input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
       <div><label for="date">Дата</label><input id="date" type="date" required></div>
     </div>
     <label for="note">Заметка (необязательно)</label>
-    <input id="note" maxlength="200" placeholder="">
-    <button id="send" type="submit">Записать</button>
+    <input id="note" maxlength="200" enterkeyhint="done" placeholder="">
     <div id="status" class="note" role="status"></div>
   </form>
 </main>
+<footer id="actions" class="hidden" aria-label="Действия с тратой"><div>
+  <button id="keyboard-done" type="button" hidden>Готово</button>
+  <button id="send" type="submit" form="form" disabled>Записать</button>
+</div></footer>
 <!-- Yar the cat kisses Nastya after a purchase: the same scene as the widget (functions/mora-telegram/widget.ts). -->
 <div id="yay" aria-live="polite"><div><svg viewBox="0 0 200 110" width="100%" height="170" aria-label="Котик Яр целует Настеньку">
 <g class="nas"><path d="M110 72a28 30 0 0 1 56 0v30h-56z" fill="#1c4f3b"/><circle cx="138" cy="66" r="22" fill="#f2ead8" stroke="#336e57" stroke-width="1.5"/>
@@ -103,6 +110,22 @@ input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
     return parts.join(' + ') || '0';
   }
   function today() { var d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); }
+
+  function textInput(el) { return el && el.tagName === 'INPUT' && el.type !== 'date'; }
+  function keyboardActions() {
+    $('keyboard-done').hidden = !textInput(document.activeElement) && document.activeElement !== $('keyboard-done');
+  }
+  function dismissKeyboard() {
+    var el = document.activeElement;
+    if (el && (el.tagName === 'INPUT' || el.tagName === 'SELECT')) el.blur();
+    if (tg && typeof tg.hideKeyboard === 'function' && tg.isVersionAtLeast('9.1')) tg.hideKeyboard();
+    keyboardActions();
+  }
+  function viewportActions() {
+    var v = window.visualViewport;
+    var inset = v ? Math.max(0, window.innerHeight - v.height - v.offsetTop) : 0;
+    document.documentElement.style.setProperty('--keyboard-inset', inset + 'px');
+  }
 
   function call(action, body) {
     if (!api) return Promise.reject(new Error('Не задан адрес сервера Mora: добавьте ?api= к адресу формы или заполните data-api.'));
@@ -148,7 +171,7 @@ input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
     var chips = $('recent'); chips.textContent = '';
     (ctx.recent || []).slice(0, 12).forEach(function (r) {
       var b = document.createElement('button'); b.type = 'button'; b.textContent = r.merchant;
-      b.onclick = function () { applyRecent(r); if (tg) tg.HapticFeedback.selectionChanged(); $('amount').focus(); };
+      b.onclick = function () { dismissKeyboard(); applyRecent(r); validate(); if (tg) tg.HapticFeedback.selectionChanged(); };
       chips.appendChild(b);
     });
     fillCurrencies();
@@ -158,6 +181,7 @@ input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
     var m = /^r(\d{1,2})_(\d{0,9}(?:d\d{0,3})?)$/.exec(start);
     if (m && ctx.recent[+m[1]]) { applyRecent(ctx.recent[+m[1]]); $('amount').value = m[2].replace('d', '.'); }
     $('loading').classList.add('hidden'); $('form').classList.remove('hidden');
+    $('actions').classList.remove('hidden');
     validate();
   }
 
@@ -170,7 +194,7 @@ input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
   function valid() { return !!(ctx && amountValue() && $('merchant').value.trim() && $('account').value && $('date').value && $('date').value <= today()); }
   function validate() {
     var ok = valid();
-    $('send').disabled = !ok;
+    $('send').disabled = busy || !ok;
   }
 
   function celebrate(text) {
@@ -185,7 +209,8 @@ input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
   function submit() {
     if (busy) return;
     if (!valid()) { status('Заполните сумму, продавца, счёт и дату.', 'error'); if (tg) tg.HapticFeedback.notificationOccurred('error'); return; }
-    busy = true; $('send').textContent = 'Записываю…'; status('Записываю…');
+    dismissKeyboard();
+    busy = true; validate(); $('send').textContent = 'Записываю…'; status('Записываю…');
     var day = $('date').value;
     var when = day === today() ? new Date() : new Date(day + 'T12:00:00');
     call('purchase', { event_id: eventId, amount: amountValue(), currency: $('currency').value, merchant: $('merchant').value.trim(),
@@ -206,12 +231,36 @@ input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
   $('account').addEventListener('change', function () { fillCurrencies(); hint(); });
   $('currency').addEventListener('change', hint);
   $('form').addEventListener('submit', function (e) { e.preventDefault(); submit(); });
+  $('keyboard-done').addEventListener('click', dismissKeyboard);
+  document.addEventListener('focusin', keyboardActions);
+  document.addEventListener('focusout', function () { requestAnimationFrame(keyboardActions); });
+  document.addEventListener('pointerdown', function (e) {
+    if (!textInput(document.activeElement) || e.target.closest('input')) return;
+    // Blur the text field BEFORE iOS opens a native picker, so closing it cannot restore the amount keyboard.
+    if (e.target.closest('select,label')) { document.activeElement.blur(); return; }
+    // Keep Done visible until its click is handled (also when tapping its padding).
+    if (e.target.closest('#keyboard-done')) { e.preventDefault(); return; }
+    dismissKeyboard();
+  });
+  $('form').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && textInput(e.target)) { e.preventDefault(); dismissKeyboard(); }
+  });
+  ['category', 'account', 'currency', 'date'].forEach(function (id) {
+    $(id).addEventListener('change', dismissKeyboard);
+  });
+  window.addEventListener('resize', viewportActions);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', viewportActions);
+    window.visualViewport.addEventListener('scroll', viewportActions);
+  }
+  viewportActions();
 
-  if (tg && tg.initData) {
+  if (tg) {
+    // Do this even if Telegram has not supplied initData: never leave a stale native action visible.
+    if (tg.MainButton) tg.MainButton.hide();
     document.documentElement.dataset.scheme = tg.colorScheme || 'light';
     tg.onEvent('themeChanged', function () { document.documentElement.dataset.scheme = tg.colorScheme; validate(); });
-    tg.ready(); tg.expand();
-    if (tg.MainButton) tg.MainButton.hide();
+    if (tg.initData) { tg.ready(); tg.expand(); }
   }
   call('context', {}).then(function (c) { ctx = c; if (!ctx.accounts.length) throw new Error('В общей базе нет активных счетов.'); render(); })
     .catch(function (e) { $('loading').textContent = e.message; $('loading').className = 'note error'; });
