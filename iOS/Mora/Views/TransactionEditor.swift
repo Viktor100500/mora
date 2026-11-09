@@ -47,7 +47,7 @@ struct TransactionEditor: View {
         newWalletCard = walletCapture.flatMap { $0.awaitsCardLink ? ($0.card ?? "") : nil }
         let dateReference = source?.date ?? draft?.date ?? Date()
         _merchant = State(initialValue: source?.merchant ?? draft?.merchant ?? "")
-        _amount = State(initialValue: source.map { Money.plain(abs($0.conversion?.originalAmount ?? $0.amount)) } ?? draft?.prefillAmount ?? "")
+        _amount = State(initialValue: source.map { Money.plain(abs($0.conversion?.originalAmount ?? $0.sameCurrencyFee?.originalAmount ?? $0.amount)) } ?? draft?.prefillAmount ?? "")
         _kind = State(initialValue: source?.kind ?? .expense)
         _date = State(initialValue: dateReference)
         _accountID = State(initialValue: source?.accountID ?? (draft == nil ? ledger.suggestedTransactionAccountID : draft?.accountID))
@@ -148,6 +148,11 @@ struct TransactionEditor: View {
                     }
                 }
                 if needsConversion { Section(L("Пересчет Visa")) { conversionPreview } }
+                if !needsConversion, let draft = balanceDraft, let fee = draft.sameCurrencyFee, let account {
+                    Section {
+                        FinancialText(L("Будет списано с комиссией \(Money.plain(fee.percent))%: \(DisplayMoney.string(abs(draft.amount), currency: account.currency))"))
+                    }
+                }
                 Section {
                     TextField(L("Название"), text: $merchant).focused($focus, equals: .merchant).textInputAutocapitalization(.sentences)
                     if focus == .merchant && !merchantSuggestions.isEmpty {
@@ -365,10 +370,11 @@ struct TransactionEditor: View {
         guard !needsConversion || converted != nil else { return nil }
         var signed = kind == .income ? value : -value
         if standaloneTransfer { signed = (transaction?.amount ?? 0) > 0 ? value : -value }
-        return Transaction(id: transaction?.id ?? newTransactionID, date: date,
+        let draft = Transaction(id: transaction?.id ?? newTransactionID, date: date,
                            merchant: "", amount: converted ?? signed, accountID: accountID, kind: kind,
                            destinationAccountID: kind == .transfer && !standaloneTransfer ? destinationID : nil,
                            destinationAmount: kind == .transfer && !standaloneTransfer ? (sameCurrency ? value : AmountInput.parse(destinationAmount)) : nil)
+        return needsConversion ? draft : (try? ledger.applyingPurchaseFee(to: draft))
     }
 
     @ViewBuilder private var balancePreview: some View {

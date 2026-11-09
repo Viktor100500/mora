@@ -56,7 +56,7 @@ public extension Transaction {
         }
         try apply(\.date); try apply(\.merchant); try apply(\.amount); try apply(\.accountID)
         try apply(\.categoryID); try apply(\.kind); try apply(\.note); try apply(\.tags)
-        try apply(\.destinationAccountID); try apply(\.destinationAmount); try apply(\.conversion)
+        try apply(\.destinationAccountID); try apply(\.destinationAmount); try apply(\.conversion); try apply(\.sameCurrencyFee)
         return merged
     }
 

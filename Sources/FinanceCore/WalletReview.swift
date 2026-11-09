@@ -60,7 +60,7 @@ public struct WalletReviewDraft: Sendable {
             }
             .max { $0.date < $1.date }
         guard let match else { return nil }
-        let original = match.conversion?.originalAmount ?? match.amount
+        let original = match.conversion?.originalAmount ?? match.sameCurrencyFee?.originalAmount ?? match.amount
         guard let currency = match.conversion?.originalCurrency ?? ledger.account(match.accountID)?.currency, original != 0 else { return nil }
         return AmountSuggestion(amount: Money.plain(abs(original)), currency: currency, date: match.date, merchant: match.merchant)
     }
@@ -130,6 +130,7 @@ public struct WalletReviewDraft: Sendable {
         var value = transaction
         value.id = capture.id
         value.externalID = "wallet:" + capture.id.uuidString.lowercased()
+        value = try ledger.applyingPurchaseFee(to: value)
         var validation = ledger
         // A retry after a lost response must be allowed to fetch the committed result.
         validation.transactions.removeAll { $0.id == value.id && $0.externalID == value.externalID }

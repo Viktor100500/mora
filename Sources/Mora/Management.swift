@@ -50,12 +50,14 @@ struct AccountEditor: View {
     @State private var kind: AccountKind
     @State private var opening: String
     @State private var conversionFee: String
+    @State private var purchaseFee: String
     @State private var color: String
     init(account: Account?) {
         _conversionFee = State(initialValue: Money.plain(account?.bankFeePercent ?? 0))
+        _purchaseFee = State(initialValue: Money.plain(account?.purchaseFeePercent ?? 0))
         self.account = account; _name = State(initialValue: account?.name ?? ""); _currency = State(initialValue: account?.currency ?? "RUB"); _kind = State(initialValue: account?.kind ?? .checking); _opening = State(initialValue: account.map { Money.plain($0.openingBalance) } ?? "0"); _color = State(initialValue: account?.color ?? "green")
     }
-    private var validFee: Bool { guard let fee = Money.parse(conversionFee) else { return false }; return fee >= 0 && fee <= 100 }
+    private var validFee: Bool { guard let fee = Money.parse(conversionFee), let purchase = Money.parse(purchaseFee) else { return false }; return fee >= 0 && fee <= 100 && purchase >= 0 && purchase <= 100 }
     private var used: Bool { guard let account else { return false }; return store.ledger.transactions.contains { $0.accountID == account.id || $0.destinationAccountID == account.id } || store.ledger.recurring.contains { $0.accountID == account.id } }
     private var normalizedName: String { name.trimmingCharacters(in: .whitespacesAndNewlines) }
     private var nameAlreadyUsed: Bool { hasNameConflict(in: store.ledger) }
@@ -76,15 +78,22 @@ struct AccountEditor: View {
                         Picker(L("Валюта"), selection: $currency) { ForEach(Array(Set(currencyList + [currency])).sorted(), id: \.self) { Text($0).tag($0) } }.disabled(used)
                     }
                     accountField("Начальный остаток") { TextField(L("Начальный остаток"), text: $opening).financialField() }
-                    accountField("Комиссия, %") { TextField(L("Комиссия за конвертацию, %"), text: $conversionFee) }
+                    accountField("Конвертация, %") { TextField(L("Комиссия за конвертацию, %"), text: $conversionFee) }
+                    accountField("Покупки, %") { TextField(L("Комиссия за покупки, %"), text: $purchaseFee) }
                 }
                 .textFieldStyle(.roundedBorder)
                 if nameAlreadyUsed {
                     Label(L("Счет с таким названием уже существует."), systemImage: "exclamationmark.circle.fill")
                         .font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
                 }
-                Text(L("Добавляется к курсу Visa при расходах в другой валюте. 0 — без комиссии. Сохраненные операции не пересчитываются."))
+                Text(L("Комиссия за конвертацию применяется к расходам в другой валюте. Изменение пересчитывает предыдущие расходы по сохранённому курсу."))
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Text(L("Комиссия за покупки применяется к расходам в валюте счета. Изменение пересчитывает предыдущие расходы по исходной сумме."))
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                if (Money.parse(purchaseFee) ?? 0) > 0 {
+                    Text(L("Перед включением обновите Mora на всех устройствах общей базы. Старые версии не смогут синхронизировать эти данные."))
+                        .font(.caption).foregroundStyle(.orange).fixedSize(horizontal: false, vertical: true)
+                }
                 Divider()
                 ColorPickerRow(color: $color)
                 Text(L("Укажите остаток перед самой ранней операцией, которую будете добавлять или импортировать. Для учета только новых операций — текущий остаток.")).font(.caption).foregroundStyle(.secondary)
@@ -100,13 +109,15 @@ struct AccountEditor: View {
     }
     private func save() { guard !saving else { return }; saving = true
         Task { @MainActor in defer { saving = false };
-        guard !normalizedName.isEmpty, !nameAlreadyUsed, validFee, let fee = Money.parse(conversionFee), let opening = Money.parse(opening) else { return }
+        guard !normalizedName.isEmpty, !nameAlreadyUsed, validFee, let fee = Money.parse(conversionFee), let purchase = Money.parse(purchaseFee), let opening = Money.parse(opening) else { return }
         var a = account ?? Account(name: name)
-        a.name = normalizedName; a.currency = currency; a.kind = kind; a.openingBalance = opening; a.color = color; a.conversionFeePercent = fee == 0 ? nil : fee
+        a.name = normalizedName; a.currency = currency; a.kind = kind; a.openingBalance = opening; a.color = color
         let value = a, originalID = account?.id, expectedName = normalizedName
         if await store.update({ ledger in
             guard !ledger.accounts.contains(where: { $0.id != originalID && $0.name.trimmingCharacters(in: .whitespacesAndNewlines).localizedCaseInsensitiveCompare(expectedName) == .orderedSame }) else { throw LedgerError.invalid(L("Счет с таким названием уже существует.")) }
             replaceOrAppend(value, in: &ledger.accounts)
+            try ledger.setConversionFee(fee, accountID: value.id)
+            try ledger.setPurchaseFee(purchase, accountID: value.id)
         }) { dismiss() }
      } }
 }

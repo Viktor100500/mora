@@ -1,10 +1,36 @@
 # Changelog
 
+## 1.7.8 — 2026-11-09
+
+Mac 1.7.8 (build 87)
+
+- **Telegram bot for purchases.** A new optional Supabase function, `mora-telegram`, records purchases from a strict form in a Telegram Mini App: amount, currency, merchant, category, account and date, with no free-text parsing. A Telegram HTML bubble widget offers recent merchants with a keypad. Purchases in the account's currency are booked at once with their category and the account's purchase fee; other currencies wait in the inbox for the Visa conversion. Requires the `telegram_bot` cloud migration after `same_currency_purchase_fee`. Setup is in `cloud/telegram/README.md`.
+
+## 1.7.6 — 2026-11-08
+
+Mac 1.7.6 (build 85) · iPhone 1.0.37 (build 38)
+
+- **Purchase fees.** Accounts can set separate percentages for expenses in the account currency and for currency conversion. Changing either fee recalculates existing expenses from their recorded original amounts or saved exchange rates. New expenses include the applicable fee.
+- Legacy split foreign-currency expenses lack per-part exchange details; changing their conversion fee is blocked rather than recalculating them incorrectly.
+- Requires the `same_currency_purchase_fee` cloud migration and updated Mora versions on all shared devices before enabling the new fee.
+
+## 1.7.5 — 2026-11-08
+
+Mac 1.7.5 (build 84)
+
+- **Transaction diagnostics.** The local diagnostic log records data refreshes and filtered-list updates to help investigate intermittent freezes.
+
+## 1.7.4 — 2026-11-08
+
+Mac 1.7.4 (build 83)
+
+- **Cloud sync diagnostics.** A local, size-limited log records sync stages and cancellation codes without financial data or credentials.
+
 ## 1.7.3 — 2026-11-08
 
 Mac 1.7.3 (build 82)
 
-- **Telegram bot for purchases.** A new optional Supabase function, `mora-telegram`, records purchases from a strict form in a Telegram Mini App: amount, currency, merchant, category, account and date, with no free-text parsing. A Telegram HTML bubble widget offers recent merchants with a keypad. Purchases in the account's currency are booked at once with their category; other currencies wait in the inbox for the Visa conversion. Setup is in `cloud/telegram/README.md`.
+- **Cloud sync.** Cancelled network requests no longer appear as errors, and background sync can retry promptly.
 
 ## 1.7.2 — 2026-11-08
 

@@ -5,7 +5,8 @@
 -- at once; another currency waits in the inbox, where open Mora converts it at
 -- the Visa rate as for Apple Pay. Booked purchases use the Wallet convention
 -- (transaction id = capture id, externalID wallet:<id>), so Mora collects them
--- into a rollbackable import. Apply after wallet_card_currency_accounts.
+-- into a rollbackable import. The account's same-currency purchase fee is added
+-- as for Apple Pay. Apply after same_currency_purchase_fee.
 begin;
 
 -- Internal: the active phone key. The member who created it must still belong to the household.
@@ -109,6 +110,14 @@ begin
       'note', concat_ws(' · ', nullif(p_note,''), t.label), 'tags', jsonb_build_array('Telegram'),
       'externalID', 'wallet:' || capture.id::text);
     if category is not null then tx := tx || jsonb_build_object('categoryID', category->>'id'); end if;
+    -- The form takes the purchase price; add the account's fee once, as for Apple Pay.
+    if coalesce((account->>'sameCurrencyFeePercent')::numeric, 0) > 0 then
+      if (account->>'sameCurrencyFeePercent')::numeric > 100 then raise exception 'Invalid purchase fee'; end if;
+      tx := tx || jsonb_build_object('sameCurrencyFee', jsonb_build_object('originalAmount', -p_amount,
+        'percent', (account->>'sameCurrencyFeePercent')::numeric),
+        'amount', round(-p_amount * (1 + (account->>'sameCurrencyFeePercent')::numeric / 100),
+                        public.mora_currency_decimals(account->>'currency')));
+    end if;
     snap := jsonb_set(snap, '{transactions}', (snap->'transactions') || jsonb_build_array(tx));
     perform public.mora_validate_snapshot(snap);
     update public.mora_households set snapshot=snap, version=version+1, updated_at=now() where id=t.household_id;

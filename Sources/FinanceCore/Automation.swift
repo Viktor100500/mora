@@ -20,7 +20,7 @@ public struct MoraAutomation {
         var rates: [String: CardConversion] = [:]
         for i in normalized.rows.indices {
             let row = normalized.rows[i]
-            guard row.count == 12 else { throw LedgerError.invalid("Строка \(i + 2): ожидается 12 колонок.") }
+            guard row.count == normalized.headers.count else { throw LedgerError.invalid("Строка \(i + 2): неверное число колонок.") }
             let account = try account(named: row[4], ledger: ledger)
             let currency = row[3].uppercased()
             guard currency != account.currency else { continue }
@@ -83,7 +83,8 @@ public struct MoraAutomation {
         for var value in originals {
             if value.accountID == target.id { values.append(value); continue }
             let currency = value.conversion?.originalCurrency ?? expected.currency
-            let amount = value.conversion?.originalAmount ?? value.amount
+            let amount = value.conversion?.originalAmount ?? value.sameCurrencyFee?.originalAmount ?? value.amount
+            value.sameCurrencyFee = nil
             if currency == target.currency { value.amount = amount; value.conversion = nil }
             else {
                 let key = "\(Dates.string(value.date))|\(currency)|\(target.currency)"
@@ -98,6 +99,7 @@ public struct MoraAutomation {
                 value.amount = try conversion.convertedAmount(); value.conversion = conversion
             }
             value.accountID = target.id
+            value = try initial.applyingPurchaseFee(to: value)
             values.append(value)
         }
         let dryRun = arguments["dry_run"] as? Bool ?? true
@@ -264,7 +266,7 @@ public struct MoraAutomation {
         }
         table = try CSVTable.parse(lines.joined(separator: "\r\n") + "\r\n")
     }
-    guard table.headers == Self.csvHeader.components(separatedBy: ","), table.rows.count <= 10_000 else { throw LedgerError.invalid("Ожидается стандартный CSV Mora с 12 колонками и не более 10000 строк.") }
+    guard [Self.csvHeader, Self.csvHeader + ",fee_original_amount,fee_percent,fee_rounding_adjustment"].contains(table.headers.joined(separator: ",")), table.rows.count <= 10_000 else { throw LedgerError.invalid("Ожидается стандартный CSV Mora и не более 10000 строк.") }
         return table
     }
 
@@ -310,7 +312,7 @@ public struct MoraAutomation {
     private func prepare(_ table: CSVTable, ledger: Ledger, allowCategories: Bool, conversions: [Int: CardConversion] = [:]) throws -> CSVImportResult {
         var corrected = table
         for i in corrected.rows.indices {
-            guard corrected.rows[i].count == 12 else { continue }
+            guard corrected.rows[i].count == corrected.headers.count else { continue }
             do {
                 let source = try account(named: corrected.rows[i][4], ledger: ledger)
                 corrected.rows[i][4] = source.name
