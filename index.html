@@ -10,7 +10,7 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
 :root{--bg:var(--tg-theme-bg-color,#fff);--text:var(--tg-theme-text-color,#111);--hint:var(--tg-theme-hint-color,#8a8f98);
---field:var(--tg-theme-secondary-bg-color,#f1f3f6);--accent:var(--tg-theme-button-color,#2a8bf2);--accent-text:var(--tg-theme-button-text-color,#fff);
+--field:var(--tg-theme-secondary-bg-color,#f1f3f6);--accent:#336e57;--accent-text:#fff;--done:#336e57;
 --danger:var(--tg-theme-destructive-text-color,#d6453d)}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 -apple-system,system-ui,sans-serif;-webkit-text-size-adjust:100%}
@@ -30,15 +30,17 @@ input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
 .chips button{flex:none;font:inherit;font-size:14px;border:0;border-radius:16px;padding:6px 12px;background:var(--field);color:var(--text)}
 .note{margin-top:10px;font-size:13px;color:var(--hint)}
 .error{color:var(--danger)}
-.done{color:#2e9e55}
+.done{color:var(--done)}
+/* Mora green, as in the apps (moraGreen and its dark variant). */
+:root[data-scheme=dark]{--accent:#40826a;--done:#85ba99}
 #send{display:none;width:100%;margin-top:18px;font:inherit;font-weight:600;border:0;border-radius:12px;padding:14px;background:var(--accent);color:var(--accent-text)}
 #send:disabled{opacity:.5}
 .hidden{display:none}
 #yay{position:fixed;inset:0;z-index:10;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .25s}
 #yay.on{opacity:1}
-#yay>div{width:min(320px,86vw);background:var(--bg);border-radius:20px;padding:16px 16px 18px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.25)}
+#yay>div{width:min(320px,86vw);background:linear-gradient(160deg,#12301f,#060e0b);color:#e6f2e0;border-radius:20px;padding:16px 16px 18px;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.25)}
 #yay b{display:block;font-size:17px;margin-top:4px}
-#yay small{display:block;color:var(--hint);margin-top:6px;font-size:13px}
+#yay small{display:block;color:rgba(230,242,224,.7);margin-top:6px;font-size:13px}
 .cat{transform-box:fill-box;transform-origin:center;animation:kiss 1.3s ease-in-out 2}
 @keyframes kiss{0%,100%{transform:none}50%{transform:translateX(30px) rotate(10deg)}}
 .ht{transform-box:fill-box;transform-origin:center;opacity:0;animation:up 1.3s ease-out .45s 2}
@@ -73,13 +75,13 @@ input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
 </main>
 <!-- Yar the cat kisses Nastya after a purchase: the same scene as the widget (functions/mora-telegram/widget.ts). -->
 <div id="yay" aria-live="polite"><div><svg viewBox="0 0 200 110" width="100%" height="170" aria-label="Котик Яр целует Настеньку">
-<g class="nas"><path d="M110 72a28 30 0 0 1 56 0v30h-56z" fill="#5b3a29"/><circle cx="138" cy="66" r="22" fill="#ffd9c2"/>
-<path d="M115 63c4-21 42-25 46 0c-11-9-32-11-46 0z" fill="#5b3a29"/><path d="M128 66q4 3 8 0M142 66q4 3 8 0M134 78q4 4 8 0" stroke="#5a2a2a" stroke-width="2" fill="none"/>
-<circle cx="126" cy="74" r="4" fill="#ff8fa3" opacity=".7"/><circle cx="151" cy="74" r="4" fill="#ff8fa3" opacity=".7"/></g>
-<g class="cat"><path d="M45 54l5-24 15 15zM95 54l-5-24-15 15z" fill="#f2a541"/><ellipse cx="70" cy="67" rx="27" ry="23" fill="#f2a541"/>
-<path d="M58 63q4-4 8 0M74 63q4-4 8 0M70 74q-4 5-8 2M70 74q4 5 8 2" stroke="#3b2a1a" stroke-width="2" fill="none"/><path d="M67 70h6l-3 4z" fill="#ff7b9c"/>
-<path d="M38 71h15M38 77h15M87 71h15M87 77h15" stroke="#7a4b14"/></g>
-<path class="ht" d="M108 34c-4-8-16-4-12 4l12 12 12-12c4-8-8-12-12-4z" fill="#ff5c8a"/></svg><b>Яр целует Настеньку · чмок!</b><small id="yay-text"></small></div></div>
+<g class="nas"><path d="M110 72a28 30 0 0 1 56 0v30h-56z" fill="#1c4f3b"/><circle cx="138" cy="66" r="22" fill="#f2ead8" stroke="#336e57" stroke-width="1.5"/>
+<path d="M115 63c4-21 42-25 46 0c-11-9-32-11-46 0z" fill="#1c4f3b"/><path d="M128 66q4 3 8 0M142 66q4 3 8 0M134 78q4 4 8 0" stroke="#1c4f3b" stroke-width="2" fill="none"/>
+<circle cx="126" cy="74" r="4" fill="#70b88f" opacity=".55"/><circle cx="151" cy="74" r="4" fill="#70b88f" opacity=".55"/></g>
+<g class="cat"><path d="M45 54l5-24 15 15zM95 54l-5-24-15 15z" fill="#edf2de" stroke="#336e57" stroke-width="1.5" stroke-linejoin="round"/><ellipse cx="70" cy="67" rx="27" ry="23" fill="#edf2de" stroke="#336e57" stroke-width="1.5"/>
+<path d="M58 63q4-4 8 0M74 63q4-4 8 0M70 74q-4 5-8 2M70 74q4 5 8 2" stroke="#1c4f3b" stroke-width="2" fill="none"/><path d="M67 70h6l-3 4z" fill="#70b88f"/>
+<path d="M38 71h15M38 77h15M87 71h15M87 77h15" stroke="#40826a"/></g>
+<path class="ht" d="M108 34c-4-8-16-4-12 4l12 12 12-12c4-8-8-12-12-4z" fill="#70b88f"/></svg><b>Яр целует Настеньку · чмок!</b><small id="yay-text"></small></div></div>
 <script>
 (function () {
   var tg = window.Telegram && Telegram.WebApp;
@@ -160,10 +162,11 @@ input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
     if (!new RegExp('^\\d{1,12}' + (d ? '(\\.\\d{1,' + d + '})?' : '') + '$').test(raw)) return null;
     var n = Number(raw); return n > 0 ? n : null;
   }
+  function accent() { return getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#336e57'; }
   function valid() { return !!(ctx && amountValue() && $('merchant').value.trim() && $('account').value && $('date').value && $('date').value <= today()); }
   function validate() {
     var ok = valid();
-    if (tg && tg.MainButton) { ok ? tg.MainButton.enable() : tg.MainButton.disable(); tg.MainButton.color = ok ? tg.themeParams.button_color || '#2a8bf2' : tg.themeParams.hint_color || '#a0a4ab'; }
+    if (tg && tg.MainButton) { ok ? tg.MainButton.enable() : tg.MainButton.disable(); tg.MainButton.color = ok ? accent() : tg.themeParams.hint_color || '#a0a4ab'; tg.MainButton.textColor = '#ffffff'; }
     $('send').disabled = !ok;
   }
 
@@ -202,6 +205,8 @@ input:focus,select:focus{box-shadow:0 0 0 2px var(--accent)}
   $('form').addEventListener('submit', function (e) { e.preventDefault(); submit(); });
 
   if (tg && tg.initData) {
+    document.documentElement.dataset.scheme = tg.colorScheme || 'light';
+    tg.onEvent('themeChanged', function () { document.documentElement.dataset.scheme = tg.colorScheme; validate(); });
     tg.ready(); tg.expand();
     tg.MainButton.setText('Записать'); tg.MainButton.show(); tg.MainButton.onClick(submit);
   } else {
