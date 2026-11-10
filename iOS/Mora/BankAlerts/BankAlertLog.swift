@@ -296,13 +296,15 @@ struct LogBankMessageIntent: AppIntent {
     @Parameter(title: "Text") var text: String?
     @Parameter(title: "From") var source: String?
     @Parameter(title: "Title") var title: String?
+    /// Wallet is reported to put the merchant here and only the amount in the text.
+    @Parameter(title: "Subtitle") var subtitle: String?
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Log \(\.$text) from \(\.$source)") { \.$title }
+        Summary("Log \(\.$text) from \(\.$source)") { \.$title; \.$subtitle }
     }
 
     func perform() async throws -> some IntentResult {
-        let body = [title, text].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.joined(separator: "\n")
+        let body = [title, subtitle, text].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.joined(separator: "\n")
         guard !body.isEmpty else { return .result() }
         let sender = WalletSender.current()
         if let alert = try? BankAlertLog.record(text: body, source: source ?? "", sending: sender != nil) {

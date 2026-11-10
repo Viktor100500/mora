@@ -256,7 +256,7 @@
   "Для каждого приложения банка сделайте свою автоматизацию. Добавьте такую же для Wallet: его уведомление приносит сумму и продавца проезда в транспорте, которых ещё нет в момент оплаты.": "Make a separate automation for each bank app. Add the same one for Wallet: its notification brings the amount and merchant of a transit ride, which are not known yet at the tap.",
   "Сумма получена из сообщения банка или уведомления Wallet": "Amount received from a bank message or a Wallet notification",
   "Добавьте действие Mora «Log Bank Message». В «Text» выберите «Входные данные команды» → «Содержимое», в «From» — «Входные данные команды» → «Отправитель».": "Add the Mora action “Log Bank Message”. For “Text”, choose Shortcut Input → Content; for “From”, choose Shortcut Input → Sender.",
-  "Добавьте действие Mora «Log Bank Message». В «Text» выберите «Уведомление» → «Текст», в «Title» — «Уведомление» → «Заголовок», в «From» впишите название приложения.": "Add the Mora action “Log Bank Message”. For “Text”, choose Notification → Body; for “Title”, choose Notification → Title; type the app name in “From”.",
+  "Добавьте действие Mora «Log Bank Message». В «Text» выберите «Уведомление» → «Текст», в «Title» — «Уведомление» → «Заголовок», в «Subtitle» — «Уведомление» → «Подзаголовок», в «From» впишите название приложения.": "Add the Mora action “Log Bank Message”. For “Text”, choose Notification → Body; for “Title”, choose Notification → Title; for “Subtitle”, choose Notification → Subtitle; type the app name in “From”.",
   "Журнал": "Journal",
   "Записать и запомнить формат": "Record and Remember Format",
   "Запомненные форматы": "Remembered Formats",
