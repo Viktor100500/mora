@@ -93,15 +93,17 @@ actor WalletDelivery {
 
     /// A bank message or a Wallet notification reports what Wallet did not pass at the tap:
     /// completes the latest purchase without amount saved shortly before it.
-    func complete(amount: String, merchant: String, reportedAt: Date, now: Date = .now) -> WalletRun? {
-        guard var run = WalletRunLog.runs(in: directory).first(where: {
+    /// A Wallet notification may name the card: a purchase paid with it is preferred.
+    func complete(amount: String, merchant: String, card: String? = nil, reportedAt: Date, now: Date = .now) -> WalletRun? {
+        let waiting = WalletRunLog.runs(in: directory).filter {
             let passed = reportedAt.timeIntervalSince($0.receivedAt)
             return [.waiting, .awaitingAmount].contains($0.delivery) && $0.amount.isEmpty && passed > -60 && passed < Self.completionHold
-        }) else { return nil }
+        }
+        guard var run = waiting.first(where: { card.map($0.card.caseInsensitiveCompare) == .orderedSame }) ?? waiting.first else { return nil }
         run.amount = amount
         if run.sentMerchant.isEmpty { run.merchant = merchant }
         run.delivery = .waiting
-        run.log("Сумма получена из сообщения банка или уведомления Wallet", at: now)
+        run.log("Сумма получена из уведомления Wallet или сообщения банка", at: now)
         try? WalletRunLog.save(run, in: directory)
         return run
     }

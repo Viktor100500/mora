@@ -40,7 +40,8 @@ struct BankAlert: Codable, Identifiable, Equatable, Sendable {
     var serverState: String?
     /// The Wallet run of the same purchase. A pair is never matched again.
     var walletRunID: UUID?
-    /// A Wallet notification: it names no card and only completes a Wallet purchase.
+    /// Came from the Wallet notification action: it completes a Wallet purchase and is
+    /// never booked by itself. `source` is the notification title, the card or its bank.
     var wallet: Bool?
 
     /// The card name sent to the shared database. Mora links it to an account
@@ -91,6 +92,31 @@ enum BankAlertLog {
                 alert.state = sending ? .waiting : .logged
             }
         }
+        try save(alert, in: directory)
+        prune(before: date.addingTimeInterval(-Double(keptDays) * 86_400), in: directory)
+        return alert
+    }
+
+    /// A Wallet notification, passed field by field by its own action and never read as a
+    /// bank message. Its fields are kept as received, also when no purchase is found in them.
+    @discardableResult
+    static func recordWallet(title: String, subtitle: String, body: String, at date: Date = .now,
+                             directory: URL = directory, walletRuns: [WalletRun] = WalletRunLog.runs()) throws -> BankAlert {
+        let fields = [("Title", title), ("Subtitle", subtitle), ("Body", body)]
+            .map { ($0.0, BankMessage.normalized($0.1)) }.filter { !$0.1.isEmpty }
+        // Wallet is reported to name the card in the title; on some iPhones it is the card's bank.
+        let card = BankMessage.normalized(title).components(separatedBy: "\n").first ?? ""
+        var alert = BankAlert(receivedAt: date, source: card.isEmpty ? "Wallet" : card,
+                              text: fields.map { "\($0.0): \($0.1)" }.joined(separator: "\n"), state: .ignored, ignoredReason: .noTransaction)
+        if let value = BankMessage.walletNotification(subtitle: subtitle, body: body) {
+            alert.state = .review; alert.ignoredReason = nil
+            alert.apply(value)
+            if let run = pairableRun(for: alert, in: walletRuns, pairedIn: directory) {
+                alert.state = .duplicate; alert.walletRunID = run.id
+                alert.lastError = "Эта покупка уже пришла из Wallet: сообщение не отправлено."
+            }
+        }
+        alert.wallet = true
         try save(alert, in: directory)
         prune(before: date.addingTimeInterval(-Double(keptDays) * 86_400), in: directory)
         return alert
@@ -257,7 +283,8 @@ actor BankAlertDelivery {
         guard var alert = BankAlertLog.alerts(in: directory).first(where: { $0.id == id }),
               alert.state != .duplicate, alert.state != .ignored, !alert.income, !alert.amount.isEmpty,
               let run = await wallet.complete(amount: [alert.amount, alert.currency].filter { !$0.isEmpty }.joined(separator: " "),
-                                              merchant: alert.merchant, reportedAt: alert.receivedAt, now: now) else { return }
+                                              merchant: alert.merchant, card: alert.wallet == true ? alert.source : nil,
+                                              reportedAt: alert.receivedAt, now: now) else { return }
         alert.state = .duplicate; alert.walletRunID = run.id
         alert.lastError = "Сумма добавлена к покупке из Wallet, которая пришла без суммы."
         try? BankAlertLog.save(alert, in: directory)
@@ -296,15 +323,13 @@ struct LogBankMessageIntent: AppIntent {
     @Parameter(title: "Text") var text: String?
     @Parameter(title: "From") var source: String?
     @Parameter(title: "Title") var title: String?
-    /// Wallet is reported to put the merchant here and only the amount in the text.
-    @Parameter(title: "Subtitle") var subtitle: String?
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Log \(\.$text) from \(\.$source)") { \.$title; \.$subtitle }
+        Summary("Log \(\.$text) from \(\.$source)") { \.$title }
     }
 
     func perform() async throws -> some IntentResult {
-        let body = [title, subtitle, text].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.joined(separator: "\n")
+        let body = [title, text].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.joined(separator: "\n")
         guard !body.isEmpty else { return .result() }
         let sender = WalletSender.current()
         if let alert = try? BankAlertLog.record(text: body, source: source ?? "", sending: sender != nil) {
@@ -314,6 +339,33 @@ struct LogBankMessageIntent: AppIntent {
             await WalletDelivery.shared.deliverWaiting(with: sender)
             await BankAlertDelivery.shared.deliverWaiting(with: sender)
         }
+        return .result()
+    }
+}
+
+/// The Shortcuts action for the iOS 27 "Notification" automation of the Wallet app. Wallet
+/// starts the "Transaction" automation before a transit tap is priced; its notification
+/// brings the amount and merchant later and completes that purchase. Separate from bank
+/// messages: nothing here is read as a text message. Each field of the notification is
+/// picked once, in the sentence of the action.
+struct LogWalletNotificationIntent: AppIntent {
+    static let title: LocalizedStringResource = "Log Wallet Notification"
+    static let description = IntentDescription("Completes a Wallet purchase that arrived without amount or merchant, such as a transit tap, from the Wallet notification. Pass the Title, Subtitle and Body of the notification.")
+    static let openAppWhenRun = false
+    static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
+
+    @Parameter(title: "Title") var title: String?
+    @Parameter(title: "Subtitle") var subtitle: String?
+    @Parameter(title: "Body") var body: String?
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("Log Wallet notification \(\.$title), \(\.$subtitle), \(\.$body)")
+    }
+
+    func perform() async throws -> some IntentResult {
+        guard let alert = try? BankAlertLog.recordWallet(title: title ?? "", subtitle: subtitle ?? "", body: body ?? "") else { return .result() }
+        await BankAlertDelivery.shared.completeWallet(alert.id)
+        if let sender = WalletSender.current() { await WalletDelivery.shared.deliverWaiting(with: sender) }
         return .result()
     }
 }

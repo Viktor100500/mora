@@ -280,6 +280,8 @@ struct MoraAppShortcuts: AppShortcutsProvider {
                     shortTitle: "Start Wallet Payment", systemImageName: "wallet.pass")
         AppShortcut(intent: AddWalletAmountIntent(), phrases: ["Add Wallet amount in \(.applicationName)"],
                     shortTitle: "Finish Wallet Payment", systemImageName: "dollarsign.circle")
+        AppShortcut(intent: LogWalletNotificationIntent(), phrases: ["Log Wallet notification in \(.applicationName)"],
+                    shortTitle: "Log Wallet Notification", systemImageName: "bell.badge")
         AppShortcut(intent: LogBankMessageIntent(), phrases: ["Log bank message in \(.applicationName)"],
                     shortTitle: "Log Bank Message", systemImageName: "message")
     }

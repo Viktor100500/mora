@@ -20,17 +20,20 @@ final class BankMessageTests: XCTestCase {
         XCTAssertFalse(value.automatic)
     }
 
-    func testWalletNotificationHasMerchantAndAmountOnTheirOwnLines() throws {
-        let transit = try parsed("Raiffeisen banka a.d. Beograd\nNjtransit Paygo Iron, Jersey City, NJ\n$5.45", sender: "Wallet")
+    func testWalletNotificationIsReadFieldByField() throws {
+        let transit = try XCTUnwrap(BankMessage.walletNotification(subtitle: "", body: "Njtransit Paygo Iron, Jersey City, NJ\n$5.45"))
         XCTAssertTrue(transit.wallet)
-        XCTAssertFalse(transit.automatic, "it names no card, so it is never booked by itself")
+        XCTAssertFalse(transit.automatic)
         XCTAssertEqual(transit.amount, Decimal(string: "5.45"))
         XCTAssertEqual(transit.currency, "USD")
         XCTAssertEqual(transit.merchant, "Njtransit Paygo Iron")
-        XCTAssertEqual(try parsed("Metropolitan Transportation Authority\n$3.00").merchant, "Metropolitan Transportation Authority")
-        XCTAssertEqual(try parsed("Card\nPort Authority of New York & New Jersey, New York, NY\n$3.25").merchant, "Port Authority of New York & New Jersey")
-        XCTAssertFalse(try parsed("Chase: You made a $12.34 transaction with STARBUCKS 1234 on card (...5678)").wallet)
-        XCTAssertEqual(BankMessage.parse("Sale ends soon\nSave up to\n$35.00 today"), .ignored(.noTransaction))
+        let split = try XCTUnwrap(BankMessage.walletNotification(subtitle: "Port Authority of New York & New Jersey, New York, NY", body: "$3.25"))
+        XCTAssertEqual(split.merchant, "Port Authority of New York & New Jersey"); XCTAssertEqual(split.amount, Decimal(string: "3.25"))
+        let inline = try XCTUnwrap(BankMessage.walletNotification(subtitle: "", body: "Metropolitan Transportation Authority $3.00"))
+        XCTAssertEqual(inline.merchant, "Metropolitan Transportation Authority"); XCTAssertEqual(inline.amount, 3)
+        XCTAssertNil(BankMessage.walletNotification(subtitle: "", body: "Your card is ready for Apple Pay"))
+        XCTAssertEqual(BankMessage.parse("Raiffeisen banka a.d. Beograd\nNjtransit Paygo Iron, Jersey City, NJ\n$5.45"), .ignored(.noTransaction),
+                       "bank messages are never read as Wallet notifications")
     }
 
     private let raiffeisen = """
