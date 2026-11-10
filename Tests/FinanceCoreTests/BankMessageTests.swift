@@ -20,6 +20,19 @@ final class BankMessageTests: XCTestCase {
         XCTAssertFalse(value.automatic)
     }
 
+    func testWalletNotificationHasMerchantAndAmountOnTheirOwnLines() throws {
+        let transit = try parsed("Raiffeisen banka a.d. Beograd\nNjtransit Paygo Iron, Jersey City, NJ\n$5.45", sender: "Wallet")
+        XCTAssertTrue(transit.wallet)
+        XCTAssertFalse(transit.automatic, "it names no card, so it is never booked by itself")
+        XCTAssertEqual(transit.amount, Decimal(string: "5.45"))
+        XCTAssertEqual(transit.currency, "USD")
+        XCTAssertEqual(transit.merchant, "Njtransit Paygo Iron")
+        XCTAssertEqual(try parsed("Metropolitan Transportation Authority\n$3.00").merchant, "Metropolitan Transportation Authority")
+        XCTAssertEqual(try parsed("Card\nPort Authority of New York & New Jersey, New York, NY\n$3.25").merchant, "Port Authority of New York & New Jersey")
+        XCTAssertFalse(try parsed("Chase: You made a $12.34 transaction with STARBUCKS 1234 on card (...5678)").wallet)
+        XCTAssertEqual(BankMessage.parse("Sale ends soon\nSave up to\n$35.00 today"), .ignored(.noTransaction))
+    }
+
     private let raiffeisen = """
         Koriscenje kartice 4054**5109
         Datum: 04.11.2026 22:07:20

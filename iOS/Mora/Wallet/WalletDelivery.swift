@@ -46,17 +46,24 @@ struct WalletSender: Codable, Equatable, Sendable {
 /// is dropped: a purchase without amount or merchant waits on the iPhone until
 /// the user processes it in the transaction form.
 actor WalletDelivery {
-    static let shared = WalletDelivery()
+    static let shared = WalletDelivery(bankAlerts: BankAlertLog.directory)
     /// How long the first action of the automation waits for its amount action,
     /// and an empty run waits for a complete run of the same payment.
     static let amountGrace: TimeInterval = 2 * 60
+    /// Wallet starts the automation before a transit tap is priced; its notification or the
+    /// bank's message brings the amount minutes later (13 for NJ Transit on 9 Nov 2026). A
+    /// purchase without amount or merchant waits this long for one before it goes to review.
+    static let completionHold: TimeInterval = 20 * 60
 
     typealias Transport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
     private let directory: URL
+    /// The journal of bank messages and notifications; nil when nothing can complete a purchase.
+    private let bankAlerts: URL?
     private let transport: Transport
 
-    init(directory: URL = WalletRunLog.directory, transport: @escaping Transport = { try await URLSession.shared.data(for: $0) }) {
-        self.directory = directory; self.transport = transport
+    init(directory: URL = WalletRunLog.directory, bankAlerts: URL? = nil,
+         transport: @escaping Transport = { try await URLSession.shared.data(for: $0) }) {
+        self.directory = directory; self.bankAlerts = bankAlerts; self.transport = transport
     }
 
     enum Outcome: Equatable {
@@ -84,13 +91,31 @@ actor WalletDelivery {
         try? WalletRunLog.save(run, in: directory)
     }
 
+    /// A bank message or a Wallet notification reports what Wallet did not pass at the tap:
+    /// completes the latest purchase without amount saved shortly before it.
+    func complete(amount: String, merchant: String, reportedAt: Date, now: Date = .now) -> WalletRun? {
+        guard var run = WalletRunLog.runs(in: directory).first(where: {
+            let passed = reportedAt.timeIntervalSince($0.receivedAt)
+            return [.waiting, .awaitingAmount].contains($0.delivery) && $0.amount.isEmpty && passed > -60 && passed < Self.completionHold
+        }) else { return nil }
+        run.amount = amount
+        if run.sentMerchant.isEmpty { run.merchant = merchant }
+        run.delivery = .waiting
+        run.log("Сумма получена из сообщения банка или уведомления Wallet", at: now)
+        try? WalletRunLog.save(run, in: directory)
+        return run
+    }
+
     /// Sends purchases oldest first and stops at the first connection problem. A purchase
     /// without amount or merchant waits for review in the shared inbox on every device.
     func deliverWaiting(with sender: WalletSender, now: Date = .now) async {
         let all = WalletRunLog.runs(in: directory)
+        // Only an iPhone whose bank messages or notifications reach Mora has something to wait for.
+        let hold = bankAlerts.map { BankAlertLog.alerts(in: $0).isEmpty } == false ? Self.completionHold : 0
         // Incomplete purchases go to the shared inbox too, so the Mac and the iPhone review the
         // same list; older builds kept them on the iPhone (`incomplete`, `late`).
         for var run in all.reversed() where [.waiting, .awaitingAmount, .incomplete, .late].contains(run.delivery) {
+            if run.amount.isEmpty || run.sentMerchant.isEmpty, now.timeIntervalSince(run.receivedAt) < hold { continue }
             if run.delivery == .awaitingAmount {
                 guard now.timeIntervalSince(run.receivedAt) >= Self.amountGrace else { continue }
                 run.log("Сумма не пришла: «Быстрые команды» прервались, читая сумму", at: now)

@@ -158,6 +158,59 @@ final class WalletRunLogTests: XCTestCase {
         XCTAssertEqual(WalletRun(receivedAt: start, amount: "", merchant: "SQ * Monoblend", card: "Visa", name: "SQ * Monoblend").sentMerchant, "SQ * Monoblend")
     }
 
+    /// Seen on the iPhone 9 Nov 2026: two transit taps came with an empty "Card or Pass" and
+    /// the card as the Name, so the card went out as the merchant.
+    func testCardPassedOnlyAsTheNameIsStillTheCard() throws {
+        try WalletRunLog.record(amount: "$70.47", merchant: "Greenwich Gourmet Mark", card: "Visa Debit for Priv Individuals", sending: true, at: start, in: directory)
+        let tap = try WalletRunLog.record(amount: nil, merchant: nil, card: nil, name: "visa debit for priv individuals", action: "Start Wallet Payment",
+                                          awaitingAmount: true, sending: true, at: start.addingTimeInterval(60), in: directory)
+        XCTAssertEqual(tap.card, "Visa Debit for Priv Individuals"); XCTAssertEqual(tap.sentMerchant, "")
+        let shop = try WalletRunLog.record(amount: nil, merchant: nil, card: nil, name: "Some Shop", sending: true, at: start.addingTimeInterval(90), in: directory)
+        XCTAssertEqual(shop.card, ""); XCTAssertEqual(shop.sentMerchant, "Some Shop")
+    }
+
+    /// 9 Nov 2026: NJ Transit was tapped at 18:07 and Wallet reported "$5.45" at 18:20.
+    func testTransitTapWaitsForItsNotificationAndIsSentComplete() async throws {
+        let alerts = directory.appending(path: "alerts")
+        try BankAlertLog.save(BankAlert(receivedAt: start.addingTimeInterval(-86_400), source: "Wallet", text: "", state: .duplicate), in: alerts)
+        try WalletRunLog.record(amount: nil, merchant: nil, card: "Visa", name: "Transaction", action: "Start Wallet Payment",
+                                awaitingAmount: true, sending: true, at: start, in: directory)
+        let requests = Requests()
+        let delivery = WalletDelivery(directory: directory, bankAlerts: alerts) { request in
+            await requests.add(request)
+            return (Data(#"{"id":"c1","state":"recorded"}"#.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+        await delivery.addAmount("", now: start.addingTimeInterval(1))
+        await delivery.deliverWaiting(with: sender, now: start.addingTimeInterval(10 * 60))
+        let early = await requests.all.count
+        XCTAssertEqual(early, 0, "a purchase without amount waits for the notification")
+
+        let alert = try BankAlertLog.record(text: "Raiffeisen banka a.d. Beograd\nNjtransit Paygo Iron, Jersey City, NJ\n$5.45", source: "Wallet", sending: true,
+                                            at: start.addingTimeInterval(13 * 60), directory: alerts, templates: [], walletRuns: WalletRunLog.runs(in: directory))
+        XCTAssertEqual(alert.state, .review)
+        await BankAlertDelivery(directory: alerts, wallet: delivery).completeWallet(alert.id, now: start.addingTimeInterval(13 * 60))
+        await delivery.deliverWaiting(with: sender, now: start.addingTimeInterval(13 * 60))
+        let sent = await requests.all
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(sent.first?.httpBody)) as? [String: String])
+        XCTAssertEqual(body["p_amount"], "5.45 USD"); XCTAssertEqual(body["p_merchant"], "Njtransit Paygo Iron"); XCTAssertEqual(body["p_card"], "Visa")
+        XCTAssertEqual(body["p_occurred_at"], start.ISO8601Format(), "the purchase keeps the time of the tap")
+        XCTAssertEqual(BankAlertLog.alerts(in: alerts).first?.state, .duplicate, "the notification is not a second purchase")
+        XCTAssertEqual(WalletRunLog.runs(in: directory).first?.delivery, .delivered)
+    }
+
+    func testPurchaseWithoutAmountGoesToReviewWhenNothingReportsIt() async throws {
+        let alerts = directory.appending(path: "alerts")
+        try BankAlertLog.save(BankAlert(receivedAt: start, source: "Wallet", text: "", state: .duplicate), in: alerts)
+        try WalletRunLog.record(amount: nil, merchant: "MTA", card: "Visa", sending: true, at: start, in: directory)
+        let delivery = WalletDelivery(directory: directory, bankAlerts: alerts) { request in
+            (Data(#"{"id":"c1","state":"pending"}"#.utf8), HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+        await delivery.deliverWaiting(with: sender, now: start.addingTimeInterval(WalletDelivery.completionHold - 1))
+        XCTAssertEqual(WalletRunLog.runs(in: directory).first?.delivery, .waiting)
+        await delivery.deliverWaiting(with: sender, now: start.addingTimeInterval(WalletDelivery.completionHold + 1))
+        XCTAssertEqual(WalletRunLog.runs(in: directory).first?.delivery, .delivered)
+    }
+
     func testServerAnswersMapToRetryOrDecision() {
         XCTAssertEqual(WalletDelivery.outcome(status: 200, data: Data(#"{"state":"pending","reason":"x"}"#.utf8)), .delivered(state: "pending", reason: "x"))
         XCTAssertEqual(WalletDelivery.outcome(status: 401, data: Data()), .keyRejected)

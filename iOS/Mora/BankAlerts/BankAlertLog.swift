@@ -40,6 +40,8 @@ struct BankAlert: Codable, Identifiable, Equatable, Sendable {
     var serverState: String?
     /// The Wallet run of the same purchase. A pair is never matched again.
     var walletRunID: UUID?
+    /// A Wallet notification: it names no card and only completes a Wallet purchase.
+    var wallet: Bool?
 
     /// The card name sent to the shared database. Mora links it to an account
     /// the first time, like a Wallet card.
@@ -54,7 +56,7 @@ struct BankAlert: Codable, Identifiable, Equatable, Sendable {
         guard let value = Money.parse(amount), value > 0 else { return nil }
         return BankMessage.Parsed(amount: value, currency: currency.isEmpty ? nil : currency, merchant: merchant,
                                   cardLast4: cardLast4.isEmpty ? nil : cardLast4, direction: income ? .income : .expense,
-                                  automatic: false, amountText: amountText, merchantText: merchantText)
+                                  automatic: false, amountText: amountText, merchantText: merchantText, wallet: wallet == true)
     }
 }
 
@@ -194,7 +196,7 @@ extension BankAlert {
     mutating func apply(_ value: BankMessage.Parsed) {
         amount = Money.plain(value.amount); currency = value.currency ?? ""
         merchant = value.merchant; cardLast4 = value.cardLast4 ?? ""; income = value.direction == .income
-        amountText = value.amountText; merchantText = value.merchantText
+        amountText = value.amountText; merchantText = value.merchantText; wallet = value.wallet ? true : nil
     }
 }
 
@@ -204,10 +206,12 @@ actor BankAlertDelivery {
     static let shared = BankAlertDelivery()
     typealias Transport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
     private let directory: URL
+    private let wallet: WalletDelivery
     private let transport: Transport
 
-    init(directory: URL = BankAlertLog.directory, transport: @escaping Transport = { try await URLSession.shared.data(for: $0) }) {
-        self.directory = directory; self.transport = transport
+    init(directory: URL = BankAlertLog.directory, wallet: WalletDelivery = .shared,
+         transport: @escaping Transport = { try await URLSession.shared.data(for: $0) }) {
+        self.directory = directory; self.wallet = wallet; self.transport = transport
     }
 
     func deliverWaiting(with sender: WalletSender? = WalletSender.current()) async {
@@ -235,7 +239,9 @@ actor BankAlertDelivery {
     func confirm(_ edited: BankAlert, sending: Bool) async -> Bool {
         var alert = edited
         var learned = false
-        if let parsed = alert.parsed { learned = (try? BankAlertLog.learn(from: alert.text, source: alert.source, parsed: parsed)) != nil }
+        // A Wallet notification already has a fixed format; a learned one would book it without a card.
+        if alert.wallet == true { learned = true }
+        else if let parsed = alert.parsed { learned = (try? BankAlertLog.learn(from: alert.text, source: alert.source, parsed: parsed)) != nil }
         guard alert.state != .duplicate else { try? BankAlertLog.save(alert, in: directory); return learned }
         alert.state = alert.income ? .skipped : sending ? .waiting : .logged
         if alert.income { alert.lastError = "Возвраты и зачисления пока добавляются вручную." }
@@ -244,16 +250,14 @@ actor BankAlertDelivery {
         return learned
     }
 
-    /// Wallet passes no amount for transit taps and deferred authorizations. When the
-    /// bank reports the amount meanwhile, it completes the Wallet purchase instead of
-    /// becoming a second one.
+    /// Wallet passes no amount, and often no merchant, for transit taps and deferred
+    /// authorizations. When the bank or Wallet's own notification reports them meanwhile,
+    /// they complete the Wallet purchase instead of becoming a second one.
     func completeWallet(_ id: UUID, now: Date = .now) async {
         guard var alert = BankAlertLog.alerts(in: directory).first(where: { $0.id == id }),
               alert.state != .duplicate, alert.state != .ignored, !alert.income, !alert.amount.isEmpty,
-              let run = WalletRunLog.runs().first(where: {
-                  $0.delivery == .awaitingAmount && abs($0.receivedAt.timeIntervalSince(alert.receivedAt)) < BankAlertLog.pairWindow
-              }) else { return }
-        await WalletDelivery.shared.addAmount([alert.amount, alert.currency].filter { !$0.isEmpty }.joined(separator: " "), now: now)
+              let run = await wallet.complete(amount: [alert.amount, alert.currency].filter { !$0.isEmpty }.joined(separator: " "),
+                                              merchant: alert.merchant, reportedAt: alert.receivedAt, now: now) else { return }
         alert.state = .duplicate; alert.walletRunID = run.id
         alert.lastError = "Сумма добавлена к покупке из Wallet, которая пришла без суммы."
         try? BankAlertLog.save(alert, in: directory)

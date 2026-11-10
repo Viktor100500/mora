@@ -113,6 +113,11 @@ enum WalletRunLog {
                        awaitingAmount: Bool = false, sending: Bool, at date: Date = .now, in directory: URL = directory) throws -> WalletRun {
         var run = WalletRun(receivedAt: date, amount: clean(amount), merchant: clean(merchant), card: clean(card), name: clean(name))
         run.action = action
+        // For a transit tap Wallet may leave "Card or Pass" empty and pass the card as the Name.
+        if run.card.isEmpty, run.merchant.isEmpty, !run.name.isEmpty,
+           let known = runs(in: directory).lazy.map(\.card).first(where: { $0.caseInsensitiveCompare(run.name) == .orderedSame }) {
+            run.card = known
+        }
         // An incomplete purchase is kept as waiting until a possible repeat run is seen, then left for the user.
         run.delivery = !sending ? .logged : awaitingAmount ? .awaitingAmount : .waiting
         let missing = [(run.amount, "сумма"), (run.merchant, "продавец"), (run.card, "карта")]

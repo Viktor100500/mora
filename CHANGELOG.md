@@ -1,5 +1,14 @@
 # Changelog
 
+## iPhone 1.0.39 — 2026-11-09
+
+iPhone 1.0.39 (build 40)
+
+- **Transit taps get their amount from the Wallet notification.** Wallet starts the automation before a ride is priced, so the purchase arrives without an amount and often without a merchant. On iOS 27, a Notification automation for the Wallet app with the Log Bank Message action now completes that purchase with the amount and merchant Wallet reports minutes later. The purchase keeps the time and card of the tap.
+- When bank messages or notifications reach Mora on the iPhone, a Wallet purchase without an amount or merchant waits up to 20 minutes for them before it goes to review. A bank text message completes it the same way; previously only within two minutes.
+- A Wallet notification names no card, so by itself it is never booked automatically; without a matching Wallet purchase it waits for review on the iPhone.
+- A card that Wallet passes only as the transaction Name is recognized as the card when it was used on this iPhone before, instead of being sent as the merchant.
+
 ## 1.7.14 — 2026-11-09
 
 Mac 1.7.14 (build 93) · Telegram form 1.7.14 (93)

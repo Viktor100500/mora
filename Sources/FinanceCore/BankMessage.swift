@@ -29,11 +29,15 @@ public enum BankMessage {
         /// The exact pieces of text the values came from, for learning a template.
         public var amountText: String
         public var merchantText: String
+        /// A Wallet notification: merchant on one line, the amount alone on the next. It names
+        /// no card, so it only completes a Wallet purchase and is never booked by itself.
+        public var wallet: Bool
 
         public init(amount: Decimal, currency: String?, merchant: String, cardLast4: String?, direction: Direction,
-                    automatic: Bool, amountText: String, merchantText: String) {
+                    automatic: Bool, amountText: String, merchantText: String, wallet: Bool = false) {
             self.amount = amount; self.currency = currency; self.merchant = merchant; self.cardLast4 = cardLast4
             self.direction = direction; self.automatic = automatic; self.amountText = amountText; self.merchantText = merchantText
+            self.wallet = wallet
         }
     }
 
@@ -46,6 +50,7 @@ public enum BankMessage {
         let text = normalized(text)
         if let reason = ignoredReason(text) { return .ignored(reason) }
         if let match = templates.lazy.compactMap({ $0.match(text, sender: sender) }).first { return .parsed(match) }
+        if let wallet = walletNotification(text) { return .parsed(wallet) }
         guard let amount = transactionAmount(in: text) else { return .ignored(.noTransaction) }
         let card = cardLast4(in: text)
         let direction: Direction? = contains(text, incomeWords) ? .income : contains(text, expenseWords) ? .expense : nil
@@ -55,6 +60,25 @@ public enum BankMessage {
         return .parsed(Parsed(amount: amount.value, currency: amount.currency, merchant: merchant.map(cleanMerchant) ?? "",
                               cardLast4: card, direction: direction ?? .expense, automatic: false,
                               amountText: amount.text, merchantText: merchant ?? ""))
+    }
+
+    /// Wallet reports a card payment as "Merchant, City, ST" and the amount alone on the last
+    /// line, under the card's bank as the title:
+    ///
+    ///     Raiffeisen banka a.d. Beograd
+    ///     Njtransit Paygo Iron, Jersey City, NJ
+    ///     $5.45
+    static func walletNotification(_ text: String) -> Parsed? {
+        let lines = text.components(separatedBy: "\n")
+        guard lines.count >= 2, let last = lines.last, let amount = amounts(in: last).first, amount.text == last else { return nil }
+        let line = lines[lines.count - 2]
+        guard line.contains(where: \.isLetter), line.count <= 120, amounts(in: line).isEmpty,
+              !contains(line, expenseWords + incomeWords) else { return nil }
+        // The place follows the merchant: "…, Jersey City, NJ".
+        var parts = line.components(separatedBy: ", ")
+        if parts.count >= 3, let region = parts.last, region.count == 2, region == region.uppercased() { parts.removeLast(2) }
+        return Parsed(amount: amount.value, currency: amount.currency, merchant: cleanMerchant(parts.joined(separator: ", ")),
+                      cardLast4: nil, direction: .expense, automatic: false, amountText: amount.text, merchantText: line, wallet: true)
     }
 
     // MARK: Filters
