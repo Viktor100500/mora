@@ -381,10 +381,17 @@
   "Добавьте автоматизацию": "Add the Automation",
   "Одна готовая команда: триггер «Транзакция» и оба действия Mora уже связаны.": "One ready shortcut: the Transaction trigger and both Mora actions are already connected.",
   "Когда я прикладываю карту Wallet": "When I tap a Wallet card",
-  "Нажмите «Добавить в Быстрые команды» и затем «Добавить быструю команду».": "Tap Add to Shortcuts, then Add Shortcut.",
-  "Откройте автоматизацию и отметьте карты, которыми платите. Включите «Запускать сразу».": "Open the automation and select the cards you pay with. Turn on Run Immediately.",
   "Вернитесь в Mora и нажмите «Дальше».": "Come back to Mora and tap Next.",
   "Настроить вручную": "Set Up Manually",
   "Добавить в Быстрые команды": "Add to Shortcuts",
-  "iPhone сообщает о покупке через автоматизацию «Быстрых команд». Готовая автоматизация добавляется одной кнопкой, затем нужно только выбрать карты.": "The iPhone reports a purchase through a Shortcuts automation. The ready automation is added with one button; then you only choose the cards."
+  "iPhone сообщает о покупке через автоматизацию «Быстрых команд». Готовая автоматизация добавляется одной кнопкой, затем нужно только выбрать карты.": "The iPhone reports a purchase through a Shortcuts automation. The ready automation is added with one button; then you only choose the cards.",
+  "Нажмите «Добавить в Быстрые команды» и выберите «Быстрые команды».": "Tap Add to Shortcuts and choose Shortcuts.",
+  "Нажмите «Добавить быструю команду».": "Tap Add Shortcut.",
+  "Включите автоматизацию": "Turn On the Automation",
+  "iOS добавляет чужие автоматизации выключенными: включить её может только владелец iPhone.": "iOS adds shared automations switched off: only the iPhone’s owner can turn one on.",
+  "Нажмите «Открыть автоматизации».": "Tap Open Automations.",
+  "Включите переключатель у «Когда я прикладываю карту Wallet» (Mora Apple Pay).": "Turn on the switch next to “When I tap a Wallet card” (Mora Apple Pay).",
+  "Если iOS спросит, выберите «Запускать сразу». Вернитесь в Mora.": "If iOS asks, choose Run Immediately. Come back to Mora.",
+  "Открыть автоматизации": "Open Automations",
+  "Откройте триггер «Транзакция» в Mora Apple Pay и отметьте карты, которыми платите.": "Open the Transaction trigger in Mora Apple Pay and select the cards you pay with."
 }

@@ -3,6 +3,7 @@ import FinanceCore
 import AppKit
 
 struct CloudSettingsCard: View {
+    var reviewHighlight: UUID? = nil
     @EnvironmentObject private var cloud: CloudSync
     @Environment(\.openWindow) private var openWindow
     var body: some View {
@@ -15,6 +16,10 @@ struct CloudSettingsCard: View {
                     Button("Настроить…") { openWindow(id: "cloud") }
                 }
                 if let error = cloud.error { Text(error).font(.caption).foregroundStyle(.orange) }
+                if !cloud.pending.isEmpty {
+                    Divider()
+                    WalletInboxView(highlightTrigger: reviewHighlight)
+                }
             }
         }
     }
@@ -36,13 +41,10 @@ struct CloudSettingsView: View {
     @State private var confirmJoin = false
     @State private var confirmLocal = false
     @State private var confirmDisconnect = false
-    @State private var selectedCapture: CloudCapture?
-    @State private var handledNotification: UUID?
     @State private var showWalletSetup = false
     @State private var revokingAgent: CloudAgentConnection?
     private var accounts: [Account] { store.ledger.accounts.filter { !$0.archived } }
     var body: some View {
-        ScrollViewReader { scrollProxy in
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 HStack {
@@ -64,7 +66,7 @@ struct CloudSettingsView: View {
                 else {
                     HStack { Label(cloud.email, systemImage: "person.crop.circle"); Spacer(); Button("Отключить облако…") { confirmDisconnect = true } }
                     if cloud.householdID == nil { householdCard }
-                    else { syncCard; inviteCard; phoneCard; cardsCard.id("wallet-cards"); inboxCard.id("wallet-inbox"); agentsCard }
+                    else { syncCard; inviteCard; phoneCard; cardsCard.id("wallet-cards"); Card { WalletInboxView() }; agentsCard }
                 }
                 Text("Первое подключение требует бесплатного проекта Supabase и установки схемы Mora. Оплата iPhone передает доступные сведения о покупке; это не банковская выписка. Автоматизация настраивается отдельно на каждом телефоне.").font(.caption).foregroundStyle(.secondary)
                 Link("Настройка автоматизации Apple", destination: URL(string: "https://support.apple.com/en-ng/guide/shortcuts/apd65c67538a/ios")!).font(.caption)
@@ -81,8 +83,6 @@ struct CloudSettingsView: View {
             if account == nil { account = accounts.first?.id }
             if cloud.signedIn { Task { await cloud.refreshLists() } }
         }
-        .onReceive(store.notifications.$navigation) { request in navigate(request, scrollProxy: scrollProxy) }
-        .onChange(of: cloud.pending) { _, _ in navigate(store.notifications.navigation, scrollProxy: scrollProxy) }
         .confirmationDialog("Открыть общую базу вместо текущей?", isPresented: $confirmJoin, titleVisibility: .visible) {
             Button("Сохранить копию и подключиться") { Task { await cloud.join(code: code); code = "" } }
         } message: { Text("Текущие данные этого Mac сохранятся в отдельный файл before-cloud. После подключения будут открыты счета и операции общей базы. Автоматического объединения двух независимых баз нет.") }
@@ -95,7 +95,6 @@ struct CloudSettingsView: View {
         .confirmationDialog("Отключить облако на этом Mac?", isPresented: $confirmDisconnect, titleVisibility: .visible) {
             Button("Отключить") { password = ""; Task { await cloud.disconnect() } }
         } message: { Text("Локальные данные останутся на Mac. Ключи телефонов продолжат работать до отзыва в общей базе. Другие участники сохранят доступ.") }
-        .sheet(item: $selectedCapture) { capture in WalletReviewForm(capture: capture).modifier(FeedbackFooter()).modifier(FinanceErrorAlert()).environmentObject(cloud).environmentObject(store) }
         .sheet(isPresented: $showWalletSetup) { WalletShortcutSetupView().environmentObject(cloud).environmentObject(store) }
         .sheet(item: Binding(get: { cloud.newAgentURL.map(AgentConnectionURL.init) }, set: { if $0 == nil { cloud.newAgentURL = nil } })) { item in
             AgentConnectionSheet(url: item.url)
@@ -104,22 +103,6 @@ struct CloudSettingsView: View {
             Button(L("Отключить"), role: .destructive) { if let agent = revokingAgent { Task { await cloud.revokeAgent(agent) } } }
         } message: { Text(L("Адрес подключения перестанет работать. Записанные операции останутся в истории импортов.")) }
         .task(id: cloud.householdID) { if cloud.signedIn && cloud.householdID != nil { await cloud.loadAgents() } }
-        }
-    }
-    private func navigate(_ request: NotificationNavigation?, scrollProxy: ScrollViewProxy) {
-        guard let request, request.id != handledNotification else { return }
-        switch request.destination {
-        case .page: return
-        case .inbox: break
-        case .capture(let id):
-            guard let capture = cloud.pending.first(where: { $0.id == id }) else { return }
-            selectedCapture = capture
-        }
-        handledNotification = request.id
-        Task { @MainActor in
-            await Task.yield()
-            scrollProxy.scrollTo("wallet-inbox", anchor: .top)
-        }
     }
     private var signInCard: some View {
         Card {
@@ -308,32 +291,51 @@ struct CloudSettingsView: View {
             }
         }
     }
-    private var inboxCard: some View {
-        Card {
-            VStack(alignment: .leading, spacing: 14) {
-                SectionHeading(title: "Покупки из Wallet на проверке", subtitle: "Полные покупки добавляются автоматически. Неполные данные можно исправить здесь.")
-                if cloud.pending.isEmpty { Text("Нет покупок для проверки").foregroundStyle(.secondary) }
-                ForEach(cloud.pending) { capture in
-                    let currency = WalletReviewDraft(capture: capture, ledger: store.ledger).currency
-                    let knownCurrency = currency != WalletReviewDraft.unknownCurrency
-                    let waiting = knownCurrency && ["Не получена валюта покупки", "Валюта покупки отличается от валюты счета"].contains(capture.reason ?? "")
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(capture.merchant.isEmpty ? "Продавец не получен" : capture.merchant)
-                            FinancialText("\(capture.amount) \(knownCurrency ? currency : "")").font(.caption).foregroundStyle(.secondary)
-                            if !knownCurrency {
-                                Text("Валюта покупки не передана").font(.caption).foregroundStyle(.secondary)
-                            }
-                            Text("Дата: \(capture.date.formatted(date: .abbreviated, time: .shortened))").font(.caption).foregroundStyle(.secondary)
-                            Text("Источник: \(capture.label)").font(.caption).foregroundStyle(.secondary)
-                            if let card = capture.card, !card.isEmpty {
-                                Text("Карта: \(card)").font(.caption).foregroundStyle(.secondary)
-                            }
-                            Text(L(waiting ? "Ожидает автоматической записи" : capture.reason ?? "Проверьте покупку")).font(.caption).foregroundStyle(.orange)
+    private func copy(_ text: String) { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string) }
+
+}
+
+/// Shared review controls appear directly in Settings and in cloud configuration.
+private struct WalletInboxView: View {
+    var highlightTrigger: UUID? = nil
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var highlighted = false
+    @EnvironmentObject private var cloud: CloudSync
+    @EnvironmentObject private var store: FinanceStore
+    @State private var selectedCapture: CloudCapture?
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            SectionHeading(title: "Покупки из Wallet на проверке", subtitle: "Полные покупки добавляются автоматически. Неполные данные можно исправить здесь.")
+            if cloud.pending.isEmpty { Text("Нет покупок для проверки").foregroundStyle(.secondary) }
+            ForEach(cloud.pending) { capture in
+                let currency = WalletReviewDraft(capture: capture, ledger: store.ledger).currency
+                let knownCurrency = currency != WalletReviewDraft.unknownCurrency
+                let waiting = knownCurrency && ["Не получена валюта покупки", "Валюта покупки отличается от валюты счета"].contains(capture.reason ?? "")
+                HStack(alignment: .center, spacing: 20) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Label(capture.merchant.isEmpty ? L("Продавец не получен") : capture.merchant,
+                              systemImage: "creditcard")
+                            .font(.callout.weight(.semibold))
+                        FinancialText("\(capture.amount) \(knownCurrency ? currency : "")").font(.caption).foregroundStyle(.secondary)
+                        if !knownCurrency {
+                            Text("Валюта покупки не передана").font(.caption).foregroundStyle(.secondary)
                         }
-                        Spacer()
+                        Text("Дата: \(capture.date.formatted(date: .abbreviated, time: .shortened))").font(.caption).foregroundStyle(.secondary)
+                        Text("Источник: \(capture.label)").font(.caption).foregroundStyle(.secondary)
+                        if let card = capture.card, !card.isEmpty {
+                            Text("Карта: \(card)").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Text(L(waiting ? "Ожидает автоматической записи" : capture.reason ?? "Проверьте покупку")).font(.caption).foregroundStyle(.orange)
+                    }
+                    Spacer()
+                    VStack(alignment: .trailing, spacing: 10) {
+                        if !waiting {
+                            Label(L("Уточните данные покупки"), systemImage: "pencil.line")
+                                .font(.caption).foregroundStyle(.orange)
+                        }
                         HStack(spacing: 8) {
                             Button("Проверить…") { selectedCapture = capture }
+                                .buttonStyle(.borderedProminent).tint(.orange).controlSize(.regular)
                             Button(role: .destructive) {
                                 Task {
                                     await cloud.resolve(capture, account: capture.account_id,
@@ -351,11 +353,32 @@ struct CloudSettingsView: View {
                         }.disabled(cloud.busy)
                     }
                 }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.orange.opacity(highlighted ? 0.14 : 0.035),
+                            in: RoundedRectangle(cornerRadius: 12))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(Color.orange.opacity(highlighted ? 0.85 : 0.24),
+                                      lineWidth: highlighted ? 2 : 1)
+                }
+                .shadow(color: .orange.opacity(highlighted ? 0.16 : 0), radius: 10)
+                .accessibilityElement(children: .contain)
             }
         }
+        .task(id: highlightTrigger) {
+            guard highlightTrigger != nil else { highlighted = false; return }
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18)) { highlighted = true }
+            do { try await Task.sleep(for: .milliseconds(650)) }
+            catch { return }
+            withAnimation(reduceMotion ? nil : .easeOut(duration: 0.9)) { highlighted = false }
+        }
+        .sheet(item: $selectedCapture) { capture in
+            WalletReviewForm(capture: capture)
+                .modifier(FeedbackFooter()).modifier(FinanceErrorAlert())
+                .environmentObject(cloud).environmentObject(store)
+        }
     }
-    private func copy(_ text: String) { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(text, forType: .string) }
-
 }
 
 private struct AgentConnectionURL: Identifiable { let url: URL; var id: String { url.absoluteString } }

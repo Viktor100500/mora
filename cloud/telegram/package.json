@@ -1,0 +1,12 @@
+{
+  "name": "mora-telegram-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/miniapp.test.mjs",
+    "preview": "node build-preview.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.58.2"
+  }
+}

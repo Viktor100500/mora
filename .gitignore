@@ -61,3 +61,5 @@ mcp/client-config.json
 cloud/VERIFICATION.md
 docs/localization-and-navigation.md
 docs/scrolling-regression.md
+# The shared Apple Pay automation: no key or personal data (cloud/shortcuts/build_wallet_automation.py).
+!iOS/Mora/Resources/Mora Apple Pay.shortcut

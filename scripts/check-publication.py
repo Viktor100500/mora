@@ -17,6 +17,8 @@ PUBLIC_FILES = {'.gitignore', '.gitattributes', 'README.md', 'CHANGELOG.md', 'CO
 PUBLIC_DIRS = {'.github', '.githooks', 'Examples', 'Prompts', 'Resources', 'Sources', 'Tests', 'cloud', 'docs', 'iOS', 'mcp', 'plugins', 'scripts'}
 PRIVATE_NAMES = {'ledger.json', 'notification-history.json', 'cloud-settings.json', 'cloud-checkpoint.json', 'cloud-project.json', 'MoraCloud.json', 'client-config.json', 'runtime.sh', 'mcp-http-token', '.DS_Store'}
 PRIVATE_PARTS = {'outputs', 'build', '.build', '.venv', '.swiftpm', 'node_modules', '__pycache__', 'private-notes', '.env'}
+# Publicly signed automation; no phone key or selected cards (cloud/shortcuts/build_wallet_automation.py --verify).
+PUBLIC_SHORTCUTS = {'iOS/Mora/Resources/Mora Apple Pay.shortcut'}
 PRIVATE_DOCS = {'cloud/VERIFICATION.md', 'docs/localization-and-navigation.md', 'docs/scrolling-regression.md'}
 RULES = {
     'absolute user home': re.compile(rb'/' + rb'Users/[^/\s\x00]+/'),
@@ -63,6 +65,8 @@ def path_issue(name: str, bundle: bool) -> str | None:
     path = PurePosixPath(name)
     if path.is_absolute() or '..' in path.parts:
         return 'unsafe path'
+    if name in PUBLIC_SHORTCUTS:
+        return None
     if path.name in PRIVATE_NAMES or path.name.startswith(('mcp-app-', 'Mora-backup-', '.env')) or path.suffix in {'.backup', '.pem', '.p12', '.p8', '.shortcut', '.log', '.pyc'}:
         return 'private/generated file'
     if any(part in PRIVATE_PARTS for part in path.parts) or name in PRIVATE_DOCS:

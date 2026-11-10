@@ -1,5 +1,35 @@
 # Changelog
 
+## 1.7.15 — 2026-11-10
+
+Mac 1.7.15 (build 94) · Telegram form 1.7.15 (94)
+
+- **Telegram bot.** Uses the released Bot API 10.4 for the chat widget. "Новая трата" and "Подробнее" open the form directly through the bot's Main Mini App link. The widget's buttons and the purchase celebration use Mora's green palette.
+- **Categories for converted purchases.** A Telegram purchase in another currency than its account keeps the category and note chosen in the form while it waits for the Visa conversion; Mora books it with that category unless a different one is chosen during review. Requires the `telegram_capture_category` cloud migration.
+- The bot's settings can live in Supabase Vault (`telegram_bot_settings` migration), so it can be configured without the Supabase CLI. The direct link has a cover in Mora's style.
+
+## 1.7.14 — 2026-11-09
+
+Mac 1.7.14 (build 93) · Telegram form 1.7.14 (93)
+
+- **Telegram purchase form.** Uses a persistent green page button with readable white text instead of Telegram's native bottom button. The action stays visible on short screens and above the on-screen keyboard.
+- A Done action, tapping outside a text field, or pressing Return dismisses the keyboard. Selecting a category, currency, account, date or recent merchant no longer returns focus to the amount. Existing amounts are preserved.
+- Retains the published form's embedded server address, network error messages and purchase celebration. Preview fixtures and browser checks use synthetic purchases only.
+
+## 1.7.13 — 2026-11-09
+
+Mac 1.7.13 (build 92)
+
+- **Apple Pay review in Settings.** Purchases awaiting review appear directly in the Shared Database and Apple Pay block, without opening cloud configuration.
+- Review notifications open the main window's Settings and scroll reliably to the review block, including first-time and repeated navigation.
+- Each pending purchase has its own outlined card, a clear prompt and a prominent review action. After scrolling finishes, the cards briefly glow orange to draw attention to the required input.
+
+## 1.7.9 — 2026-11-09
+
+Mac 1.7.9 (build 88) · iPhone 1.0.38 (build 39)
+
+- iPhone: bundles the signed Mora Apple Pay automation for iOS 27, with its Transaction trigger and both Mora actions already connected. Select your Wallet cards, enable the automation, and check the first payment in Mora. The template has no phone key or selected cards; its signing certificate expires on 8 December 2027.
+
 ## 1.7.8 — 2026-11-09
 
 Mac 1.7.8 (build 87)

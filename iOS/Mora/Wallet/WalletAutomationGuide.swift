@@ -12,17 +12,20 @@ struct WalletAutomationGuide: View {
     @State private var latest: WalletRun?
     @State private var manual = !Self.oneTapAvailable
 
-    /// Shared from an iOS 27 iPhone: the Transaction trigger with no cards chosen,
-    /// then Start Wallet Payment and Finish Wallet Payment wired to its Merchant,
-    /// Name, Card or Pass and Amount. It holds no key or personal data.
-    static let templateURL = URL(string: "https://www.icloud.com/shortcuts/1eb769cc18ee4426919bfc1349ccf307")!
+    /// Built by cloud/shortcuts/build_wallet_automation.py and signed on an iOS 27 iPhone
+    /// (macOS 26 drops the trigger when signing): the Transaction trigger, then Start
+    /// Wallet Payment and Finish Wallet Payment wired to its Merchant, Name, Card or
+    /// Pass and Amount. No key or personal data. The signature expires on 8 Dec 2027.
+    static let templateFile = Bundle.main.url(forResource: "Mora Apple Pay", withExtension: "shortcut")
+    /// Undocumented, checked on iOS 26 and 27: opens the Automation tab of Shortcuts.
+    static let automationsURL = URL(string: "shortcuts://automations")!
     static var oneTapAvailable: Bool {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--wallet-one-tap") { return true }
         #endif
-        return ProcessInfo.processInfo.isOperatingSystemAtLeast(OperatingSystemVersion(majorVersion: 27, minorVersion: 0, patchVersion: 0))
+        return templateFile != nil && ProcessInfo.processInfo.isOperatingSystemAtLeast(OperatingSystemVersion(majorVersion: 27, minorVersion: 0, patchVersion: 0))
     }
-    private var steps: Int { manual ? 5 : 2 }
+    private var steps: Int { manual ? 5 : 3 }
 
     var body: some View {
         NavigationStack {
@@ -85,15 +88,40 @@ struct WalletAutomationGuide: View {
                     ActionMock(title: "Finish Wallet Payment", parts: [.text("Finish payment of "), .token("Сумма")])
                 }
             }
-            instructions(["Нажмите «Добавить в Быстрые команды» и затем «Добавить быструю команду».",
-                          "Откройте автоматизацию и отметьте карты, которыми платите. Включите «Запускать сразу».",
+            instructions(["Нажмите «Добавить в Быстрые команды» и выберите «Быстрые команды».",
+                          "Нажмите «Добавить быструю команду».",
                           "Вернитесь в Mora и нажмите «Дальше»."])
             Button { withAnimation { manual = true; step = 1 } } label: {
                 Text(L("Настроить вручную")).font(.subheadline).frame(maxWidth: .infinity)
             }
             .buttonStyle(.plain).foregroundStyle(Color.moraGreen)
+        } else if step == 2 {
+            header(2, "Включите автоматизацию", "iOS добавляет чужие автоматизации выключенными: включить её может только владелец iPhone.")
+            GuideMock {
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 6) {
+                            WalletAppIcon()
+                            Image(systemName: "arrow.right").font(.caption).foregroundStyle(.secondary)
+                            Image(systemName: "leaf.fill").font(.caption).foregroundStyle(.white)
+                                .frame(width: 24, height: 24).background(Color.moraGreen, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        }
+                        Text(L("Когда я прикладываю карту Wallet")).font(.subheadline.weight(.semibold))
+                        Text("Mora Apple Pay").font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer(minLength: 0)
+                    Capsule().fill(Color.green).frame(width: 50, height: 30)
+                        .overlay(alignment: .trailing) { Circle().fill(.white).padding(2) }
+                }
+                .padding(14)
+                .background(Color.moraCard, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            instructions(["Нажмите «Открыть автоматизации».",
+                          "Откройте триггер «Транзакция» в Mora Apple Pay и отметьте карты, которыми платите.",
+                          "Включите переключатель у «Когда я прикладываю карту Wallet» (Mora Apple Pay).",
+                          "Если iOS спросит, выберите «Запускать сразу». Вернитесь в Mora."])
         } else {
-            header(2, "Проверьте настройку", "Заплатите чем-нибудь Apple Pay — Mora покажет здесь, что передал Wallet.")
+            header(3, "Проверьте настройку", "Заплатите чем-нибудь Apple Pay — Mora покажет здесь, что передал Wallet.")
             WalletAutomationCheck(run: latest)
         }
     }
@@ -201,7 +229,18 @@ struct WalletAutomationGuide: View {
             case 0:
                 primary("Начать") { startedAt = Date(); step = 1 }
             case 1 where !manual:
-                primary("Добавить в Быстрые команды") { openURL(Self.templateURL) }
+                if let file = Self.templateFile {
+                    ShareLink(item: file, preview: SharePreview("Mora Apple Pay")) {
+                        Text(L("Добавить в Быстрые команды")).fontWeight(.semibold).frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent).controlSize(.large).tint(.moraGreen)
+                }
+                HStack(spacing: 10) {
+                    Button { step -= 1 } label: { Text(L("Назад")).frame(maxWidth: .infinity) }.buttonStyle(.bordered).controlSize(.large)
+                    Button { step += 1 } label: { Text(L("Дальше")).frame(maxWidth: .infinity) }.buttonStyle(.bordered).controlSize(.large).tint(.moraGreen)
+                }
+            case 2 where !manual:
+                primary("Открыть автоматизации") { openURL(Self.automationsURL) }
                 HStack(spacing: 10) {
                     Button { step -= 1 } label: { Text(L("Назад")).frame(maxWidth: .infinity) }.buttonStyle(.bordered).controlSize(.large)
                     Button { step += 1 } label: { Text(L("Дальше")).frame(maxWidth: .infinity) }.buttonStyle(.bordered).controlSize(.large).tint(.moraGreen)
