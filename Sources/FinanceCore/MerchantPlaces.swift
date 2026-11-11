@@ -62,6 +62,7 @@ public struct MerchantPlaces: Sendable {
         let name = MerchantName.descriptor(merchant)
         guard !name.isEmpty, name.count <= 1000 else { return nil }
         let words = name.split(separator: " ")
+        let withoutLocation = MerchantName.withoutLocationSuffix(name)
         for length in stride(from: words.count, through: 1, by: -1) {
             let key = words.prefix(length).joined()
             guard let match = index[key] else { continue }
@@ -69,7 +70,11 @@ public struct MerchantPlaces: Sendable {
             // A bank descriptor can append a street number to a one-word name.
             let address = !exact && words[length].first?.isNumber == true && key.count >= 6
             let prefix = match.prefixAllowed && words.prefix(length).joined(separator: " ").count >= 8
-            guard exact || address || prefix else { continue }
+            // A shortened source name remains exact-only except for a known
+            // regional location tail. Longer conflicting/unknown names above
+            // still block a fallback to this alias.
+            let location = withoutLocation != name && withoutLocation == words.prefix(length).joined(separator: " ")
+            guard exact || address || prefix || location else { continue }
             guard !match.unknown, match.groups.count == 1 else { return nil }
             return match.groups.first
         }

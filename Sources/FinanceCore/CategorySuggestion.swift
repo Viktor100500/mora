@@ -45,9 +45,10 @@ extension Ledger {
 
 /// Wallet and bank statements can omit a generic store descriptor or add a
 /// payment processor prefix. Keep brand words intact: arbitrary prefixes,
-/// locations and single-word names are not enough evidence of the same seller.
+/// unrecognized locations and single-word names are not enough evidence of the
+/// same seller. Recognized regional location tails share the conflict checks.
 private func merchantHistoryKey(_ merchant: String) -> String? {
-    let name = MerchantName.descriptor(merchant)
+    let name = MerchantName.withoutLocationSuffix(MerchantName.descriptor(merchant))
     var words = name.split(separator: " ").map(String.init)
     let descriptors: Set<String> = ["market", "markets", "store", "stores", "shop", "supermarket"]
     while words.count > 2, let last = words.last, descriptors.contains(last) { words.removeLast() }

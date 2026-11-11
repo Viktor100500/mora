@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.7.16 — 2026-11-10
+
+Mac 1.7.16 (build 95) · iPhone 1.0.39 (build 40)
+
+- **Merchant categories.** History and shortened regional directory names now recognize known New York/New Jersey location endings, including city/state variants. For example, `SQ * Dan Bakery Hoboken` can match `Dan Bakery` in history and `DÄN BAKERY & CAFÉ` in the directory. Conflicting categories and unknown directory types still block inferred matches; explicit rules and exact history keep priority.
+
 ## 1.7.15 — 2026-11-10
 
 Mac 1.7.15 (build 94) · Telegram form 1.7.15 (94)

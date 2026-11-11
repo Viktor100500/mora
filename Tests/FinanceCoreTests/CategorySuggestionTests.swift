@@ -77,4 +77,35 @@ final class CategorySuggestionTests: XCTestCase {
         ledger.rules = [CategoryRule(keyword: "Test", categoryID: groceries)]
         XCTAssertEqual(ledger.historicalCategory(merchant: "Test Deli", kind: .expense), groceries)
     }
+
+    func testRegionalLocationHistoryVariantsAndConflicts() {
+        var ledger = Ledger.empty
+        let account = Account(name: "Test"); ledger.accounts = [account]
+        let dining = ledger.categories.first { $0.name == "Кафе и рестораны" }!.id
+        let groceries = ledger.categories.first { $0.name == "Продукты" }!.id
+        ledger.transactions = [Transaction(date: Date(), merchant: "Dan Bakery", amount: -10,
+            accountID: account.id, categoryID: dining)]
+        for name in ["SQ * Dan Bakery Hoboken", "POS TST* DÄN Bakery Jersey City NJ USA",
+                     "Dan Bakery New York NY", "Dan Bakery Brooklyn"] {
+            XCTAssertEqual(ledger.historicalCategory(merchant: name, kind: .expense), dining, name)
+        }
+        for name in ["Dan Bakery Medical Center", "Dan Bakery Unknownville", "Dan Bakeries Hoboken",
+                     "Other Dan Bakery Hoboken", "Dan Hoboken"] {
+            XCTAssertNil(ledger.historicalCategory(merchant: name, kind: .expense), name)
+        }
+        XCTAssertNil(ledger.historicalCategory(merchant: "Dan Bakery Hoboken", kind: .income))
+        XCTAssertNil(ledger.historicalCategory(merchant: "Dan Bakery Hoboken", kind: .transfer))
+
+        ledger.transactions[0].merchant = "SQ * Dan Bakery Hoboken"
+        XCTAssertEqual(ledger.historicalCategory(merchant: "Dan Bakery", kind: .expense), dining)
+        ledger.transactions.append(Transaction(date: Date(), merchant: "Dan Bakery Jersey City", amount: -5,
+            accountID: account.id, categoryID: groceries))
+        XCTAssertNil(ledger.historicalCategory(merchant: "POS Dan Bakery Brooklyn", kind: .expense))
+        XCTAssertEqual(ledger.historicalCategory(merchant: "SQ * Dan Bakery Hoboken", kind: .expense), dining)
+        ledger.rules = [CategoryRule(keyword: "Dan Bakery", categoryID: groceries)]
+        XCTAssertEqual(ledger.historicalCategory(merchant: "SQ * Dan Bakery Hoboken", kind: .expense), groceries)
+        ledger.rules = []
+        ledger.categories.removeAll { $0.id == groceries }
+        XCTAssertEqual(ledger.historicalCategory(merchant: "Dan Bakery Brooklyn", kind: .expense), dining)
+    }
 }

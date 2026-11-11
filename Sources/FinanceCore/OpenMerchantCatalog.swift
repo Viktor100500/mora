@@ -37,6 +37,32 @@ public enum MerchantName {
         }
         return name
     }
+
+    /// Recognized regional bank-description suffixes, never arbitrary trailing
+    /// words. Retain a substantial, multiword seller name after removing one.
+    static func withoutLocationSuffix(_ name: String) -> String {
+        let words = name.split(separator: " ")
+        for length in stride(from: min(5, words.count - 2), through: 1, by: -1) {
+            guard locationSuffixes.contains(words.suffix(length).joined(separator: " ")) else { continue }
+            let stem = words.dropLast(length).joined(separator: " ")
+            if stem.count >= 8 { return stem }
+        }
+        return name
+    }
+
+    private static let locationSuffixes: Set<String> = {
+        let cities = [("hoboken", "nj"), ("jersey city", "nj"), ("union city", "nj"), ("weehawken", "nj"),
+                      ("new york", "ny"), ("new york city", "ny"), ("nyc", "ny"), ("manhattan", "ny"),
+                      ("brooklyn", "ny"), ("queens", "ny"), ("bronx", "ny"), ("staten island", "ny")]
+        var suffixes: Set<String> = []
+        for (city, state) in cities {
+            suffixes.insert(city)
+            suffixes.insert("\(city) \(state)")
+            suffixes.insert("\(city) usa")
+            suffixes.insert("\(city) \(state) usa")
+        }
+        return suffixes
+    }()
 }
 
 /// Exact names and longest token-boundary prefixes. Conflicting types never win
