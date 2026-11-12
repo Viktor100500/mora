@@ -1,5 +1,12 @@
 # Changelog
 
+## iPhone 1.0.43 — 2026-11-12
+
+iPhone 1.0.43 (build 44)
+
+- **Gentler tab switching.** The native glass reacts to touch while the screen changes only on release; cancelling the touch keeps the current screen. A short opacity fade softens screen changes, including with Reduce Motion, without moving or scaling the content. VoiceOver activation and repeated-tab actions remain available.
+- **Tab spacing.** Adds a little more room between the five native tab items while keeping full localized labels and stable geometry throughout selection.
+
 ## iPhone 1.0.42 — 2026-11-11
 
 iPhone 1.0.42 (build 43)

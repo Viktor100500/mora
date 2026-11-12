@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import UIKit.UIGestureRecognizerSubclass
 import FinanceCore
 
 struct RootView: View {
@@ -164,6 +165,16 @@ private struct SystemTabBar: UIViewRepresentable {
     func makeUIView(context: Context) -> Container {
         let view = Container()
         view.bar.delegate = context.coordinator
+        view.touchObserver.finished = { [weak view, weak coordinator = context.coordinator] cancelled in
+            guard let view, let coordinator else { return }
+            let pending = view.pendingSelection
+            view.pendingSelection = nil
+            if !cancelled, let pending {
+                coordinator.select(pending, in: view)
+            } else if let index = Self.tabs.firstIndex(where: { $0.0 == coordinator.selection.wrappedValue }) {
+                view.bar.selectedItem = view.bar.items?[index]
+            }
+        }
         view.bar.items = Self.tabs.enumerated().map { index, tab in
             let image = UIImage(systemName: tab.2 + ".fill") ?? UIImage(systemName: tab.2)
             let item = UITabBarItem(title: L(tab.1), image: image, tag: index)
@@ -186,7 +197,7 @@ private struct SystemTabBar: UIViewRepresentable {
             }
         }
         if titlesChanged { view.refreshItems() }
-        if let index = Self.tabs.firstIndex(where: { $0.0 == selection }), let item = view.bar.items?[index], view.bar.selectedItem !== item {
+        if !view.touchObserver.isInteracting, let index = Self.tabs.firstIndex(where: { $0.0 == selection }), let item = view.bar.items?[index], view.bar.selectedItem !== item {
             view.bar.selectedItem = item
         }
         let badge = reviewCount > 0 ? String(reviewCount) : nil
@@ -197,7 +208,7 @@ private struct SystemTabBar: UIViewRepresentable {
         let width = proposal.width ?? 375
         // sizeThatFits includes the home-indicator inset even for a standalone bar.
         // Reserve that part below SwiftUI's safe area, rather than counting it twice.
-        let nativeHeight = uiView.bar.sizeThatFits(CGSize(width: width + 16, height: 0)).height - (uiView.window?.safeAreaInsets.bottom ?? 0)
+        let nativeHeight = uiView.bar.sizeThatFits(CGSize(width: width + 24, height: 0)).height - (uiView.window?.safeAreaInsets.bottom ?? 0)
         return CGSize(width: width, height: nativeHeight + 14)
     }
 
@@ -205,13 +216,34 @@ private struct SystemTabBar: UIViewRepresentable {
         var selection: Binding<AppTab>
         init(selection: Binding<AppTab>) { self.selection = selection }
         func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
+            guard let view = tabBar.superview as? Container else { return }
+            view.pendingSelection = item
+            // Native recognizers can call the delegate before our observer gets
+            // the same event. Decide after event delivery, never inside didSelect.
+            DispatchQueue.main.async { [weak self, weak view] in
+                guard let self, let view, !view.touchObserver.isInteracting,
+                      let pending = view.pendingSelection else { return }
+                view.pendingSelection = nil
+                // VoiceOver and keyboard activation have no touch to wait for.
+                select(pending, in: view)
+            }
+        }
+        func select(_ item: UITabBarItem, in view: Container) {
             guard SystemTabBar.tabs.indices.contains(item.tag) else { return }
-            selection.wrappedValue = SystemTabBar.tabs[item.tag].0
+            let tab = SystemTabBar.tabs[item.tag].0
+            if selection.wrappedValue == tab {
+                selection.wrappedValue = tab
+            } else {
+                view.crossfadeContent { selection.wrappedValue = tab }
+            }
         }
     }
 
     final class Container: UIView {
         let bar = UITabBar()
+        let touchObserver = TabTouchObserver()
+        var pendingSelection: UITabBarItem?
+        private weak var fadingContent: UIView?
         private var itemsWidth: CGFloat = 0
         private var bottom: NSLayoutConstraint!
         override init(frame: CGRect) {
@@ -220,16 +252,45 @@ private struct SystemTabBar: UIViewRepresentable {
             clipsToBounds = false
             bar.translatesAutoresizingMaskIntoConstraints = false
             addSubview(bar)
+            bar.addGestureRecognizer(touchObserver)
             bottom = bar.bottomAnchor.constraint(equalTo: bottomAnchor)
             NSLayoutConstraint.activate([
                 bar.centerXAnchor.constraint(equalTo: centerXAnchor),
-                bar.widthAnchor.constraint(equalTo: widthAnchor, constant: 16),
+                bar.widthAnchor.constraint(equalTo: widthAnchor, constant: 24),
                 // Leave room above the bar for the system's morphing glass lens.
                 bar.topAnchor.constraint(equalTo: topAnchor, constant: 14),
                 bottom
             ])
         }
         required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+        func crossfadeContent(_ changeSelection: () -> Void) {
+            fadingContent?.removeFromSuperview()
+            guard let root = window?.rootViewController?.view,
+                  let snapshot = root.snapshotView(afterScreenUpdates: false) else {
+                changeSelection()
+                return
+            }
+            // Clip above the bar so UIKit alone animates the glass. Only opacity
+            // changes: this also works with Reduce Motion, without sliding/scaling.
+            let height = max(0, min(root.bounds.height, convert(bounds, to: root).minY))
+            let overlay = UIView(frame: CGRect(x: root.bounds.minX, y: root.bounds.minY, width: root.bounds.width, height: height))
+            overlay.clipsToBounds = true
+            overlay.isUserInteractionEnabled = false
+            overlay.accessibilityElementsHidden = true
+            snapshot.frame = root.bounds
+            overlay.addSubview(snapshot)
+            root.addSubview(overlay)
+            fadingContent = overlay
+            changeSelection()
+            // Let SwiftUI install the selected screen before fading its old image.
+            DispatchQueue.main.async { [weak root, weak overlay] in
+                guard let root, let overlay else { return }
+                root.layoutIfNeeded()
+                UIView.animate(withDuration: 0.12, delay: 0, options: [.curveEaseOut, .allowUserInteraction]) {
+                    overlay.alpha = 0
+                } completion: { _ in overlay.removeFromSuperview() }
+            }
+        }
         override func layoutSubviews() {
             super.layoutSubviews()
             // iOS 26 otherwise retains title measurements made at an initial zero
@@ -252,6 +313,58 @@ private struct SystemTabBar: UIViewRepresentable {
         private func updateBottomInset() {
             let inset = window?.safeAreaInsets.bottom ?? 0
             if bottom.constant != inset { bottom.constant = inset; invalidateIntrinsicContentSize() }
+        }
+    }
+
+    /// Observes release/cancellation without delaying or consuming UIKit's touches.
+    /// Screen selection is committed after the native bar finishes that same event.
+    final class TabTouchObserver: UIGestureRecognizer {
+        var finished: ((Bool) -> Void)?
+        private(set) var isInteracting = false
+        private var trackedTouch: UITouch?
+        private var generation = 0
+
+        init() {
+            super.init(target: nil, action: nil)
+            cancelsTouchesInView = false
+            delaysTouchesBegan = false
+            delaysTouchesEnded = false
+        }
+        override func canPrevent(_ other: UIGestureRecognizer) -> Bool { false }
+        override func canBePrevented(by other: UIGestureRecognizer) -> Bool { false }
+        override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+            guard trackedTouch == nil, let touch = touches.first else { return }
+            generation += 1
+            trackedTouch = touch
+            isInteracting = true
+            state = .began
+        }
+        override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
+            if let trackedTouch, touches.contains(trackedTouch) { state = .changed }
+        }
+        override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
+            guard let trackedTouch, touches.contains(trackedTouch) else { return }
+            let inside = view?.bounds.contains(trackedTouch.location(in: view)) ?? false
+            finish(cancelled: !inside)
+            state = .ended
+        }
+        override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
+            guard let trackedTouch, touches.contains(trackedTouch) else { return }
+            finish(cancelled: true)
+            state = .cancelled
+        }
+        override func reset() {
+            super.reset()
+            if trackedTouch != nil { finish(cancelled: true) }
+        }
+        private func finish(cancelled: Bool) {
+            trackedTouch = nil
+            let current = generation
+            DispatchQueue.main.async { [weak self] in
+                guard let self, generation == current else { return }
+                isInteracting = false
+                finished?(cancelled)
+            }
         }
     }
 }
