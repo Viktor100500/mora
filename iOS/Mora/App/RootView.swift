@@ -18,22 +18,23 @@ struct RootView: View {
     var body: some View {
         TabView(selection: Binding(get: { router.tab }, set: { router.select($0) })) {
             OverviewScreen()
-                .background(NativeTabSpacing().frame(width: 0, height: 0))
+                .modifier(ManagedTabBarVisibility())
                 .tabItem { Label(L("Обзор"), systemImage: "square.grid.2x2") }.tag(AppTab.overview)
             TransactionsScreen()
-                .background(NativeTabSpacing().frame(width: 0, height: 0))
+                .modifier(ManagedTabBarVisibility())
                 .tabItem { Label(L("Операции"), systemImage: "arrow.left.arrow.right") }.tag(AppTab.transactions)
             AnalyticsScreen()
-                .background(NativeTabSpacing().frame(width: 0, height: 0))
+                .modifier(ManagedTabBarVisibility())
                 .tabItem { Label(L("Аналитика"), systemImage: "chart.xyaxis.line") }.tag(AppTab.analytics)
             AccountsScreen()
-                .background(NativeTabSpacing().frame(width: 0, height: 0))
+                .modifier(ManagedTabBarVisibility())
                 .tabItem { Label(L("Счета"), systemImage: "wallet.bifold") }.tag(AppTab.accounts)
             MoreScreen()
-                .background(NativeTabSpacing().frame(width: 0, height: 0))
+                .modifier(ManagedTabBarVisibility())
                 .tabItem { Label(L("Ещё"), systemImage: "ellipsis.circle") }.tag(AppTab.more)
                 .badge(reviewQueue.count(with: cloud))
         }
+        .modifier(StableSystemTabBar(router: router, reviewCount: reviewQueue.count(with: cloud)))
         .tint(.moraGreen)
         .environment(\.locale, L10n.locale)
         .preferredColorScheme(colorScheme)
@@ -119,27 +120,138 @@ struct RootView: View {
     }
 }
 
-/// Give only the system tab bar a little more room between its items.
-/// Screen layout, native labels, selection and switching remain UIKit's own.
-private struct NativeTabSpacing: UIViewControllerRepresentable {
-    func makeUIViewController(context: Context) -> Controller { Controller() }
-    func updateUIViewController(_ controller: Controller, context: Context) { controller.updateSpacing() }
+/// The content stays in TabView; the visible control is a real UITabBar with
+/// stable constraints, rather than resizing the controller-owned bar after a switch.
+private struct ManagedTabBarVisibility: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *), UIDevice.current.userInterfaceIdiom == .phone {
+            content.toolbar(.hidden, for: .tabBar)
+        } else { content }
+    }
+}
 
-    final class Controller: UIViewController {
-        override func viewDidAppear(_ animated: Bool) { super.viewDidAppear(animated); updateSpacing() }
-        override func viewDidLayoutSubviews() { super.viewDidLayoutSubviews(); updateSpacing() }
-        func updateSpacing() {
-            func findTabs(in controller: UIViewController) -> UITabBarController? {
-                if let tabs = controller as? UITabBarController { return tabs }
-                return controller.children.lazy.compactMap { findTabs(in: $0) }.first
+private struct StableSystemTabBar: ViewModifier {
+    @ObservedObject var router: AppRouter
+    let reviewCount: Int
+    @State private var keyboardVisible = false
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *), UIDevice.current.userInterfaceIdiom == .phone {
+            content
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    if !keyboardVisible {
+                        SystemTabBar(selection: Binding(get: { router.tab }, set: { router.select($0) }), reviewCount: reviewCount)
+                    }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboardVisible = true }
+                .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in keyboardVisible = false }
+        } else { content }
+    }
+}
+
+private struct SystemTabBar: UIViewRepresentable {
+    @Binding var selection: AppTab
+    let reviewCount: Int
+    private static let tabs: [(AppTab, String, String)] = [
+        (.overview, "Обзор", "square.grid.2x2"),
+        (.transactions, "Операции", "arrow.left.arrow.right"),
+        (.analytics, "Аналитика", "chart.xyaxis.line"),
+        (.accounts, "Счета", "wallet.bifold"),
+        (.more, "Ещё", "ellipsis.circle")
+    ]
+
+    func makeCoordinator() -> Coordinator { Coordinator(selection: $selection) }
+    func makeUIView(context: Context) -> Container {
+        let view = Container()
+        view.bar.delegate = context.coordinator
+        view.bar.items = Self.tabs.enumerated().map { index, tab in
+            let image = UIImage(systemName: tab.2 + ".fill") ?? UIImage(systemName: tab.2)
+            let item = UITabBarItem(title: L(tab.1), image: image, tag: index)
+            item.selectedImage = image
+            return item
+        }
+        updateUIView(view, context: context)
+        return view
+    }
+    func updateUIView(_ view: Container, context: Context) {
+        context.coordinator.selection = $selection
+        view.bar.tintColor = UIColor(Color.moraGreen)
+        view.semanticContentAttribute = context.environment.layoutDirection == .rightToLeft ? .forceRightToLeft : .forceLeftToRight
+        var titlesChanged = false
+        for (index, tab) in Self.tabs.enumerated() {
+            let title = L(tab.1)
+            if view.bar.items?[index].title != title {
+                view.bar.items?[index].title = title
+                titlesChanged = true
             }
-            let tabs = tabBarController ?? view.window?.rootViewController.flatMap { findTabs(in: $0) }
-            guard let bar = tabs?.tabBar, let container = bar.superview,
-                  traitCollection.userInterfaceIdiom == .phone, container.bounds.width > 0 else { return }
-            let extra: CGFloat = container.bounds.width < 600 ? 8 : 0
-            let width = container.bounds.width + extra * 2
-            guard abs(bar.frame.width - width) > 0.5 || abs(bar.frame.minX + extra) > 0.5 else { return }
-            bar.frame = CGRect(x: -extra, y: bar.frame.minY, width: width, height: bar.frame.height)
+        }
+        if titlesChanged { view.refreshItems() }
+        if let index = Self.tabs.firstIndex(where: { $0.0 == selection }), let item = view.bar.items?[index], view.bar.selectedItem !== item {
+            view.bar.selectedItem = item
+        }
+        let badge = reviewCount > 0 ? String(reviewCount) : nil
+        if view.bar.items?.last?.badgeValue != badge { view.bar.items?.last?.badgeValue = badge }
+        view.bar.items?.last?.accessibilityValue = reviewCount > 0 ? L("Покупок на проверке: \(reviewCount)") : nil
+    }
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: Container, context: Context) -> CGSize? {
+        let width = proposal.width ?? 375
+        // sizeThatFits includes the home-indicator inset even for a standalone bar.
+        // Reserve that part below SwiftUI's safe area, rather than counting it twice.
+        let nativeHeight = uiView.bar.sizeThatFits(CGSize(width: width + 16, height: 0)).height - (uiView.window?.safeAreaInsets.bottom ?? 0)
+        return CGSize(width: width, height: nativeHeight + 14)
+    }
+
+    final class Coordinator: NSObject, UITabBarDelegate {
+        var selection: Binding<AppTab>
+        init(selection: Binding<AppTab>) { self.selection = selection }
+        func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
+            guard SystemTabBar.tabs.indices.contains(item.tag) else { return }
+            selection.wrappedValue = SystemTabBar.tabs[item.tag].0
+        }
+    }
+
+    final class Container: UIView {
+        let bar = UITabBar()
+        private var itemsWidth: CGFloat = 0
+        private var bottom: NSLayoutConstraint!
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            backgroundColor = .clear
+            clipsToBounds = false
+            bar.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(bar)
+            bottom = bar.bottomAnchor.constraint(equalTo: bottomAnchor)
+            NSLayoutConstraint.activate([
+                bar.centerXAnchor.constraint(equalTo: centerXAnchor),
+                bar.widthAnchor.constraint(equalTo: widthAnchor, constant: 16),
+                // Leave room above the bar for the system's morphing glass lens.
+                bar.topAnchor.constraint(equalTo: topAnchor, constant: 14),
+                bottom
+            ])
+        }
+        required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            // iOS 26 otherwise retains title measurements made at an initial zero
+            // width. Rebuild only for a real width change, never for tab selection.
+            if bar.bounds.width > 0, abs(itemsWidth - bar.bounds.width) > 0.5 {
+                itemsWidth = bar.bounds.width
+                refreshItems()
+            }
+        }
+        func refreshItems() {
+            let items = bar.items
+            let selected = bar.selectedItem
+            let delegate = bar.delegate
+            bar.delegate = nil
+            UIView.performWithoutAnimation { bar.items = nil; bar.items = items; bar.selectedItem = selected }
+            bar.delegate = delegate
+        }
+        override func didMoveToWindow() { super.didMoveToWindow(); updateBottomInset() }
+        override func safeAreaInsetsDidChange() { super.safeAreaInsetsDidChange(); updateBottomInset() }
+        private func updateBottomInset() {
+            let inset = window?.safeAreaInsets.bottom ?? 0
+            if bottom.constant != inset { bottom.constant = inset; invalidateIntrinsicContentSize() }
         }
     }
 }

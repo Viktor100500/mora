@@ -1,5 +1,11 @@
 # Changelog
 
+## iPhone 1.0.42 — 2026-11-11
+
+iPhone 1.0.42 (build 43)
+
+- **Stable native tab bar.** Uses a real system UITabBar with constraints set before selection animations. Removes the post-transition frame changes that made icons jump. Keeps all five full localized labels, native Liquid Glass selection and existing screen navigation.
+
 ## iPhone 1.0.41 — 2026-11-11
 
 iPhone 1.0.41 (build 42)
