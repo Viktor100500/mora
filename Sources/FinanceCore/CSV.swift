@@ -297,6 +297,7 @@ public enum CSVImporter: Sendable {
                     t.conversion = existing.conversion
                     t.sameCurrencyFee = existing.sameCurrencyFee
                 }
+                if let conversion = t.conversion { t.note = conversion.annotating(t.note) }
                 t = try staged.applyingPurchaseFee(to: t)
                 preview.amount = t.amount
                 let key = fingerprint(t, ledger: staged)

@@ -310,9 +310,8 @@ struct TransactionEditor: View {
                saved.originalCurrency == purchaseCurrency, saved.accountCurrency == account.currency,
                Dates.string(saved.date) == Dates.string(date) { quote = saved }
             else {
-                let rate = try await VisaRateClient.shared.rate(from: purchaseCurrency, to: account.currency, date: date)
-                quote = CardConversion(originalAmount: signed, originalCurrency: purchaseCurrency, accountCurrency: account.currency,
-                                       rate: rate, date: Calendar.current.startOfDay(for: date)).applyingFee(of: account)
+                quote = try await VisaRateClient.shared.conversion(amount: signed, from: purchaseCurrency,
+                    to: account.currency, date: date).applyingFee(of: account)
             }
             try Task.checkCancellation()
             guard key == quoteKey else { return }
@@ -343,8 +342,9 @@ struct TransactionEditor: View {
             VStack(alignment: .leading, spacing: 4) {
                 FinancialText("\(kind == .income ? L("Будет зачислено") : L("Будет списано")): \(DisplayMoney.string(abs(converted), currency: quote.accountCurrency))")
                     .font(.subheadline.weight(.semibold))
-                FinancialText(L("Visa · 1 \(quote.originalCurrency) = \(Money.plain(quote.rate)) \(quote.accountCurrency) · \(Dates.string(quote.date))"))
+                FinancialText(L("Visa · 1 \(quote.originalCurrency) = \(Money.plain(quote.rate)) \(quote.accountCurrency) · \(Dates.string(quote.rateDate))"))
                     .font(.caption).foregroundStyle(.secondary)
+                if let warning = quote.cachedRateNote { Text(L(warning)).font(.caption).foregroundStyle(.orange) }
                 Text(quote.feePercent == 0 ? L("Без банковской комиссии") : L("Банковская комиссия: \(Money.plain(quote.feePercent))% · включена в сумму"))
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -411,6 +411,7 @@ struct TransactionEditor: View {
         if needsConversion {
             guard let quote = currentConversion, let converted = try? quote.convertedAmount() else { return nil }
             result.amount = converted; result.conversion = quote
+            result.note = quote.annotating(result.note)
         }
         return result
     }

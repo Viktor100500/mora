@@ -97,6 +97,7 @@ public struct MoraAutomation {
                 }
                 conversion = conversion.applyingFee(of: target)
                 value.amount = try conversion.convertedAmount(); value.conversion = conversion
+                value.note = conversion.annotating(value.note)
             }
             value.accountID = target.id
             value = try initial.applyingPurchaseFee(to: value)

@@ -200,6 +200,7 @@
   "Введите сумму зачисления больше нуля.": "Enter a destination amount greater than zero.",
   "Дождитесь получения курса.": "Wait for the exchange rate.",
   "Для сохранения нужен курс конвертации.": "An exchange rate is required to save.",
+  "Visa: использован сохранённый курс от {0}.": "Visa: used the saved rate from {0}.",
   "Получаем курс Visa…": "Getting the Visa rate…",
   "Visa · 1 {0} = {1} {2} · {3} · без банковской комиссии": "Visa · 1 {0} = {1} {2} · {3} · excluding bank fees",
   "Повторить получение курса": "Retry rate lookup",

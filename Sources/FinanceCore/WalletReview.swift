@@ -130,6 +130,7 @@ public struct WalletReviewDraft: Sendable {
         var value = transaction
         value.id = capture.id
         value.externalID = "wallet:" + capture.id.uuidString.lowercased()
+        if let conversion = value.conversion { value.note = conversion.annotating(value.note) }
         value = try ledger.applyingPurchaseFee(to: value)
         var validation = ledger
         // A retry after a lost response must be allowed to fetch the committed result.

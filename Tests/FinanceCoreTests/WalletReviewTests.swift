@@ -43,6 +43,30 @@ final class WalletReviewTests: XCTestCase {
         }
         XCTAssertEqual(retry, value)
     }
+    func testAutomaticFallbackKeepsRateDateAndNoteOnBookingRetry() async throws {
+        var ledger = Ledger.empty
+        ledger.accounts = [Account(name: "EUR", currency: "EUR")]
+        let item = try capture(account: ledger.accounts[0].id)
+        let oldDate = Dates.parse("2026-10-15")!
+        let candidate = try await WalletReviewDraft.automaticTransaction(for: item, in: ledger) { amount, from, to, date in
+            var quote = CardConversion(originalAmount: amount, originalCurrency: from, accountCurrency: to, rate: Decimal(string: "0.9")!, date: date)
+            quote.cachedRateDate = oldDate
+            return quote
+        }
+        let value = try XCTUnwrap(candidate)
+        XCTAssertEqual(value.date, item.date)
+        XCTAssertEqual(value.conversion?.cachedRateDate, oldDate)
+        XCTAssertTrue(value.note.contains("2026-10-15"))
+        XCTAssertTrue(value.note.contains("Apple Wallet"))
+        XCTAssertEqual(try WalletReviewDraft.transaction(value, for: item, in: ledger), value)
+        ledger.transactions.append(value)
+        try ledger.validate()
+        let retry = try await WalletReviewDraft.automaticTransaction(for: item, in: ledger) { _, _, _, _ in
+            XCTFail("A retry must preserve the recorded fallback"); throw URLError(.timedOut)
+        }
+        XCTAssertEqual(retry, value)
+    }
+
     func testAutomaticSameCurrencyAndIncompletePurchasesNeverFetchRates() async throws {
         var ledger = Ledger.empty; ledger.accounts = [Account(name: "USD", currency: "USD")]
         let account = ledger.accounts[0].id

@@ -16,6 +16,16 @@ public struct CardConversion: Codable, Equatable, Sendable {
     /// Snapshot of the account fee at booking time, independent of later settings.
     public var bankFeePercent: Decimal? = nil
     public var feePercent: Decimal { bankFeePercent ?? 0 }
+    /// Present only when a failed refresh used the last successful quote for this pair.
+    public var cachedRateDate: Date? = nil
+    public var rateDate: Date { cachedRateDate ?? date }
+    public var cachedRateNote: String? {
+        cachedRateDate.map { "Visa: использован сохранённый курс от \(Dates.string($0))." }
+    }
+    public func annotating(_ note: String) -> String {
+        guard let cachedRateNote, !note.contains(cachedRateNote) else { return note }
+        return [note, cachedRateNote].filter { !$0.isEmpty }.joined(separator: "\n")
+    }
 
     public init(originalAmount: Decimal, originalCurrency: String, accountCurrency: String, rate: Decimal, date: Date,
                 provider: String = "Visa", bankFeePercent: Decimal? = nil) {
@@ -46,83 +56,188 @@ public struct CardConversion: Codable, Equatable, Sendable {
     }
 }
 
-/// Uses the public Visa calculator. Only a unit amount, currencies and date leave the Mac.
-/// No browser credentials, account names, card numbers or purchase amounts are sent.
+/// Uses the public Visa calculator. Only a unit amount, currencies and date leave the device.
 @MainActor
 public final class VisaRateClient {
     public static let shared = VisaRateClient()
     public static let calculatorURL = URL(string: "https://www.visa.co.uk/support/consumer/travel-support/exchange-rate-calculator.html")!
+    /// One deadline for loading the page, selecting currencies and calculating the quote.
+    public static let requestTimeout: TimeInterval = 25
     private let cache: VisaRateCache
     private let fetchRate: @MainActor @Sendable (String, String, Date) async throws -> Decimal
     private let now: @Sendable () -> Date
-    private var inFlight: [String: Task<Decimal, Error>] = [:]
+    private let timeout: TimeInterval
+    private var inFlight: [String: Task<VisaRateResult, Error>] = [:]
+    private var failedAt: [String: Date] = [:]
 
     public convenience init() {
-        let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+        let files = FileManager.default
+        let directory = files.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             .appendingPathComponent("com.mora.finance.local", isDirectory: true)
-        self.init(cacheURL: directory.appendingPathComponent("visa-rates.json"),
+        let legacy = files.urls(for: .cachesDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("com.mora.finance.local/visa-rates.json")
+        self.init(cacheURL: directory.appendingPathComponent("visa-rates.json"), legacyCacheURL: legacy,
                   fetchRate: { try await VisaCalculator().fetch(from: $0, to: $1, date: $2) })
     }
 
-    init(cacheURL: URL?, now: @escaping @Sendable () -> Date = { Date() },
+    init(cacheURL: URL?, legacyCacheURL: URL? = nil, now: @escaping @Sendable () -> Date = { Date() },
+         timeout: TimeInterval = VisaRateClient.requestTimeout,
          fetchRate: @escaping @MainActor @Sendable (String, String, Date) async throws -> Decimal) {
-        cache = VisaRateCache(fileURL: cacheURL); self.now = now; self.fetchRate = fetchRate
+        cache = VisaRateCache(fileURL: cacheURL, legacyURL: legacyCacheURL)
+        self.now = now; self.timeout = timeout; self.fetchRate = fetchRate
     }
 
     public func conversion(amount: Decimal, from: String, to: String, date: Date) async throws -> CardConversion {
-        let rate = try await rate(from: from, to: to, date: date)
-        let value = CardConversion(originalAmount: amount, originalCurrency: from, accountCurrency: to, rate: rate, date: Calendar.current.startOfDay(for: date))
+        let result = try await quote(from: from, to: to, date: date)
+        var value = CardConversion(originalAmount: amount, originalCurrency: from, accountCurrency: to,
+                                   rate: result.quote.rate, date: Calendar.current.startOfDay(for: date))
+        value.cachedRateDate = result.isFallback ? result.quote.date : nil
         _ = try value.convertedAmount()
         return value
     }
 
     public func rate(from: String, to: String, date: Date) async throws -> Decimal {
+        try await quote(from: from, to: to, date: date).quote.rate
+    }
+
+    private func quote(from: String, to: String, date: Date) async throws -> VisaRateResult {
+        try Task.checkCancellation()
         guard Locale.commonISOCurrencyCodes.contains(from), Locale.commonISOCurrencyCodes.contains(to), from != to else {
             throw LedgerError.invalid("Выберите поддерживаемую валюту покупки и счет.")
         }
-        // Visa publishes daily rates. Expire at the provider's UTC day boundary,
-        // keeping the purchase's calendar date and direction in the cache key.
-        let day = Int(floor(now().timeIntervalSince1970 / 86_400))
-        let key = "\(day)|\(Dates.string(date))|\(from)|\(to)"
-        let rate: Decimal
-        if let cached = await cache.rate(for: key) { rate = cached }
-        else if let task = inFlight[key] { rate = try await task.value }
-        else {
-            // An editor task can be cancelled on every keystroke or dismissal.
-            // Its shared fetch must survive for other previews and queued saves.
-            let task = Task { [fetchRate, cache] in
-                let rate = try await fetchRate(from, to, date)
-                guard rate > 0, !rate.isNaN else { throw LedgerError.invalid("Visa вернула некорректный курс. Операция не сохранена.") }
-                await cache.store(rate, for: key, day: day)
-                return rate
+        let timestamp = now()
+        let day = Int(floor(timestamp.timeIntervalSince1970 / 86_400))
+        let pair = "\(from)|\(to)"
+        let key = "\(day)|\(Dates.string(date))|\(pair)"
+        let result: VisaRateResult
+        if let cached = await cache.quote(for: key) {
+            result = VisaRateResult(quote: cached, isFallback: false)
+        } else if let failed = failedAt[pair], timestamp.timeIntervalSince(failed) >= 0,
+                  timestamp.timeIntervalSince(failed) < 60, let last = await cache.latest(for: pair) {
+            result = VisaRateResult(quote: last, isFallback: true)
+        } else if let task = inFlight[key] {
+            result = try await task.value
+        } else {
+            // Shared work survives a cancelled editor preview so a queued save can reuse it.
+            let task = Task { [self] in
+                do {
+                    let rate = try await VisaRateRequest().run(timeout: timeout) { [fetchRate] in
+                        try await fetchRate(from, to, date)
+                    }
+                    guard rate > 0, !rate.isNaN else { throw LedgerError.invalid("Visa вернула некорректный курс. Операция не сохранена.") }
+                    let quote = VisaQuote(rate: rate, date: Calendar.current.startOfDay(for: date), fetchedAt: now())
+                    await cache.store(quote, for: key, pair: pair, day: day)
+                    failedAt[pair] = nil
+                    return VisaRateResult(quote: quote, isFallback: false)
+                } catch is CancellationError { throw CancellationError() }
+                catch {
+                    failedAt[pair] = now()
+                    guard let last = await cache.latest(for: pair) else { throw error }
+                    return VisaRateResult(quote: last, isFallback: true)
+                }
             }
             inFlight[key] = task
             defer { inFlight[key] = nil }
-            rate = try await task.value
+            result = try await task.value
         }
         try Task.checkCancellation()
-        return rate
+        return result
     }
 }
 
-/// Optional disk caching never turns a successful quote into a failed purchase.
-private actor VisaRateCache {
-    private let fileURL: URL?
-    private var rates: [String: Decimal]?
-    init(fileURL: URL?) { self.fileURL = fileURL }
-    func rate(for key: String) -> Decimal? {
-        if rates == nil {
-            rates = fileURL.flatMap { try? Data(contentsOf: $0) }
-                .flatMap { try? JSONDecoder().decode([String: Decimal].self, from: $0) } ?? [:]
-        }
-        guard let rate = rates?[key], rate > 0, !rate.isNaN else { return nil }
-        return rate
+private struct VisaQuote: Codable, Sendable {
+    let rate: Decimal
+    let date: Date
+    let fetchedAt: Date
+    var isValid: Bool {
+        rate > 0 && !rate.isNaN && date.timeIntervalSince1970.isFinite && fetchedAt.timeIntervalSince1970.isFinite
     }
-    func store(_ rate: Decimal, for key: String, day: Int) {
-        _ = self.rate(for: key)
-        rates = rates?.filter { $0.key.hasPrefix("\(day)|") }
-        rates?[key] = rate
-        guard let fileURL, let data = try? JSONEncoder().encode(rates ?? [:]) else { return }
+}
+private struct VisaRateResult: Sendable {
+    let quote: VisaQuote
+    let isFallback: Bool
+}
+
+/// An unstructured race bounds even a non-cooperative web callback. Late results cannot
+/// overwrite a timeout or warm the cache; cancellation stops the calculator's polling.
+@MainActor
+private final class VisaRateRequest {
+    private var continuation: CheckedContinuation<Decimal, Error>?
+    private var worker: Task<Void, Never>?
+    private var timer: Task<Void, Never>?
+    func run(timeout: TimeInterval, fetch: @escaping @MainActor @Sendable () async throws -> Decimal) async throws -> Decimal {
+        try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+            worker = Task {
+                do { finish(.success(try await fetch())) }
+                catch { finish(.failure(error)) }
+            }
+            timer = Task {
+                do { try await Task.sleep(for: .seconds(timeout)); finish(.failure(URLError(.timedOut))) }
+                catch { }
+            }
+        }
+    }
+    private func finish(_ result: Result<Decimal, Error>) {
+        guard let continuation else { return }
+        self.continuation = nil
+        worker?.cancel(); timer?.cancel()
+        worker = nil; timer = nil
+        continuation.resume(with: result)
+    }
+}
+
+/// Application Support keeps last-known pairs across restarts and system cache cleanup.
+/// Optional persistence never turns a successful quote into a failed purchase.
+private actor VisaRateCache {
+    private struct Contents: Codable {
+        var daily: [String: VisaQuote] = [:]
+        var latest: [String: VisaQuote] = [:]
+    }
+    private let fileURL: URL?
+    private let legacyURL: URL?
+    private var contents: Contents?
+    init(fileURL: URL?, legacyURL: URL?) { self.fileURL = fileURL; self.legacyURL = legacyURL }
+    private func load() {
+        guard contents == nil else { return }
+        contents = Contents()
+        for url in [fileURL, legacyURL].compactMap({ $0 }) {
+            guard let data = try? Data(contentsOf: url) else { continue }
+            if let decoded = try? JSONDecoder().decode(Contents.self, from: data) {
+                contents = Contents(daily: decoded.daily.filter { $0.value.isValid }, latest: decoded.latest.filter { $0.value.isValid })
+                return
+            }
+            // Migrate the old day|purchase-date|from|to decimal dictionary, preserving all pairs.
+            guard let legacy = try? JSONDecoder().decode([String: Decimal].self, from: data) else { continue }
+            for (key, rate) in legacy {
+                let parts = key.split(separator: "|").map(String.init)
+                guard parts.count == 4, let day = Int(parts[0]), let date = Dates.parse(parts[1]),
+                      Locale.commonISOCurrencyCodes.contains(parts[2]), Locale.commonISOCurrencyCodes.contains(parts[3]),
+                      parts[2] != parts[3] else { continue }
+                let quote = VisaQuote(rate: rate, date: date, fetchedAt: Date(timeIntervalSince1970: Double(day) * 86_400))
+                guard quote.isValid else { continue }
+                contents?.daily[key] = quote
+                let pair = "\(parts[2])|\(parts[3])"
+                if contents?.latest[pair].map({ $0.fetchedAt > quote.fetchedAt || ($0.fetchedAt == quote.fetchedAt && $0.date > quote.date) }) != true {
+                    contents?.latest[pair] = quote
+                }
+            }
+            persist()
+            return
+        }
+    }
+    func quote(for key: String) -> VisaQuote? { load(); return contents?.daily[key] }
+    func latest(for pair: String) -> VisaQuote? { load(); return contents?.latest[pair] }
+    func store(_ quote: VisaQuote, for key: String, pair: String, day: Int) {
+        load()
+        let daily = contents?.daily.filter { $0.key.hasPrefix("\(day)|") } ?? [:]
+        contents?.daily = daily
+        contents?.daily[key] = quote
+        contents?.latest[pair] = quote
+        persist()
+    }
+    private func persist() {
+        guard let fileURL, let contents, let data = try? JSONEncoder().encode(contents) else { return }
         try? FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: fileURL, options: .atomic)
     }

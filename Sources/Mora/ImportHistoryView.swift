@@ -73,7 +73,7 @@ struct ImportHistoryView: View {
                 Text(transaction.merchant).font(.callout.weight(.medium)).lineLimit(nil).fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
                 Text(subtitle).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 if let conversion = transaction.conversion {
-                    FinancialText("\(DisplayMoney.string(abs(conversion.originalAmount), currency: conversion.originalCurrency)) · Visa \(Money.plain(conversion.rate)) · \(Dates.string(conversion.date))").font(.caption).foregroundStyle(.secondary)
+                    FinancialText("\(DisplayMoney.string(abs(conversion.originalAmount), currency: conversion.originalCurrency)) · Visa \(Money.plain(conversion.rate)) · \(Dates.string(conversion.rateDate))").font(.caption).foregroundStyle(.secondary)
                 }
             }.frame(maxWidth: .infinity, alignment: .leading).layoutPriority(1)
             VStack(alignment: .trailing, spacing: 4) {

@@ -44,6 +44,8 @@ final class CloudSync: ObservableObject {
     /// Captures the user deleted that the server has not confirmed yet: a sync in between must not bring them back.
     private var dismissing: Set<UUID> = []
     private var synchronizing = false
+    private var bookingWallet = false
+    private var hasAutomaticPurchases = false
 
     init(transport: URLSession = .shared) { self.transport = transport }
 
@@ -192,7 +194,7 @@ final class CloudSync: ObservableObject {
             operationWaiters.removeAll()
             for waiter in waiters { waiter.resume() }
             // A complete purchase seen outside synchronization is booked right after it.
-            if processingWallet && !synchronizing {
+            if hasAutomaticPurchases && !synchronizing && Date() >= nextAttempt {
                 nextAttempt = .distantPast
                 Task { await self.synchronize(inBackground: true) }
             }
@@ -307,7 +309,9 @@ final class CloudSync: ObservableObject {
             attemptedCaptures.contains(capture.id) || store.map { !WalletReviewDraft.canBookAutomatically(capture, in: $0.ledger) } ?? true
         } : visible
         if pending != shown { pending = shown }
-        let processing = shown.count < visible.count
+        hasAutomaticPurchases = enabled && shown.count < visible.count
+        // Waiting for connectivity/backoff is not active purchase loading.
+        let processing = bookingWallet && hasAutomaticPurchases
         if processingWallet != processing { withAnimation(.spring(duration: 0.35)) { processingWallet = processing } }
     }
     private func diskLedger() async throws -> Ledger {
@@ -482,6 +486,9 @@ final class CloudSync: ObservableObject {
     }
     /// Complete purchases are booked with the same Visa quote and account fee as on the Mac.
     private func bookWalletPurchases() async throws {
+        bookingWallet = true
+        publishPending()
+        defer { bookingWallet = false; publishPending() }
         guard let id = householdID, let store else { return }
         var firstError: Error?
         for capture in inbox.sorted(by: { $0.date < $1.date }) {

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.7.17 — 2026-11-11
+
+Mac 1.7.17 (build 96) · iPhone 1.0.40 (build 41)
+
+- **Visa fallback.** Successful quotes persist per currency pair across restarts. Same-day quotes are reused; after a failed refresh or a 25-second total deadline, purchases use the last successful quote for that direction and record its original date in the note. Failed pairs wait one minute before retrying. Existing quotes migrate automatically.
+- **iPhone Wallet loading.** The purchase spinner runs only during automatic booking and stops while waiting for a retry. Pending purchases no longer bypass the cloud retry delay.
+- **iPhone tab bar.** The Liquid Glass tab bar keeps each selection inside its button with an 8-point gap between tabs. Older iOS versions retain the native bar.
+
 ## 1.7.16 — 2026-11-10
 
 Mac 1.7.16 (build 95) · iPhone 1.0.39 (build 40)
