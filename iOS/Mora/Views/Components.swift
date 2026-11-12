@@ -337,6 +337,13 @@ struct EmptyCard: View {
 struct StorageFooter: View {
     @EnvironmentObject private var store: FinanceStore
     @EnvironmentObject private var cloud: CloudSync
+
+    private var bottomClearance: CGFloat {
+        // Keep the last scrollable row above the floating iPhone bar.
+        if #available(iOS 26, *), UIDevice.current.userInterfaceIdiom == .phone { return 64 }
+        return 0
+    }
+
     var body: some View {
         HStack(spacing: 5) {
             Image(systemName: "lock.shield")
@@ -346,6 +353,7 @@ struct StorageFooter: View {
         }
         .font(.caption2).foregroundStyle(.tertiary).multilineTextAlignment(.center)
         .frame(maxWidth: .infinity).padding(.vertical, 8)
+        .padding(.bottom, bottomClearance)
     }
 }
 

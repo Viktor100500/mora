@@ -1,5 +1,11 @@
 # Changelog
 
+## iPhone 1.0.44 — 2026-11-12
+
+iPhone 1.0.44 (build 45)
+
+- **Storage status spacing.** Adds bottom clearance below the local/shared-data status on Overview and More so the floating iPhone tab bar does not cover it. Tab interaction and Reduce Motion behavior are unchanged.
+
 ## iPhone 1.0.43 — 2026-11-12
 
 iPhone 1.0.43 (build 44)
