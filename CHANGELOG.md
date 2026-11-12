@@ -1,5 +1,11 @@
 # Changelog
 
+## iPhone 1.0.45 — 2026-11-12
+
+iPhone 1.0.45 (build 46)
+
+- **Compact storage caption.** Removes the oversized bottom spacer below the local/shared-data caption. A small visual offset raises only the caption, restoring the original scroll content height and spacing above the tab bar.
+
 ## iPhone 1.0.44 — 2026-11-12
 
 iPhone 1.0.44 (build 45)
