@@ -61,6 +61,19 @@ def tracked(tree: str | None, seen: set | None = None):
         yield name.decode(), mode, git('cat-file', 'blob', oid)
 
 
+def history_files(tree: str, published: str | None = None):
+    """Check the tip and every newly published commit, including removed secrets.
+
+    A known remote tip is already public; its ancestors are not uploaded again.
+    New branches without a remote tip retain the full-history audit.
+    """
+    seen: set = set()
+    yield from tracked(tree, seen)
+    revisions = [tree] + (['--not', published] if published else [])
+    for commit in git('rev-list', *revisions).decode().splitlines():
+        yield from tracked(commit, seen)
+
+
 def path_issue(name: str, bundle: bool) -> str | None:
     path = PurePosixPath(name)
     if path.is_absolute() or '..' in path.parts:
@@ -114,17 +127,18 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--tree', help='Git ref to inspect; defaults to the exact Git index')
     parser.add_argument('--history', help='Inspect every reachable commit, deduplicating unchanged blobs')
+    parser.add_argument('--published', help='Already published remote tip; only valid with --history')
     parser.add_argument('--bundle', type=Path, help='Inspect the files of an assembled .app')
     args = parser.parse_args()
+    if args.published and not args.history:
+        parser.error('--published requires --history')
     if args.bundle:
         base = args.bundle.resolve()
         if not base.is_dir():
             parser.error('Bundle directory does not exist.')
         files = ((p.relative_to(base).as_posix(), '120000' if p.is_symlink() else '100644', p.read_bytes()) for p in sorted(base.rglob('*')) if p.is_file())
     elif args.history:
-        seen: set = set()
-        commits = git('rev-list', args.history).decode().splitlines()
-        files = (file for commit in commits for file in tracked(commit, seen))
+        files = history_files(args.history, args.published)
     else:
         files = tracked(args.tree)
     findings = inspect(files, bundle=args.bundle is not None)

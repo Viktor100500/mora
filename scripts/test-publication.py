@@ -44,6 +44,37 @@ class PublicationTests(unittest.TestCase):
             self.assertFalse(checks.inspect([('Contents/MacOS/Mora', '100755', address)], bundle=True))
             self.assertTrue(checks.inspect([('Contents/Resources/private.txt', '100644', address)], bundle=True))
 
+    def testExistingRemoteHistoryIsExcludedButAllOutgoingCommitsAreInspected(self):
+        previous = checks.ROOT
+        try:
+            with tempfile.TemporaryDirectory(prefix='mora-publication-history-') as directory:
+                checks.ROOT = Path(directory)
+                def git(*args):
+                    return subprocess.check_output(['git', '-C', directory, *args])
+                git('init', '-q')
+                git('config', 'user.name', 'Publication Test')
+                git('config', 'user.email', 'test@example.test')
+                file = checks.ROOT / 'README.md'
+                def commit(data):
+                    file.write_bytes(data)
+                    git('add', 'README.md')
+                    git('-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'Synthetic fixture')
+                    return git('rev-parse', 'HEAD').decode().strip()
+                secret = b'ghp_' + b'A' * 32
+                commit(secret)
+                published = commit(b'public example')
+                commit(b'new public example')
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertFalse(checks.inspect(checks.history_files('HEAD', published)))
+                    self.assertTrue(checks.inspect(checks.history_files('HEAD')))
+                # A secret added and then removed in the outgoing history still blocks upload.
+                commit(secret)
+                commit(b'public again')
+                with contextlib.redirect_stdout(io.StringIO()):
+                    self.assertTrue(checks.inspect(checks.history_files('HEAD', published)))
+        finally:
+            checks.ROOT = previous
+
     def testChecksGitIndexRatherThanUnstagedWorkingCopy(self):
         previous = checks.ROOT
         try:

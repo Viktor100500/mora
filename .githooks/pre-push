@@ -4,5 +4,10 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   case "$local_sha" in
     0000000000000000000000000000000000000000) continue ;;
   esac
-  python3 scripts/check-publication.py --history "$local_sha"
+  case "$remote_sha" in
+    0000000000000000000000000000000000000000)
+      python3 scripts/check-publication.py --history "$local_sha" ;;
+    *)
+      python3 scripts/check-publication.py --history "$local_sha" --published "$remote_sha" ;;
+  esac
 done
