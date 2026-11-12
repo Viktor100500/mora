@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import FinanceCore
 
 struct RootView: View {
@@ -17,23 +18,22 @@ struct RootView: View {
     var body: some View {
         TabView(selection: Binding(get: { router.tab }, set: { router.select($0) })) {
             OverviewScreen()
-                .modifier(NativeTabBarVisibility())
+                .background(NativeTabSpacing().frame(width: 0, height: 0))
                 .tabItem { Label(L("Обзор"), systemImage: "square.grid.2x2") }.tag(AppTab.overview)
             TransactionsScreen()
-                .modifier(NativeTabBarVisibility())
+                .background(NativeTabSpacing().frame(width: 0, height: 0))
                 .tabItem { Label(L("Операции"), systemImage: "arrow.left.arrow.right") }.tag(AppTab.transactions)
             AnalyticsScreen()
-                .modifier(NativeTabBarVisibility())
+                .background(NativeTabSpacing().frame(width: 0, height: 0))
                 .tabItem { Label(L("Аналитика"), systemImage: "chart.xyaxis.line") }.tag(AppTab.analytics)
             AccountsScreen()
-                .modifier(NativeTabBarVisibility())
+                .background(NativeTabSpacing().frame(width: 0, height: 0))
                 .tabItem { Label(L("Счета"), systemImage: "wallet.bifold") }.tag(AppTab.accounts)
             MoreScreen()
-                .modifier(NativeTabBarVisibility())
+                .background(NativeTabSpacing().frame(width: 0, height: 0))
                 .tabItem { Label(L("Ещё"), systemImage: "ellipsis.circle") }.tag(AppTab.more)
                 .badge(reviewQueue.count(with: cloud))
         }
-        .modifier(SpacedTabBar(router: router, reviewCount: reviewQueue.count(with: cloud)))
         .tint(.moraGreen)
         .environment(\.locale, L10n.locale)
         .preferredColorScheme(colorScheme)
@@ -119,69 +119,28 @@ struct RootView: View {
     }
 }
 
-private struct NativeTabBarVisibility: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(iOS 26, *) { content.toolbar(.hidden, for: .tabBar) }
-        else { content }
-    }
-}
+/// Give only the system tab bar a little more room between its items.
+/// Screen layout, native labels, selection and switching remain UIKit's own.
+private struct NativeTabSpacing: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> Controller { Controller() }
+    func updateUIViewController(_ controller: Controller, context: Context) { controller.updateSpacing() }
 
-/// Keep the selection inside its button. The native Liquid Glass highlight can
-/// extend past a tab's layout slot and touch its neighbour's icon or title.
-private struct SpacedTabBar: ViewModifier {
-    @ObservedObject var router: AppRouter
-    let reviewCount: Int
-    private let items: [(AppTab, String, String)] = [
-        (.overview, "Обзор", "square.grid.2x2"),
-        (.transactions, "Операции", "arrow.left.arrow.right"),
-        (.analytics, "Аналитика", "chart.xyaxis.line"),
-        (.accounts, "Счета", "wallet.bifold"),
-        (.more, "Ещё", "ellipsis.circle")
-    ]
-
-    func body(content: Content) -> some View {
-        if #available(iOS 26, *) {
-            content
-                .toolbar(.hidden, for: .tabBar)
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    HStack(spacing: 8) {
-                        ForEach(items, id: \.0) { item in
-                            let selected = router.tab == item.0
-                            Button { router.select(item.0) } label: {
-                                VStack(spacing: 3) {
-                                    Image(systemName: item.2)
-                                        .font(.system(size: 22, weight: .medium))
-                                        .frame(height: 25)
-                                        .overlay(alignment: .topTrailing) {
-                                            if item.0 == .more && reviewCount > 0 {
-                                                Text(reviewCount > 99 ? "99+" : "\(reviewCount)")
-                                                    .font(.system(size: 9, weight: .bold))
-                                                    .foregroundStyle(.white).padding(3)
-                                                    .background(.red, in: Capsule())
-                                                    .offset(x: 12, y: -6)
-                                            }
-                                        }
-                                    Text(L(item.1)).font(.system(size: 10, weight: .semibold))
-                                        .lineLimit(1).minimumScaleFactor(0.8)
-                                }
-                                .frame(maxWidth: .infinity, minHeight: 48)
-                                .padding(.vertical, 4)
-                                .foregroundStyle(selected ? Color.moraGreen : Color.primary)
-                                .background(selected ? Color.moraGreen.opacity(0.13) : .clear, in: Capsule())
-                                .contentShape(Capsule())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(L(item.1))
-                            .accessibilityValue(item.0 == .more && reviewCount > 0 ? L("Покупок на проверке: \(reviewCount)") : "")
-                            .accessibilityAddTraits(selected ? .isSelected : [])
-                        }
-                    }
-                    .padding(6)
-                    .glassEffect(.regular, in: Capsule())
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 4)
-                }
-        } else { content }
+    final class Controller: UIViewController {
+        override func viewDidAppear(_ animated: Bool) { super.viewDidAppear(animated); updateSpacing() }
+        override func viewDidLayoutSubviews() { super.viewDidLayoutSubviews(); updateSpacing() }
+        func updateSpacing() {
+            func findTabs(in controller: UIViewController) -> UITabBarController? {
+                if let tabs = controller as? UITabBarController { return tabs }
+                return controller.children.lazy.compactMap { findTabs(in: $0) }.first
+            }
+            let tabs = tabBarController ?? view.window?.rootViewController.flatMap { findTabs(in: $0) }
+            guard let bar = tabs?.tabBar, let container = bar.superview,
+                  traitCollection.userInterfaceIdiom == .phone, container.bounds.width > 0 else { return }
+            let extra: CGFloat = container.bounds.width < 600 ? 8 : 0
+            let width = container.bounds.width + extra * 2
+            guard abs(bar.frame.width - width) > 0.5 || abs(bar.frame.minX + extra) > 0.5 else { return }
+            bar.frame = CGRect(x: -extra, y: bar.frame.minY, width: width, height: bar.frame.height)
+        }
     }
 }
 

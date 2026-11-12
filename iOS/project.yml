@@ -15,8 +15,8 @@ configFiles:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "1.0.40"
-    CURRENT_PROJECT_VERSION: "41"
+    MARKETING_VERSION: "1.0.41"
+    CURRENT_PROJECT_VERSION: "42"
     DEAD_CODE_STRIPPING: YES
 targets:
   MoraiOS:

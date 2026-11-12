@@ -1,5 +1,11 @@
 # Changelog
 
+## iPhone 1.0.41 — 2026-11-11
+
+iPhone 1.0.41 (build 42)
+
+- **Native tab bar restored.** Removes the custom tab strip and restores the system selection, labels, badges and Liquid Glass switching. Widens only the native bottom bar by 16 points on narrow iPhones, giving its icons more room while preserving screen layout. Visa caching and Wallet loading fixes remain.
+
 ## 1.7.17 — 2026-11-11
 
 Mac 1.7.17 (build 96) · iPhone 1.0.40 (build 41)
