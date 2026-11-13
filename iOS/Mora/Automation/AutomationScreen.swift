@@ -32,7 +32,7 @@ struct AutomationScreen: View {
                 } footer: { Text(L("Сообщения в этих форматах записываются без проверки.")) }
             }
         }
-        .navigationTitle(L("Автоматизация"))
+        .wrappingTitle(L("Автоматизация / Быстрые команды"))
         .toolbar { toolbar }
         .navigationDestination(item: $openedBank) { id in
             if let alert = queue.alerts.first(where: { $0.id == id }) {

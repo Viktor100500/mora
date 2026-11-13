@@ -458,7 +458,7 @@
   "Дождитесь SMS банка о покупке — Mora покажет здесь, что из него прочитала.": "Wait for a bank text about a purchase: Mora shows here what it read.",
   "Дождитесь уведомления банка о покупке — Mora покажет здесь, что из него прочитала.": "Wait for a bank notification about a purchase: Mora shows here what it read.",
   "Ждём первый запуск": "Waiting for the first run",
-  "Можно закрыть помощника: результат будет виден в «Автоматизация» → «Журнал».": "You can close the assistant: the result will appear in Automation → Log.",
+  "Можно закрыть помощника: результат будет виден в «Автоматизация / Быстрые команды» → «Журнал».": "You can close the assistant: the result will appear in Automation / Shortcuts → Log.",
   "Когда я получаю уведомление от Wallet": "When I get a notification from Wallet",
   "Когда я получаю сообщение, содержащее «$»": "When I get a message containing “$”",
   "Когда я получаю уведомление от приложения банка": "When I get a notification from a bank app",
@@ -527,9 +527,10 @@
   "Включить отправку с этого iPhone": "Turn On Sending from This iPhone",
   "Mora создаст ключ этого iPhone и будет сама отправлять покупки всех автоматизаций. Команда с Mac не нужна.": "Mora creates a key for this iPhone and sends purchases from all automations itself. No shortcut from the Mac is needed.",
   "Карт пока нет. Включите отправку с этого iPhone и выберите счета для своих карт.": "No cards yet. Turn on sending from this iPhone and choose accounts for your cards.",
-  "Общая база работает с вашим собственным проектом Supabase: разработчик не предоставляет сервер и не получает доступ к данным. Автоматическая запись покупок настраивается в «Ещё» → «Автоматизация».": "The shared database runs on your own Supabase project: the developer provides no server and has no access to the data. Automatic purchase recording is set up in More → Automation.",
+  "Общая база работает с вашим собственным проектом Supabase: разработчик не предоставляет сервер и не получает доступ к данным. Автоматическая запись покупок настраивается в «Ещё» → «Автоматизация / Быстрые команды».": "The shared database runs on your own Supabase project: the developer provides no server and has no access to the data. Automatic purchase recording is set up in More → Automation / Shortcuts.",
   "Участники": "Members",
   "Участник вводит код в Mora на своём iPhone или Mac и видит ту же общую базу.": "A member enters the code in Mora on their iPhone or Mac and sees the same shared database.",
   "Автоматизации передали не всё — проверьте": "Automations didn't pass everything: review them",
-  "Mora покажет здесь, что передал Wallet. Можно закрыть помощника: результат будет виден в «Автоматизация» → «Журнал».": "Mora shows here what Wallet passed. You can close the assistant: the result will appear in Automation → Log."
+  "Mora покажет здесь, что передал Wallet. Можно закрыть помощника: результат будет виден в «Автоматизация / Быстрые команды» → «Журнал».": "Mora shows here what Wallet passed. You can close the assistant: the result will appear in Automation / Shortcuts → Log.",
+  "Автоматизация / Быстрые команды": "Automation / Shortcuts"
 }

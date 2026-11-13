@@ -1,5 +1,12 @@
 # Changelog
 
+## iPhone 1.0.50 — 2026-11-14
+
+iPhone 1.0.50 (build 51) · Mac unchanged (1.7.19, build 98)
+
+- **Section renamed.** "More" → "Automation" is now "Automation / Shortcuts" („Автоматизация / Быстрые команды“), including its screen title and the hints that point to it. The long title wraps onto two lines instead of being cut off.
+
+
 ## iPhone 1.0.49 — 2026-11-14
 
 iPhone 1.0.49 (build 50) · Mac unchanged (1.7.19, build 98)
