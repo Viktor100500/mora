@@ -40,11 +40,8 @@ struct WalletSetupScreen: View {
                 } footer: { Text(L("Когда подпись закончится, Mora не откроется и действие в автоматизации перестанет записывать покупки. Переустановите Mora с Mac заранее: данные сохранятся.")) }
             }
             if let sender { enabled(sender) } else { setup }
-            Section {
-                NavigationLink { WalletRunsScreen() } label: { Label(L("Запуски Wallet"), systemImage: "list.bullet.rectangle") }
-            } footer: { Text(L("Что передал Wallet при каждой оплате и как покупка дошла до Mora.")) }
         }
-        .navigationTitle(L("Apple Pay на iPhone"))
+        .wrappingTitle(L("Карты и счета"))
         .disabled(cloud.busy)
         .overlay { if cloud.busy { ProgressView().controlSize(.large) } }
         .onAppear {
@@ -55,7 +52,7 @@ struct WalletSetupScreen: View {
             if cards.isEmpty { cards = seenCards.map { WalletCardAssignment(card: $0, accountID: Self.unselected) } }
             if cards.isEmpty { addCard() }
         }
-        .confirmationDialog(L("Отключить Apple Pay на этом iPhone?"), isPresented: $confirmDisable, titleVisibility: .visible) {
+        .confirmationDialog(L("Отключить отправку с этого iPhone?"), isPresented: $confirmDisable, titleVisibility: .visible) {
             Button(L("Отключить"), role: .destructive) { Task { await cloud.disableWalletSender(); sender = WalletSender.current() } }
         } message: { Text(L("Ключ телефона будет отозван. Покупки, которые ещё ждут отправки, останутся на iPhone.")) }
     }
@@ -64,31 +61,14 @@ struct WalletSetupScreen: View {
         Section {
             LabeledContent(L("Ключ телефона"), value: sender.label)
             if cloud.householdID != sender.householdID {
-                Label(L("Ключ создан для другой общей базы. Отключите Apple Pay и включите заново."), systemImage: "exclamationmark.triangle")
+                Label(L("Ключ создан для другой общей базы. Отключите отправку и включите заново."), systemImage: "exclamationmark.triangle")
                     .font(.footnote).foregroundStyle(.orange)
             }
-        } header: { Text(L("Apple Pay включён")) }
-        automationSection
+            Button(L("Отключить отправку"), role: .destructive) { confirmDisable = true }
+        } header: { Text(L("Отправка включена")) } footer: {
+            Text(L("Все автоматизации этого iPhone отправляют покупки в общую базу этим ключом."))
+        }
         WalletCardsSection()
-    }
-
-    /// Whether the last payment came through the two-step automation.
-    @ViewBuilder private var automationSection: some View {
-        let last = WalletRunLog.runs().first { $0.delivery != .duplicate }
-        let ready = last.map(WalletAutomationCheck.isReady) == true
-        Section {
-            HStack(spacing: 12) {
-                IconTile(icon: ready ? "checkmark.seal" : "wand.and.stars", color: ready ? "green" : "orange", size: 42)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(L(ready ? "Автоматизация работает" : last == nil ? "Автоматизация ещё не настроена" : "Автоматизацию нужно обновить")).font(.headline)
-                    Text(L(ready ? "Последняя оплата пришла через «Start Wallet Payment» и «Finish Wallet Payment»." : "Пошаговый помощник, около двух минут."))
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            Button { router.open(.walletGuide) } label: {
-                Label(L(ready ? "Открыть помощника" : "Настроить автоматизацию"), systemImage: "list.number")
-            }
-        } header: { Text(L("Автоматизация на iPhone")) }
     }
 
     @ViewBuilder private var setup: some View {
@@ -134,7 +114,7 @@ struct WalletSetupScreen: View {
                 Text(L("Карты, которыми уже платили на этом iPhone, добавлены сами: выберите для них счета. Карта, которой ещё не платили, появится после первой покупки в «Карты Apple Pay». Покупки неизвестной карты или без карты ждут проверки и не спишутся с другого счёта."))
             }
             Section {
-                Button(L("Включить Apple Pay на этом iPhone")) {
+                Button(L("Включить отправку с этого iPhone")) {
                     Task {
                         let assignments = cards.map { WalletCardAssignment(id: $0.id, card: $0.card.trimmingCharacters(in: .whitespaces), accountID: $0.account_id) }
                         let other = Dictionary(uniqueKeysWithValues: cards.map { card in
@@ -142,12 +122,11 @@ struct WalletSetupScreen: View {
                         }).filter { !$0.value.isEmpty }
                         if await cloud.enableWalletSender(label: label.trimmingCharacters(in: .whitespaces), cards: assignments, otherCurrencies: other) {
                             sender = WalletSender.current()
-                            router.open(.walletGuide)
                         }
                     }
                 }
                 .disabled(!ready || label.trimmingCharacters(in: .whitespaces).isEmpty)
-            } footer: { Text(L("Mora создаст ключ этого iPhone и будет отправлять покупки сама. Команда с Mac не нужна.")) }
+            } footer: { Text(L("Mora создаст ключ этого iPhone и будет сама отправлять покупки всех автоматизаций. Команда с Mac не нужна.")) }
         }
     }
 
@@ -168,7 +147,7 @@ private struct WalletCardsSection: View {
     var body: some View {
         Section {
             if cloud.walletCards.isEmpty {
-                Text(L("Карт пока нет. Включите «Apple Pay на этом iPhone» и выберите счета для своих карт Wallet.")).foregroundStyle(.secondary)
+                Text(L("Карт пока нет. Включите отправку с этого iPhone и выберите счета для своих карт.")).foregroundStyle(.secondary)
             }
             ForEach(cloud.walletCards) { card in
                 Picker(selection: Binding(get: { card.account_id }, set: { value in Task { await cloud.linkCard(card.id, account: value) } })) {

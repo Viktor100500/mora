@@ -20,7 +20,6 @@
 		432494E72479380325F37A61 /* FinanceStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2416F36C6721CE96EB36684 /* FinanceStore.swift */; };
 		44A2F81196C8403ED8792C92 /* WalletAutomationGuide.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7E91B2AD778BDBDC0998D00 /* WalletAutomationGuide.swift */; };
 		47DF943863B3B7E04EFFE1BA /* CloudSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F6A6EC2D5631B2FD2C571AD /* CloudSync.swift */; };
-		4D7E107FE9A882FEB64ACF16 /* BankAlertsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7894B189102F38686910542B /* BankAlertsScreen.swift */; };
 		5AE34127A645E0401C5747E3 /* Privacy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EDE0057776581121FB80FCE /* Privacy.swift */; };
 		5BBED0ADBF01093A70E94AD4 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B8D07C72F2ADAD285B72897 /* RootView.swift */; };
 		5FC30B7EB94BBB5B7C508FD5 /* MoreScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B73290723DB39F73BF342AFD /* MoreScreen.swift */; };
@@ -30,24 +29,27 @@
 		657B7726F17D4315E713C6EB /* CurrencyPicker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B4EB47169E11E5D33A55AF /* CurrencyPicker.swift */; };
 		66937E5EF2D39C492F4E49D9 /* Files.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82E5A0638F195085193DE6F5 /* Files.swift */; };
 		6AA9F4CD6F747F8773393FA8 /* MacPairing.swift in Sources */ = {isa = PBXBuildFile; fileRef = 06283B4C7D9BC7737F298289 /* MacPairing.swift */; };
+		70593BB8346CABC01527BA32 /* AutomationScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = F8289EF30A2CFC1FA2A6F130 /* AutomationScreen.swift */; };
 		75241264723BC5B43A618B3F /* CardCurrencyAccounts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 04D3B8D9CB748ACD16777C29 /* CardCurrencyAccounts.swift */; };
 		7A0FAC2A8A759AA6E0522800 /* OverviewScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6376376D9EC5F6E8AE7DFB56 /* OverviewScreen.swift */; };
 		7C02E4373E115058FD1C15E1 /* WalletRunLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A4E9DA3F49721E1DF85F7FB /* WalletRunLogTests.swift */; };
+		7C6C890343BEFD0C037586BA /* CaptureAutomation.swift in Sources */ = {isa = PBXBuildFile; fileRef = D0A4047180666275ADB8A649 /* CaptureAutomation.swift */; };
 		7E0492BAFA581CDC5F053656 /* AccountsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF0A2F4EF48693450012E079 /* AccountsScreen.swift */; };
 		85FBAF0B4C61C666143C0746 /* Mora Apple Pay.shortcut in Resources */ = {isa = PBXBuildFile; fileRef = A3F8FFEA783AAA0562549B0D /* Mora Apple Pay.shortcut */; };
 		8948AAA8431B51D6BAB4196B /* SettingsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E05AB6AF2B45D97DA131D38 /* SettingsScreen.swift */; };
 		8B6894C18A118F40390C1F08 /* TransactionsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF18FC467A335C0717CE8A3B /* TransactionsScreen.swift */; };
 		93EFDDAE568584166D654CE1 /* FinanceStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0318B2C398473B18013456E /* FinanceStoreTests.swift */; };
 		97B0EDEFDB32F1BD3C34A96F /* SupportSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05D35A85A2341ED366AA546D /* SupportSection.swift */; };
-		99ACB4FCF65E722FC5A24ABC /* WalletRunsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4E2901038A4DDB9BD22E007 /* WalletRunsScreen.swift */; };
 		A3D9EB13A2AB05BEA95256C1 /* CloudScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 85BFEB921FC926A84CB68715 /* CloudScreen.swift */; };
 		A79F61D6F2690D64D766CFEF /* WalletReviewScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7C451B8D5F1BF04E0E42F7D /* WalletReviewScreen.swift */; };
 		AEE49357E8A3A6C9EE9AAE83 /* TransactionEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1CED08EE69D8287C08552F /* TransactionEditor.swift */; };
 		BE0D8CEE4CCD69722D7A0763 /* MerchantCategorizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35FB27FDB12838BC42FF32F4 /* MerchantCategorizer.swift */; };
 		C1ACF4FB85C7D4AC8437A0B0 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7EABC9B8C57126A5C9087F8 /* Components.swift */; };
+		C95A3FB005487DC3EFBDA916 /* AutomationGuide.swift in Sources */ = {isa = PBXBuildFile; fileRef = 240D97CA24C2C69665F1A102 /* AutomationGuide.swift */; };
 		CC257AB75FA52B7F53DC6CAB /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0F407065AB8FA06ADF586CC7 /* InfoPlist.strings */; };
 		CED62CE9B0273557FB4183A3 /* WalletDelivery.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCFF2BEB1FEAFE94C74F7F1C /* WalletDelivery.swift */; };
 		D0FF25F050A0E85A5510A5ED /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9ABBD1E8E150D6529D1A8D84 /* Assets.xcassets */; };
+		D270AD4A71D4160C0C8A3D0B /* BankAlertDetailScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A82A3613EC346023ACBC1F0E /* BankAlertDetailScreen.swift */; };
 		D83EF4C0E53A8CDF4D3861E9 /* ReportCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14EC5F098BA136755B3F0442 /* ReportCache.swift */; };
 		E2527261C36FAE22159C7811 /* ImportScreens.swift in Sources */ = {isa = PBXBuildFile; fileRef = F65900D0DE8EB82F68603C47 /* ImportScreens.swift */; };
 		ED5B2909D756EDDE51A1BB4B /* BankAlertLogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2E47E92A35BAFC3B83CF672 /* BankAlertLogTests.swift */; };
@@ -71,6 +73,7 @@
 		05D35A85A2341ED366AA546D /* SupportSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportSection.swift; sourceTree = "<group>"; };
 		06283B4C7D9BC7737F298289 /* MacPairing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacPairing.swift; sourceTree = "<group>"; };
 		14EC5F098BA136755B3F0442 /* ReportCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportCache.swift; sourceTree = "<group>"; };
+		240D97CA24C2C69665F1A102 /* AutomationGuide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutomationGuide.swift; sourceTree = "<group>"; };
 		263002D25366E09E01B9CF43 /* MobileStrings.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = MobileStrings.json; sourceTree = "<group>"; };
 		2B8D07C72F2ADAD285B72897 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		35FB27FDB12838BC42FF32F4 /* MerchantCategorizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MerchantCategorizer.swift; path = ../Sources/Mora/MerchantCategorizer.swift; sourceTree = "<group>"; };
@@ -85,7 +88,6 @@
 		07A889AF174EB93DE0FB0318 /* FinanceApp-shortcut-file */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "FinanceApp-shortcut-file"; path = ..; sourceTree = SOURCE_ROOT; };
 		6A1CED08EE69D8287C08552F /* TransactionEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionEditor.swift; sourceTree = "<group>"; };
 		6F4E44FD82A4CF0B2F08C570 /* MoraApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoraApp.swift; sourceTree = "<group>"; };
-		7894B189102F38686910542B /* BankAlertsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BankAlertsScreen.swift; sourceTree = "<group>"; };
 		7B24112A18F8359DF9CB0001 /* AnalyticsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsScreen.swift; sourceTree = "<group>"; };
 		7E05AB6AF2B45D97DA131D38 /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
 		7E19C5DC0D52A24B7BC428CB /* ru */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ru; path = ru.lproj/InfoPlist.strings; sourceTree = "<group>"; };
@@ -99,6 +101,7 @@
 		9EDE0057776581121FB80FCE /* Privacy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Privacy.swift; sourceTree = "<group>"; };
 		A3F8FFEA783AAA0562549B0D /* Mora Apple Pay.shortcut */ = {isa = PBXFileReference; path = "Mora Apple Pay.shortcut"; sourceTree = "<group>"; };
 		A4268DBCDBF2D3C22A9524B9 /* MoraiOSTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = MoraiOSTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A82A3613EC346023ACBC1F0E /* BankAlertDetailScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BankAlertDetailScreen.swift; sourceTree = "<group>"; };
 		AF0A2F4EF48693450012E079 /* AccountsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountsScreen.swift; sourceTree = "<group>"; };
 		B2E47E92A35BAFC3B83CF672 /* BankAlertLogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BankAlertLogTests.swift; sourceTree = "<group>"; };
 		B496B3B0EE4A5574647F3A61 /* LocalizationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalizationTests.swift; sourceTree = "<group>"; };
@@ -107,8 +110,8 @@
 		BCFF2BEB1FEAFE94C74F7F1C /* WalletDelivery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletDelivery.swift; sourceTree = "<group>"; };
 		BF18FC467A335C0717CE8A3B /* TransactionsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionsScreen.swift; sourceTree = "<group>"; };
 		C0318B2C398473B18013456E /* FinanceStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinanceStoreTests.swift; sourceTree = "<group>"; };
-		C4E2901038A4DDB9BD22E007 /* WalletRunsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletRunsScreen.swift; sourceTree = "<group>"; };
 		C7EABC9B8C57126A5C9087F8 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
+		D0A4047180666275ADB8A649 /* CaptureAutomation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CaptureAutomation.swift; sourceTree = "<group>"; };
 		D3D1434CFE66D39D0B602795 /* WelcomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeView.swift; sourceTree = "<group>"; };
 		D7C451B8D5F1BF04E0E42F7D /* WalletReviewScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletReviewScreen.swift; sourceTree = "<group>"; };
 		D7E91B2AD778BDBDC0998D00 /* WalletAutomationGuide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletAutomationGuide.swift; sourceTree = "<group>"; };
@@ -117,6 +120,7 @@
 		F2416F36C6721CE96EB36684 /* FinanceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinanceStore.swift; sourceTree = "<group>"; };
 		F3E78F6ACDBE2C140769209A /* ChangeDescription.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ChangeDescription.swift; path = ../Sources/Mora/ChangeDescription.swift; sourceTree = "<group>"; };
 		F65900D0DE8EB82F68603C47 /* ImportScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportScreens.swift; sourceTree = "<group>"; };
+		F8289EF30A2CFC1FA2A6F130 /* AutomationScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutomationScreen.swift; sourceTree = "<group>"; };
 		F9AC73B755D7E67297AE96D1 /* Localization.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Localization.swift; sourceTree = "<group>"; };
 		"TEMP_0792B35D-3C62-4445-A035-477D1F182E6F" /* Signing.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Signing.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -136,8 +140,8 @@
 		058CC186699AF811927EDF29 /* BankAlerts */ = {
 			isa = PBXGroup;
 			children = (
+				A82A3613EC346023ACBC1F0E /* BankAlertDetailScreen.swift */,
 				E483F765535A3F985A7852BA /* BankAlertLog.swift */,
-				7894B189102F38686910542B /* BankAlertsScreen.swift */,
 			);
 			path = BankAlerts;
 			sourceTree = "<group>";
@@ -217,7 +221,6 @@
 				BCFF2BEB1FEAFE94C74F7F1C /* WalletDelivery.swift */,
 				D7C451B8D5F1BF04E0E42F7D /* WalletReviewScreen.swift */,
 				951FB5CB562E7123711699C8 /* WalletRunLog.swift */,
-				C4E2901038A4DDB9BD22E007 /* WalletRunsScreen.swift */,
 				E344C9591051D2195C1A02FB /* WalletSetupScreen.swift */,
 			);
 			path = Wallet;
@@ -242,6 +245,16 @@
 				D3D1434CFE66D39D0B602795 /* WelcomeView.swift */,
 			);
 			path = Views;
+			sourceTree = "<group>";
+		};
+		D80279CD1C7BE5BC910706B0 /* Automation */ = {
+			isa = PBXGroup;
+			children = (
+				240D97CA24C2C69665F1A102 /* AutomationGuide.swift */,
+				F8289EF30A2CFC1FA2A6F130 /* AutomationScreen.swift */,
+				D0A4047180666275ADB8A649 /* CaptureAutomation.swift */,
+			);
+			path = Automation;
 			sourceTree = "<group>";
 		};
 		D959190400F712DD4E2DCA26 /* Cloud */ = {
@@ -271,6 +284,7 @@
 			children = (
 				99498B2673D2067EFC542157 /* Info.plist */,
 				06B33ECE88E25CA0E6731713 /* App */,
+				D80279CD1C7BE5BC910706B0 /* Automation */,
 				058CC186699AF811927EDF29 /* BankAlerts */,
 				D959190400F712DD4E2DCA26 /* Cloud */,
 				2E7D4C892AB9C7D4CA7060EB /* Resources */,
@@ -413,8 +427,11 @@
 				650885242DBE201F24A31FB8 /* AIImportScreen.swift in Sources */,
 				7E0492BAFA581CDC5F053656 /* AccountsScreen.swift in Sources */,
 				1133888B890EB3C1A8FA30F6 /* AnalyticsScreen.swift in Sources */,
+				C95A3FB005487DC3EFBDA916 /* AutomationGuide.swift in Sources */,
+				70593BB8346CABC01527BA32 /* AutomationScreen.swift in Sources */,
+				D270AD4A71D4160C0C8A3D0B /* BankAlertDetailScreen.swift in Sources */,
 				2430D1FDC6742397B0E7198D /* BankAlertLog.swift in Sources */,
-				4D7E107FE9A882FEB64ACF16 /* BankAlertsScreen.swift in Sources */,
+				7C6C890343BEFD0C037586BA /* CaptureAutomation.swift in Sources */,
 				75241264723BC5B43A618B3F /* CardCurrencyAccounts.swift in Sources */,
 				129FCB8A9685F1D935FDC35E /* ChangeDescription.swift in Sources */,
 				A3D9EB13A2AB05BEA95256C1 /* CloudScreen.swift in Sources */,
@@ -445,7 +462,6 @@
 				CED62CE9B0273557FB4183A3 /* WalletDelivery.swift in Sources */,
 				A79F61D6F2690D64D766CFEF /* WalletReviewScreen.swift in Sources */,
 				073EA49332D01D3373184C31 /* WalletRunLog.swift in Sources */,
-				99ACB4FCF65E722FC5A24ABC /* WalletRunsScreen.swift in Sources */,
 				F4051B2E6B74A39AE11C4739 /* WalletSetupScreen.swift in Sources */,
 				0D5C6F9C0B69FE94F1926DE6 /* WelcomeView.swift in Sources */,
 			);
@@ -548,7 +564,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 47;
+				CURRENT_PROJECT_VERSION = 49;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -562,7 +578,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.46;
+				MARKETING_VERSION = 1.0.48;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -625,7 +641,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 47;
+				CURRENT_PROJECT_VERSION = 49;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -645,7 +661,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.46;
+				MARKETING_VERSION = 1.0.48;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

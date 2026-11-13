@@ -1,5 +1,17 @@
 # Changelog
 
+## iPhone 1.0.48 — 2026-11-13
+
+iPhone 1.0.48 (build 49) · Mac unchanged (1.7.19, build 98)
+
+- **Automation section.** "More" now has separate "Shared Database" and "Automation" items. Shared Database holds only cloud settings: database, account, sync status and members. Automation holds the Shortcuts automations, the phone key with card accounts, purchases to review and one log.
+- **Four automations, four setups.** Wallet Transaction, Wallet Notification, Bank Text and Bank Notification each have a status and their own Set Up button. Bank app notifications get a separate action, `Log Bank Notification`. Existing automations that use `Log Bank Message` with a Title keep working and are logged as bank notifications.
+- **Ready automations on iOS 27.** When a signed automation is bundled (`cloud/shortcuts/READY-AUTOMATIONS.md`), Set Up adds it in one tap and explains turning on its switch in the Automation tab. Otherwise, and on older iOS, a step-by-step guide is shown. Notification automations require iOS 27.
+- **Source and duplicates everywhere.** Every log entry and review item shows the automation it came from. Merged or suppressed duplicates are explained on both sides: which message completed a Wallet purchase, which run or message was not sent and why. Bank messages in a new format now appear in the review list and the badge.
+- **Removed** payment screenshots and "Try a sample".
+- **Long titles fit.** iOS large titles never wrap, so "Texts and Notifications" was cut off. New screens use an inline title that wraps onto two lines.
+
+
 ## iPhone 1.0.47 — 2026-11-13
 
 iPhone 1.0.47 (build 48) · Mac unchanged (1.7.19, build 98)

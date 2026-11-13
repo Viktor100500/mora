@@ -29,18 +29,20 @@ struct MoreScreen: View {
                 }
                 Section {
                     NavigationLink { CloudScreen() } label: {
+                        LabeledContent {
+                            if cloud.householdID != nil { Text(cloud.enabled ? L("Включена") : L("Пауза")) }
+                        } label: { Label(L("Общая база"), systemImage: "icloud") }
+                    }
+                    NavigationLink { AutomationScreen() } label: {
                         HStack {
-                            Label(L("Общая база и Apple Pay"), systemImage: "icloud")
+                            Label(L("Автоматизация"), systemImage: "bolt.badge.automatic")
                             Spacer()
                             if reviewQueue.count(with: cloud) > 0 {
                                 Text("\(reviewQueue.count(with: cloud))").font(.caption.weight(.bold)).foregroundStyle(.white)
                                     .padding(.horizontal, 7).padding(.vertical, 2).background(Color.red, in: Capsule())
-                            } else if cloud.householdID != nil {
-                                Text(cloud.enabled ? L("Включена") : L("Пауза")).font(.caption).foregroundStyle(.secondary)
                             }
                         }
                     }
-                    NavigationLink { BankAlertsScreen() } label: { Label(L("SMS и уведомления банков"), systemImage: "message.badge") }
                     NavigationLink { SettingsScreen() } label: { Label(L("Настройки"), systemImage: "slider.horizontal.3") }
                 }
                 SupportSection()
@@ -54,6 +56,7 @@ struct MoreScreen: View {
                 case "settings": SettingsScreen()
                 case "categories": CategoriesScreen()
                 case "cloud": CloudScreen()
+                case "automation": AutomationScreen()
                 case "imports": ImportHistoryScreen()
                 case "ai": AIImportScreen()
                 case "wallet-review": WalletReviewScreen()

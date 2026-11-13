@@ -105,8 +105,8 @@ struct DemoBanner: View {
     }
 }
 
-/// Like the Mac notice: how many Apple Pay purchases need the user. The list
-/// itself lives in "More" → "Purchases to Review".
+/// Like the Mac notice: how many automatically captured purchases need the user.
+/// The list itself lives in "More" → "Automation".
 struct WalletReviewBanner: View {
     @EnvironmentObject private var cloud: CloudSync
     @EnvironmentObject private var router: AppRouter
@@ -120,7 +120,7 @@ struct WalletReviewBanner: View {
                     Image(systemName: "exclamationmark.circle.fill").font(.title2)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(L("Покупки на проверку: \(count)")).font(.subheadline.weight(.semibold))
-                        Text(L("Wallet передал не всё — допишите вручную")).font(.caption)
+                        Text(L("Автоматизации передали не всё — проверьте")).font(.caption)
                     }
                     Spacer()
                     Image(systemName: "chevron.right").font(.caption.weight(.semibold))

@@ -107,6 +107,7 @@ struct RootView: View {
         case "category": router.sheet = .category(nil, .expense)
         case "welcome": router.sheet = .welcome
         case "wallet-guide": router.sheet = .walletGuide
+        case "sms-guide": router.sheet = .automationGuide(.bankSMS)
         default: break
         }
     }
@@ -580,6 +581,8 @@ private struct SheetContent: View {
         case .walletReview(let capture): TransactionEditor(walletCapture: capture, ledger: store.ledger).id(capture.id)
         case .walletRun(let run, let account): TransactionEditor(walletRun: (run, account), ledger: store.ledger).id(run.id)
         case .walletGuide: WalletAutomationGuide()
+        case .automationGuide(let automation):
+            if automation == .walletTransaction { WalletAutomationGuide() } else { AutomationGuide(automation: automation) }
         }
     }
 }

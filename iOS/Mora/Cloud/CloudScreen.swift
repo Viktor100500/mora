@@ -5,7 +5,6 @@ struct CloudScreen: View {
     @EnvironmentObject private var store: FinanceStore
     @EnvironmentObject private var cloud: CloudSync
     @EnvironmentObject private var router: AppRouter
-    @EnvironmentObject private var reviewQueue: WalletReviewQueue
     @State private var url = ""
     @State private var key = ""
     @State private var email = ""
@@ -35,21 +34,8 @@ struct CloudScreen: View {
             } else {
                 connected
             }
-            if !store.isDemo {
-                Section {
-                    NavigationLink { WalletSetupScreen() } label: {
-                        LabeledContent {
-                            Text(WalletSender.current() == nil ? L("Выключено") : L("Включено"))
-                        } label: { Label(L("Apple Pay на этом iPhone"), systemImage: "wallet.pass") }
-                    }
-                    if AppSignature.expiresSoon(), let expiration = AppSignature.expiration {
-                        Label(L("Подпись Mora действует до \(expiration.formatted(date: .abbreviated, time: .omitted))"), systemImage: "exclamationmark.triangle")
-                            .font(.footnote).foregroundStyle(.orange)
-                    }
-                } footer: { Text(L("Карты, автоматизация «Быстрых команд» и журнал запусков Wallet. Без сети покупка ждёт на iPhone и уходит позже.")) }
-            }
             Section {
-                Text(L("Общая база работает с вашим собственным проектом Supabase: разработчик не предоставляет сервер и не получает доступ к данным. Покупки Apple Pay приходят через «Быстрые команды» — экспериментальная интеграция, не банковская синхронизация."))
+                Text(L("Общая база работает с вашим собственным проектом Supabase: разработчик не предоставляет сервер и не получает доступ к данным. Автоматическая запись покупок настраивается в «Ещё» → «Автоматизация»."))
                     .font(.footnote).foregroundStyle(.secondary)
             }
         }
@@ -131,23 +117,13 @@ struct CloudScreen: View {
             }
             Toggle(L("Синхронизировать автоматически"), isOn: Binding(get: { cloud.enabled }, set: { value in Task { await cloud.pause(!value) } }))
             Button { Task { await cloud.synchronize(notifyResult: true) } } label: { Label(L("Синхронизировать сейчас"), systemImage: "arrow.triangle.2.circlepath") }
-        } footer: { Text(L("Открытая Mora проверяет изменения примерно каждые восемь секунд. Независимые изменения объединяются.")) }
+        } header: { Text(L("Синхронизация")) } footer: { Text(L("Открытая Mora проверяет изменения примерно каждые восемь секунд. Независимые изменения объединяются.")) }
         if cloud.conflict {
             Section {
                 Text(L("Одна и та же запись изменена на двух устройствах. Выберите, какую версию сохранить.")).font(.subheadline)
                 Button(L("Загрузить общую версию")) { Task { await cloud.useCloudVersion() } }
                 Button(L("Оставить версию iPhone"), role: .destructive) { Task { await cloud.keepLocalVersion() } }
             } header: { Label(L("Конфликт синхронизации"), systemImage: "exclamationmark.triangle").foregroundStyle(.orange) }
-        }
-        Section {
-            NavigationLink { WalletReviewScreen() } label: {
-                LabeledContent {
-                    let count = reviewQueue.count(with: cloud)
-                    Text(count == 0 ? L("Нет") : "\(count)").foregroundStyle(count == 0 ? Color.secondary : Color.orange)
-                } label: { Label(L("Покупки на проверку"), systemImage: "tray") }
-            }
-        } footer: {
-            Text(L("Полные покупки записываются автоматически. Сюда попадают покупки, которые Wallet передал не полностью."))
         }
         Section {
             Button { Task { await cloud.invite() } } label: { Label(L("Пригласить участника"), systemImage: "person.badge.plus") }
@@ -158,6 +134,10 @@ struct CloudScreen: View {
                     Button { UIPasteboard.general.string = code; store.showToast(L("Код скопирован")) } label: { Image(systemName: "doc.on.doc") }
                 }
             }
+        } header: { Text(L("Участники")) } footer: {
+            Text(L("Участник вводит код в Mora на своём iPhone или Mac и видит ту же общую базу."))
+        }
+        Section {
             Button(L("Отключить общую базу"), role: .destructive) { confirmDisconnect = true }
         }
     }
