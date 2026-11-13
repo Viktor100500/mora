@@ -1,6 +1,5 @@
 import SwiftUI
 import UIKit
-import UIKit.UIGestureRecognizerSubclass
 import FinanceCore
 
 struct RootView: View {
@@ -121,12 +120,28 @@ struct RootView: View {
     }
 }
 
-/// The content stays in TabView; the visible control is a real UITabBar with
-/// stable constraints, rather than resizing the controller-owned bar after a switch.
+private struct MoraTabBarInsetKey: EnvironmentKey { static let defaultValue: CGFloat = 0 }
+private extension EnvironmentValues {
+    /// Height the floating tab bar covers above the bottom safe area.
+    var moraTabBarInset: CGFloat {
+        get { self[MoraTabBarInsetKey.self] }
+        set { self[MoraTabBarInsetKey.self] = newValue }
+    }
+}
+
+/// Each tab hides the controller-owned bar and reserves the floating bar's height
+/// in its own safe area, so lists, scroll views and pushed screens stop above it.
+/// The inset is applied inside the tab: UITabBarController does not pass an outer
+/// SwiftUI inset on to its children.
 private struct ManagedTabBarVisibility: ViewModifier {
+    @Environment(\.moraTabBarInset) private var inset
     func body(content: Content) -> some View {
         if #available(iOS 26, *), UIDevice.current.userInterfaceIdiom == .phone {
-            content.toolbar(.hidden, for: .tabBar)
+            content
+                .toolbar(.hidden, for: .tabBar)
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    Color.clear.frame(height: inset).allowsHitTesting(false).accessibilityHidden(true)
+                }
         } else { content }
     }
 }
@@ -135,13 +150,19 @@ private struct StableSystemTabBar: ViewModifier {
     @ObservedObject var router: AppRouter
     let reviewCount: Int
     @State private var keyboardVisible = false
+    @State private var barInset: CGFloat = 57
 
     func body(content: Content) -> some View {
         if #available(iOS 26, *), UIDevice.current.userInterfaceIdiom == .phone {
             content
-                .safeAreaInset(edge: .bottom, spacing: 0) {
+                .environment(\.moraTabBarInset, keyboardVisible ? 0 : barInset)
+                .overlay(alignment: .bottom) {
                     if !keyboardVisible {
-                        SystemTabBar(selection: Binding(get: { router.tab }, set: { router.select($0) }), reviewCount: reviewCount)
+                        SystemTabBar(selection: Binding(get: { router.tab }, set: { router.select($0) }),
+                                     reviewCount: reviewCount,
+                                     onContentInset: { if abs(barInset - $0) > 0.5 { barInset = $0 } })
+                            .frame(height: GlassTabBar.height)
+                            .ignoresSafeArea(.all, edges: .bottom)
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in keyboardVisible = true }
@@ -150,9 +171,14 @@ private struct StableSystemTabBar: ViewModifier {
     }
 }
 
+/// A floating Liquid Glass tab bar. The selection pill and the glass lens are moved
+/// with explicit UIKit animations, so they keep animating with Reduce Motion on,
+/// unlike UITabBar, whose lens morph the system turns off in that mode.
+@available(iOS 26, *)
 private struct SystemTabBar: UIViewRepresentable {
     @Binding var selection: AppTab
     let reviewCount: Int
+    let onContentInset: (CGFloat) -> Void
     private static let tabs: [(AppTab, String, String)] = [
         (.overview, "Обзор", "square.grid.2x2"),
         (.transactions, "Операции", "arrow.left.arrow.right"),
@@ -161,211 +187,363 @@ private struct SystemTabBar: UIViewRepresentable {
         (.more, "Ещё", "ellipsis.circle")
     ]
 
-    func makeCoordinator() -> Coordinator { Coordinator(selection: $selection) }
-    func makeUIView(context: Context) -> Container {
-        let view = Container()
-        view.bar.delegate = context.coordinator
-        view.touchObserver.finished = { [weak view, weak coordinator = context.coordinator] cancelled in
-            guard let view, let coordinator else { return }
-            let pending = view.pendingSelection
-            view.pendingSelection = nil
-            if !cancelled, let pending {
-                coordinator.select(pending, in: view)
-            } else if let index = Self.tabs.firstIndex(where: { $0.0 == coordinator.selection.wrappedValue }) {
-                view.bar.selectedItem = view.bar.items?[index]
+    final class Coordinator {
+        var selection: Binding<AppTab>
+        var onContentInset: (CGFloat) -> Void
+        init(selection: Binding<AppTab>, onContentInset: @escaping (CGFloat) -> Void) {
+            self.selection = selection
+            self.onContentInset = onContentInset
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(selection: $selection, onContentInset: onContentInset) }
+
+    func makeUIView(context: Context) -> GlassTabBar {
+        let view = GlassTabBar(symbols: Self.tabs.map(\.2))
+        let coordinator = context.coordinator
+        view.onSelect = { [weak view] index in
+            guard let view, Self.tabs.indices.contains(index) else { return }
+            let tab = Self.tabs[index].0
+            if coordinator.selection.wrappedValue == tab {
+                coordinator.selection.wrappedValue = tab
+            } else {
+                view.crossfadeContent { coordinator.selection.wrappedValue = tab }
             }
         }
-        view.bar.items = Self.tabs.enumerated().map { index, tab in
-            let image = UIImage(systemName: tab.2 + ".fill") ?? UIImage(systemName: tab.2)
-            let item = UITabBarItem(title: L(tab.1), image: image, tag: index)
-            item.selectedImage = image
-            return item
+        view.onContentInset = { inset in
+            DispatchQueue.main.async { coordinator.onContentInset(inset) }
         }
         updateUIView(view, context: context)
         return view
     }
-    func updateUIView(_ view: Container, context: Context) {
+
+    func updateUIView(_ view: GlassTabBar, context: Context) {
         context.coordinator.selection = $selection
-        view.bar.tintColor = UIColor(Color.moraGreen)
+        context.coordinator.onContentInset = onContentInset
+        view.tintColor = UIColor(Color.moraGreen)
         view.semanticContentAttribute = context.environment.layoutDirection == .rightToLeft ? .forceRightToLeft : .forceLeftToRight
-        var titlesChanged = false
-        for (index, tab) in Self.tabs.enumerated() {
-            let title = L(tab.1)
-            if view.bar.items?[index].title != title {
-                view.bar.items?[index].title = title
-                titlesChanged = true
-            }
+        view.setTitles(Self.tabs.map { L($0.1) })
+        if let index = Self.tabs.firstIndex(where: { $0.0 == selection }) {
+            view.setSelectedIndex(index, animated: view.window != nil)
         }
-        if titlesChanged { view.refreshItems() }
-        if !view.touchObserver.isInteracting, let index = Self.tabs.firstIndex(where: { $0.0 == selection }), let item = view.bar.items?[index], view.bar.selectedItem !== item {
-            view.bar.selectedItem = item
-        }
-        let badge = reviewCount > 0 ? String(reviewCount) : nil
-        if view.bar.items?.last?.badgeValue != badge { view.bar.items?.last?.badgeValue = badge }
-        view.bar.items?.last?.accessibilityValue = reviewCount > 0 ? L("Покупок на проверке: \(reviewCount)") : nil
-    }
-    func sizeThatFits(_ proposal: ProposedViewSize, uiView: Container, context: Context) -> CGSize? {
-        let width = proposal.width ?? 375
-        // sizeThatFits includes the home-indicator inset even for a standalone bar.
-        // Reserve that part below SwiftUI's safe area, rather than counting it twice.
-        let nativeHeight = uiView.bar.sizeThatFits(CGSize(width: width + 24, height: 0)).height - (uiView.window?.safeAreaInsets.bottom ?? 0)
-        return CGSize(width: width, height: nativeHeight + 14)
+        view.setBadge(reviewCount > 0 ? String(reviewCount) : nil,
+                      accessibilityValue: reviewCount > 0 ? L("Покупок на проверке: \(reviewCount)") : nil)
     }
 
-    final class Coordinator: NSObject, UITabBarDelegate {
-        var selection: Binding<AppTab>
-        init(selection: Binding<AppTab>) { self.selection = selection }
-        func tabBar(_ tabBar: UITabBar, didSelect item: UITabBarItem) {
-            guard let view = tabBar.superview as? Container else { return }
-            view.pendingSelection = item
-            // Native recognizers can call the delegate before our observer gets
-            // the same event. Decide after event delivery, never inside didSelect.
-            DispatchQueue.main.async { [weak self, weak view] in
-                guard let self, let view, !view.touchObserver.isInteracting,
-                      let pending = view.pendingSelection else { return }
-                view.pendingSelection = nil
-                // VoiceOver and keyboard activation have no touch to wait for.
-                select(pending, in: view)
-            }
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView: GlassTabBar, context: Context) -> CGSize? {
+        CGSize(width: proposal.width ?? 375, height: GlassTabBar.height)
+    }
+}
+
+@available(iOS 26, *)
+private final class GlassTabBar: UIView {
+    static let capsuleHeight: CGFloat = 62
+    static let topRoom: CGFloat = 14
+    static let sideMargin: CGFloat = 20
+    static let maxBottomMargin: CGFloat = 21
+    /// The view reaches the bottom of the screen; the capsule floats above it.
+    static let height = topRoom + capsuleHeight + maxBottomMargin
+    static func bottomMargin(homeInset: CGFloat) -> CGFloat { homeInset > 0 ? maxBottomMargin : 10 }
+    /// How far the capsule (plus a small gap) rises above the bottom safe area.
+    static func contentInset(homeInset: CGFloat) -> CGFloat {
+        max(0, capsuleHeight + bottomMargin(homeInset: homeInset) - homeInset + 8)
+    }
+
+    var onSelect: ((Int) -> Void)?
+    var onContentInset: ((CGFloat) -> Void)?
+
+    private let capsule = UIVisualEffectView(effect: UIGlassEffect(style: .regular))
+    private let pill = UIView()
+    private let lens = UIVisualEffectView(effect: nil)
+    private var items: [ItemView] = []
+    private var selectedIndex = 0
+    private var trackedTouch: UITouch?
+    private var hoverIndex: Int?
+    private var reportedInset: CGFloat = -1
+    private weak var fadingContent: UIView?
+
+    init(symbols: [String]) {
+        super.init(frame: .zero)
+        backgroundColor = .clear
+        clipsToBounds = false
+        isMultipleTouchEnabled = false
+        accessibilityTraits = .tabBar
+
+        capsule.cornerConfiguration = .capsule()
+        capsule.clipsToBounds = true
+        capsule.isUserInteractionEnabled = false
+        addSubview(capsule)
+
+        pill.isUserInteractionEnabled = false
+        pill.backgroundColor = UIColor { $0.userInterfaceStyle == .dark ? UIColor(white: 1, alpha: 0.14) : UIColor(white: 0, alpha: 0.07) }
+        pill.layer.cornerCurve = .continuous
+        capsule.contentView.addSubview(pill)
+
+        items = symbols.enumerated().map { index, symbol in
+            let item = ItemView(symbol: symbol)
+            item.activate = { [weak self] in self?.commit(index) }
+            capsule.contentView.addSubview(item)
+            return item
         }
-        func select(_ item: UITabBarItem, in view: Container) {
-            guard SystemTabBar.tabs.indices.contains(item.tag) else { return }
-            let tab = SystemTabBar.tabs[item.tag].0
-            if selection.wrappedValue == tab {
-                selection.wrappedValue = tab
-            } else {
-                view.crossfadeContent { selection.wrappedValue = tab }
-            }
+
+        lens.cornerConfiguration = .capsule()
+        lens.clipsToBounds = true
+        lens.isUserInteractionEnabled = false
+        lens.alpha = 0
+        addSubview(lens)
+
+        accessibilityElements = items
+        updateItemAppearance()
+    }
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    // MARK: Layout
+
+    private var homeInset: CGFloat { window?.safeAreaInsets.bottom ?? 34 }
+    private var isRTL: Bool { effectiveUserInterfaceLayoutDirection == .rightToLeft }
+    private var itemWidth: CGFloat { max(1, (capsule.bounds.width - 8) / CGFloat(max(items.count, 1))) }
+
+    /// The visual slot of an item, in the capsule's coordinates.
+    private func slot(_ index: Int) -> CGRect {
+        let visual = isRTL ? items.count - 1 - index : index
+        return CGRect(x: 4 + CGFloat(visual) * itemWidth, y: 0, width: itemWidth, height: capsule.bounds.height)
+    }
+    private func pillFrame(centerX: CGFloat) -> CGRect {
+        let height = capsule.bounds.height - 8
+        return CGRect(x: centerX - itemWidth / 2, y: 4, width: itemWidth, height: height)
+    }
+    private func lensFrame(centerX: CGFloat) -> CGRect {
+        let width = itemWidth + 14, height = capsule.bounds.height + 12
+        let center = CGPoint(x: capsule.frame.minX + centerX, y: capsule.frame.midY)
+        return CGRect(x: center.x - width / 2, y: center.y - height / 2, width: width, height: height)
+    }
+    private func clampedCenterX(_ x: CGFloat) -> CGFloat {
+        min(max(x, 4 + itemWidth / 2), capsule.bounds.width - 4 - itemWidth / 2)
+    }
+    private func index(atCapsuleX x: CGFloat) -> Int {
+        let visual = min(max(Int((x - 4) / itemWidth), 0), items.count - 1)
+        return isRTL ? items.count - 1 - visual : visual
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        let bottom = Self.bottomMargin(homeInset: homeInset)
+        let frame = CGRect(x: Self.sideMargin, y: bounds.height - bottom - Self.capsuleHeight,
+                           width: max(0, bounds.width - Self.sideMargin * 2), height: Self.capsuleHeight)
+        if capsule.frame != frame {
+            capsule.frame = frame
+            for (index, item) in items.enumerated() { item.frame = slot(index) }
+            pill.layer.cornerRadius = (Self.capsuleHeight - 8) / 2
+            if trackedTouch == nil { pill.frame = pillFrame(centerX: slot(selectedIndex).midX) }
+        }
+        let inset = Self.contentInset(homeInset: homeInset)
+        if abs(inset - reportedInset) > 0.5 {
+            reportedInset = inset
+            onContentInset?(inset)
+        }
+    }
+    override func safeAreaInsetsDidChange() { super.safeAreaInsetsDidChange(); setNeedsLayout() }
+    override func didMoveToWindow() { super.didMoveToWindow(); setNeedsLayout() }
+
+    // MARK: State
+
+    func setTitles(_ titles: [String]) {
+        for (item, title) in zip(items, titles) where item.title != title { item.title = title }
+    }
+    func setBadge(_ badge: String?, accessibilityValue: String?) {
+        items.last?.badge = badge
+        items.last?.accessibilityValue = accessibilityValue
+    }
+    func setSelectedIndex(_ index: Int, animated: Bool) {
+        guard items.indices.contains(index), index != selectedIndex else { return }
+        selectedIndex = index
+        guard trackedTouch == nil else { return }
+        updateItemAppearance()
+        let move = { self.pill.frame = self.pillFrame(centerX: self.slot(index).midX) }
+        if animated && !capsule.bounds.isEmpty {
+            UIView.animate(withDuration: 0.42, delay: 0, usingSpringWithDamping: 0.78, initialSpringVelocity: 0,
+                           options: [.allowUserInteraction, .beginFromCurrentState], animations: move)
+        } else { move() }
+    }
+    private func updateItemAppearance() {
+        let highlighted = hoverIndex ?? selectedIndex
+        for (index, item) in items.enumerated() {
+            item.isHighlightedTab = index == highlighted
+            item.accessibilityTraits = index == selectedIndex ? [.button, .selected] : .button
+        }
+    }
+    private func commit(_ index: Int) {
+        guard items.indices.contains(index) else { return }
+        let changed = index != selectedIndex
+        if changed { setSelectedIndex(index, animated: true) }
+        onSelect?(index)
+    }
+
+    // MARK: Touches
+
+    override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
+        capsule.frame.insetBy(dx: -4, dy: -6).contains(point)
+    }
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        self.point(inside: point, with: event) && !isHidden && alpha > 0.01 ? self : nil
+    }
+
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard trackedTouch == nil, let touch = touches.first else { return }
+        trackedTouch = touch
+        let x = clampedCenterX(touch.location(in: capsule).x)
+        hoverIndex = index(atCapsuleX: x)
+        updateItemAppearance()
+        lens.layer.removeAllAnimations()
+        if lens.alpha < 0.01 {
+            lens.frame = lensFrame(centerX: slot(selectedIndex).midX)
+            lens.transform = CGAffineTransform(scaleX: 0.8, y: 0.8)
+        }
+        let glass = UIGlassEffect(style: .clear)
+        glass.tintColor = tintColor.withAlphaComponent(0.08)
+        UIView.animate(withDuration: 0.38, delay: 0, usingSpringWithDamping: 0.68, initialSpringVelocity: 0,
+                       options: [.allowUserInteraction, .beginFromCurrentState]) {
+            self.lens.alpha = 1
+            self.lens.effect = glass
+            self.lens.transform = .identity
+            self.lens.frame = self.lensFrame(centerX: x)
+            self.pill.alpha = 0
+            self.pill.frame = self.pillFrame(centerX: x)
         }
     }
 
-    final class Container: UIView {
-        let bar = UITabBar()
-        let touchObserver = TabTouchObserver()
-        var pendingSelection: UITabBarItem?
-        private weak var fadingContent: UIView?
-        private var itemsWidth: CGFloat = 0
-        private var bottom: NSLayoutConstraint!
-        override init(frame: CGRect) {
-            super.init(frame: frame)
-            backgroundColor = .clear
-            clipsToBounds = false
-            bar.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(bar)
-            bar.addGestureRecognizer(touchObserver)
-            bottom = bar.bottomAnchor.constraint(equalTo: bottomAnchor)
-            NSLayoutConstraint.activate([
-                bar.centerXAnchor.constraint(equalTo: centerXAnchor),
-                bar.widthAnchor.constraint(equalTo: widthAnchor, constant: 24),
-                // Leave room above the bar for the system's morphing glass lens.
-                bar.topAnchor.constraint(equalTo: topAnchor, constant: 14),
-                bottom
-            ])
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let trackedTouch, touches.contains(trackedTouch) else { return }
+        let x = clampedCenterX(trackedTouch.location(in: capsule).x)
+        let index = index(atCapsuleX: x)
+        if index != hoverIndex { hoverIndex = index; updateItemAppearance() }
+        UIView.animate(withDuration: 0.18, delay: 0, options: [.allowUserInteraction, .beginFromCurrentState, .curveEaseOut]) {
+            self.lens.frame = self.lensFrame(centerX: x)
+            self.pill.frame = self.pillFrame(centerX: x)
+        }
+    }
+
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let trackedTouch, touches.contains(trackedTouch) else { return }
+        let location = trackedTouch.location(in: capsule)
+        let inside = capsule.bounds.insetBy(dx: -8, dy: -24).contains(location)
+        finishTouch(selecting: inside ? index(atCapsuleX: clampedCenterX(location.x)) : nil)
+    }
+
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        guard let trackedTouch, touches.contains(trackedTouch) else { return }
+        finishTouch(selecting: nil)
+    }
+
+    private func finishTouch(selecting index: Int?) {
+        trackedTouch = nil
+        hoverIndex = nil
+        if let index, index != selectedIndex { selectedIndex = index }
+        updateItemAppearance()
+        let target = slot(selectedIndex).midX
+        UIView.animate(withDuration: 0.5, delay: 0, usingSpringWithDamping: 0.74, initialSpringVelocity: 0,
+                       options: [.allowUserInteraction, .beginFromCurrentState]) {
+            self.pill.frame = self.pillFrame(centerX: target)
+            self.pill.alpha = 1
+            self.lens.frame = self.lensFrame(centerX: target)
+            self.lens.transform = CGAffineTransform(scaleX: 0.86, y: 0.86)
+        }
+        UIView.animate(withDuration: 0.28, delay: 0.08, options: [.allowUserInteraction, .beginFromCurrentState, .curveEaseOut]) {
+            self.lens.effect = nil
+            self.lens.alpha = 0
+        }
+        if let index { onSelect?(index) }
+    }
+
+    // MARK: Content transition
+
+    func crossfadeContent(_ changeSelection: () -> Void) {
+        fadingContent?.removeFromSuperview()
+        guard let root = window?.rootViewController?.view,
+              let snapshot = root.snapshotView(afterScreenUpdates: false) else {
+            changeSelection()
+            return
+        }
+        // Clip above the bar so only the glass animates there. Only opacity changes.
+        let height = max(0, min(root.bounds.height, convert(lensFrame(centerX: 0), to: root).minY))
+        let overlay = UIView(frame: CGRect(x: root.bounds.minX, y: root.bounds.minY, width: root.bounds.width, height: height))
+        overlay.clipsToBounds = true
+        overlay.isUserInteractionEnabled = false
+        overlay.accessibilityElementsHidden = true
+        snapshot.frame = root.bounds
+        overlay.addSubview(snapshot)
+        root.addSubview(overlay)
+        fadingContent = overlay
+        changeSelection()
+        DispatchQueue.main.async { [weak root, weak overlay] in
+            guard let root, let overlay else { return }
+            root.layoutIfNeeded()
+            UIView.animate(withDuration: 0.12, delay: 0, options: [.curveEaseOut, .allowUserInteraction]) {
+                overlay.alpha = 0
+            } completion: { _ in overlay.removeFromSuperview() }
+        }
+    }
+
+    // MARK: Item
+
+    private final class ItemView: UIView {
+        private let icon = UIImageView()
+        private let label = UILabel()
+        private let badgeLabel = UILabel()
+        var activate: (() -> Void)?
+
+        var title: String? {
+            get { label.text }
+            set { label.text = newValue; accessibilityLabel = newValue }
+        }
+        var badge: String? {
+            didSet {
+                guard badge != oldValue else { return }
+                badgeLabel.text = badge.map { " \($0) " }
+                badgeLabel.isHidden = badge == nil
+                setNeedsLayout()
+            }
+        }
+        var isHighlightedTab = false { didSet { if isHighlightedTab != oldValue { updateColors() } } }
+
+        init(symbol: String) {
+            super.init(frame: .zero)
+            isUserInteractionEnabled = false
+            isAccessibilityElement = true
+            icon.image = UIImage(systemName: symbol + ".fill") ?? UIImage(systemName: symbol)
+            icon.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 19, weight: .medium)
+            icon.contentMode = .center
+            label.font = .systemFont(ofSize: 10, weight: .semibold)
+            label.textAlignment = .center
+            label.adjustsFontSizeToFitWidth = true
+            label.minimumScaleFactor = 0.7
+            badgeLabel.font = .systemFont(ofSize: 12, weight: .semibold)
+            badgeLabel.textColor = .white
+            badgeLabel.textAlignment = .center
+            badgeLabel.backgroundColor = .systemRed
+            badgeLabel.clipsToBounds = true
+            badgeLabel.isHidden = true
+            [icon, label, badgeLabel].forEach(addSubview)
+            updateColors()
         }
         required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-        func crossfadeContent(_ changeSelection: () -> Void) {
-            fadingContent?.removeFromSuperview()
-            guard let root = window?.rootViewController?.view,
-                  let snapshot = root.snapshotView(afterScreenUpdates: false) else {
-                changeSelection()
-                return
-            }
-            // Clip above the bar so UIKit alone animates the glass. Only opacity
-            // changes: this also works with Reduce Motion, without sliding/scaling.
-            let height = max(0, min(root.bounds.height, convert(bounds, to: root).minY))
-            let overlay = UIView(frame: CGRect(x: root.bounds.minX, y: root.bounds.minY, width: root.bounds.width, height: height))
-            overlay.clipsToBounds = true
-            overlay.isUserInteractionEnabled = false
-            overlay.accessibilityElementsHidden = true
-            snapshot.frame = root.bounds
-            overlay.addSubview(snapshot)
-            root.addSubview(overlay)
-            fadingContent = overlay
-            changeSelection()
-            // Let SwiftUI install the selected screen before fading its old image.
-            DispatchQueue.main.async { [weak root, weak overlay] in
-                guard let root, let overlay else { return }
-                root.layoutIfNeeded()
-                UIView.animate(withDuration: 0.12, delay: 0, options: [.curveEaseOut, .allowUserInteraction]) {
-                    overlay.alpha = 0
-                } completion: { _ in overlay.removeFromSuperview() }
-            }
+
+        override func tintColorDidChange() { super.tintColorDidChange(); updateColors() }
+        private func updateColors() {
+            let color: UIColor = isHighlightedTab ? tintColor : .label
+            icon.tintColor = color
+            label.textColor = color
         }
         override func layoutSubviews() {
             super.layoutSubviews()
-            // iOS 26 otherwise retains title measurements made at an initial zero
-            // width. Rebuild only for a real width change, never for tab selection.
-            if bar.bounds.width > 0, abs(itemsWidth - bar.bounds.width) > 0.5 {
-                itemsWidth = bar.bounds.width
-                refreshItems()
-            }
+            icon.frame = CGRect(x: 0, y: bounds.midY - 22, width: bounds.width, height: 28)
+            label.frame = CGRect(x: 2, y: bounds.midY + 8, width: max(0, bounds.width - 4), height: 13)
+            let size = badgeLabel.sizeThatFits(CGSize(width: 60, height: 18))
+            let width = max(18, size.width)
+            badgeLabel.frame = CGRect(x: bounds.midX + 4, y: bounds.midY - 26, width: width, height: 18)
+            badgeLabel.layer.cornerRadius = 9
         }
-        func refreshItems() {
-            let items = bar.items
-            let selected = bar.selectedItem
-            let delegate = bar.delegate
-            bar.delegate = nil
-            UIView.performWithoutAnimation { bar.items = nil; bar.items = items; bar.selectedItem = selected }
-            bar.delegate = delegate
-        }
-        override func didMoveToWindow() { super.didMoveToWindow(); updateBottomInset() }
-        override func safeAreaInsetsDidChange() { super.safeAreaInsetsDidChange(); updateBottomInset() }
-        private func updateBottomInset() {
-            let inset = window?.safeAreaInsets.bottom ?? 0
-            if bottom.constant != inset { bottom.constant = inset; invalidateIntrinsicContentSize() }
-        }
-    }
-
-    /// Observes release/cancellation without delaying or consuming UIKit's touches.
-    /// Screen selection is committed after the native bar finishes that same event.
-    final class TabTouchObserver: UIGestureRecognizer {
-        var finished: ((Bool) -> Void)?
-        private(set) var isInteracting = false
-        private var trackedTouch: UITouch?
-        private var generation = 0
-
-        init() {
-            super.init(target: nil, action: nil)
-            cancelsTouchesInView = false
-            delaysTouchesBegan = false
-            delaysTouchesEnded = false
-        }
-        override func canPrevent(_ other: UIGestureRecognizer) -> Bool { false }
-        override func canBePrevented(by other: UIGestureRecognizer) -> Bool { false }
-        override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
-            guard trackedTouch == nil, let touch = touches.first else { return }
-            generation += 1
-            trackedTouch = touch
-            isInteracting = true
-            state = .began
-        }
-        override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent) {
-            if let trackedTouch, touches.contains(trackedTouch) { state = .changed }
-        }
-        override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent) {
-            guard let trackedTouch, touches.contains(trackedTouch) else { return }
-            let inside = view?.bounds.contains(trackedTouch.location(in: view)) ?? false
-            finish(cancelled: !inside)
-            state = .ended
-        }
-        override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent) {
-            guard let trackedTouch, touches.contains(trackedTouch) else { return }
-            finish(cancelled: true)
-            state = .cancelled
-        }
-        override func reset() {
-            super.reset()
-            if trackedTouch != nil { finish(cancelled: true) }
-        }
-        private func finish(cancelled: Bool) {
-            trackedTouch = nil
-            let current = generation
-            DispatchQueue.main.async { [weak self] in
-                guard let self, generation == current else { return }
-                isInteracting = false
-                finished?(cancelled)
-            }
-        }
+        override func accessibilityActivate() -> Bool { activate?(); return true }
     }
 }
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## iPhone 1.0.47 — 2026-11-13
+
+iPhone 1.0.47 (build 48) · Mac unchanged (1.7.19, build 98)
+
+- **Content stops above the tab bar.** Each tab now reserves the floating bar's height in its own bottom safe area, so every screen, including pushed ones, scrolls to its end above the bar instead of under it.
+- **Liquid Glass tab bar with Reduce Motion.** The bottom bar is now a custom Liquid Glass capsule. Its selection pill and glass lens slide with explicit animations that keep working when Reduce Motion is on; the selection never extends over neighbouring tabs.
+
+
 ## 1.7.19 — 2026-11-13
 
 Mac 1.7.19 (build 98) · iPhone 1.0.46 (build 47)
