@@ -14,6 +14,7 @@
 		1133888B890EB3C1A8FA30F6 /* AnalyticsScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7B24112A18F8359DF9CB0001 /* AnalyticsScreen.swift */; };
 		129FCB8A9685F1D935FDC35E /* ChangeDescription.swift in Sources */ = {isa = PBXBuildFile; fileRef = F3E78F6ACDBE2C140769209A /* ChangeDescription.swift */; };
 		12C5CA0ED2B9C15CC6FA43F8 /* MobileStrings.json in Resources */ = {isa = PBXBuildFile; fileRef = 263002D25366E09E01B9CF43 /* MobileStrings.json */; };
+		24302B7EAC3FF8361145BDCC /* Mora Bank Notification.shortcut in Resources */ = {isa = PBXBuildFile; fileRef = 899DA7129939174D7BB68C91 /* Mora Bank Notification.shortcut */; };
 		2430D1FDC6742397B0E7198D /* BankAlertLog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E483F765535A3F985A7852BA /* BankAlertLog.swift */; };
 		309A259918CE041EAC12AA3A /* PairingVisuals.swift in Sources */ = {isa = PBXBuildFile; fileRef = 40143EA2813412A012DAA081 /* PairingVisuals.swift */; };
 		35873C37AADE829EA8F0AA59 /* FinanceCore in Frameworks */ = {isa = PBXBuildFile; productRef = 261299B9EF33104DB0E57FE7 /* FinanceCore */; };
@@ -45,8 +46,10 @@
 		AEE49357E8A3A6C9EE9AAE83 /* TransactionEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A1CED08EE69D8287C08552F /* TransactionEditor.swift */; };
 		BE0D8CEE4CCD69722D7A0763 /* MerchantCategorizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35FB27FDB12838BC42FF32F4 /* MerchantCategorizer.swift */; };
 		C1ACF4FB85C7D4AC8437A0B0 /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = C7EABC9B8C57126A5C9087F8 /* Components.swift */; };
+		C3DEC3346BEB535B85F09B45 /* Mora Bank SMS.shortcut in Resources */ = {isa = PBXBuildFile; fileRef = EE756E00CFE55BCF3B16D45B /* Mora Bank SMS.shortcut */; };
 		C95A3FB005487DC3EFBDA916 /* AutomationGuide.swift in Sources */ = {isa = PBXBuildFile; fileRef = 240D97CA24C2C69665F1A102 /* AutomationGuide.swift */; };
 		CC257AB75FA52B7F53DC6CAB /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 0F407065AB8FA06ADF586CC7 /* InfoPlist.strings */; };
+		CDD307208C4485838EEED2E0 /* Mora Wallet Notification.shortcut in Resources */ = {isa = PBXBuildFile; fileRef = 7D39815B8AC5C52E8CEB001A /* Mora Wallet Notification.shortcut */; };
 		CED62CE9B0273557FB4183A3 /* WalletDelivery.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCFF2BEB1FEAFE94C74F7F1C /* WalletDelivery.swift */; };
 		D0FF25F050A0E85A5510A5ED /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9ABBD1E8E150D6529D1A8D84 /* Assets.xcassets */; };
 		D270AD4A71D4160C0C8A3D0B /* BankAlertDetailScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = A82A3613EC346023ACBC1F0E /* BankAlertDetailScreen.swift */; };
@@ -89,11 +92,13 @@
 		6A1CED08EE69D8287C08552F /* TransactionEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TransactionEditor.swift; sourceTree = "<group>"; };
 		6F4E44FD82A4CF0B2F08C570 /* MoraApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoraApp.swift; sourceTree = "<group>"; };
 		7B24112A18F8359DF9CB0001 /* AnalyticsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalyticsScreen.swift; sourceTree = "<group>"; };
+		7D39815B8AC5C52E8CEB001A /* Mora Wallet Notification.shortcut */ = {isa = PBXFileReference; path = "Mora Wallet Notification.shortcut"; sourceTree = "<group>"; };
 		7E05AB6AF2B45D97DA131D38 /* SettingsScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsScreen.swift; sourceTree = "<group>"; };
 		7E19C5DC0D52A24B7BC428CB /* ru */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = ru; path = ru.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		7F6A6EC2D5631B2FD2C571AD /* CloudSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudSync.swift; sourceTree = "<group>"; };
 		82E5A0638F195085193DE6F5 /* Files.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Files.swift; sourceTree = "<group>"; };
 		85BFEB921FC926A84CB68715 /* CloudScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudScreen.swift; sourceTree = "<group>"; };
+		899DA7129939174D7BB68C91 /* Mora Bank Notification.shortcut */ = {isa = PBXFileReference; path = "Mora Bank Notification.shortcut"; sourceTree = "<group>"; };
 		91B4EB47169E11E5D33A55AF /* CurrencyPicker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrencyPicker.swift; sourceTree = "<group>"; };
 		951FB5CB562E7123711699C8 /* WalletRunLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletRunLog.swift; sourceTree = "<group>"; };
 		99498B2673D2067EFC542157 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
@@ -117,6 +122,7 @@
 		D7E91B2AD778BDBDC0998D00 /* WalletAutomationGuide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletAutomationGuide.swift; sourceTree = "<group>"; };
 		E344C9591051D2195C1A02FB /* WalletSetupScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletSetupScreen.swift; sourceTree = "<group>"; };
 		E483F765535A3F985A7852BA /* BankAlertLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BankAlertLog.swift; sourceTree = "<group>"; };
+		EE756E00CFE55BCF3B16D45B /* Mora Bank SMS.shortcut */ = {isa = PBXFileReference; path = "Mora Bank SMS.shortcut"; sourceTree = "<group>"; };
 		F2416F36C6721CE96EB36684 /* FinanceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinanceStore.swift; sourceTree = "<group>"; };
 		F3E78F6ACDBE2C140769209A /* ChangeDescription.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ChangeDescription.swift; path = ../Sources/Mora/ChangeDescription.swift; sourceTree = "<group>"; };
 		F65900D0DE8EB82F68603C47 /* ImportScreens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportScreens.swift; sourceTree = "<group>"; };
@@ -161,6 +167,9 @@
 				9ABBD1E8E150D6529D1A8D84 /* Assets.xcassets */,
 				263002D25366E09E01B9CF43 /* MobileStrings.json */,
 				A3F8FFEA783AAA0562549B0D /* Mora Apple Pay.shortcut */,
+				899DA7129939174D7BB68C91 /* Mora Bank Notification.shortcut */,
+				EE756E00CFE55BCF3B16D45B /* Mora Bank SMS.shortcut */,
+				7D39815B8AC5C52E8CEB001A /* Mora Wallet Notification.shortcut */,
 				0F407065AB8FA06ADF586CC7 /* InfoPlist.strings */,
 			);
 			path = Resources;
@@ -403,6 +412,9 @@
 				CC257AB75FA52B7F53DC6CAB /* InfoPlist.strings in Resources */,
 				12C5CA0ED2B9C15CC6FA43F8 /* MobileStrings.json in Resources */,
 				85FBAF0B4C61C666143C0746 /* Mora Apple Pay.shortcut in Resources */,
+				24302B7EAC3FF8361145BDCC /* Mora Bank Notification.shortcut in Resources */,
+				C3DEC3346BEB535B85F09B45 /* Mora Bank SMS.shortcut in Resources */,
+				CDD307208C4485838EEED2E0 /* Mora Wallet Notification.shortcut in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -564,7 +576,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 64;
+				CURRENT_PROJECT_VERSION = 65;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -578,7 +590,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.63;
+				MARKETING_VERSION = 1.0.64;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -641,7 +653,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 64;
+				CURRENT_PROJECT_VERSION = 65;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -661,7 +673,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.63;
+				MARKETING_VERSION = 1.0.64;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
