@@ -120,17 +120,30 @@ enum CaptureAutomation: String, CaseIterable, Identifiable, Sendable {
     enum SetupState { case notSet, waiting, working }
 
     /// Told by the card's button alone: never set up, set up but no purchase since, or
-    /// at least one purchase received through this automation.
+    /// at least one purchase received through this automation. Only purchases after the
+    /// setup, or after the section started counting (`countingSince`), are evidence:
+    /// journal entries kept from before, such as old messages waiting for review, are not.
     func setupState(runs: [WalletRun], alerts: [BankAlert]) -> SetupState {
         let finished = setupFinishedAt
-        if let last = lastRun(runs: runs, alerts: alerts), finished.map({ last >= $0.addingTimeInterval(-60) }) ?? true { return .working }
+        let since = finished.map { $0.addingTimeInterval(-60) } ?? Self.countingSince
+        if let last = lastRun(runs: runs, alerts: alerts), last >= since { return .working }
         return finished == nil ? .notSet : .waiting
+    }
+
+    private static let countingSinceKey = "mora.automation.countingSince"
+    /// Set the first time the section opens in Mora 1.0.61 or later.
+    static var countingSince: Date {
+        if let date = UserDefaults.standard.object(forKey: countingSinceKey) as? Date { return date }
+        let now = Date()
+        UserDefaults.standard.set(now, forKey: countingSinceKey)
+        return now
     }
 
     /// Forgets once that the setup guides were completed, so they can be tried again:
     /// first in 1.0.55, again in 1.0.60 after "Set Up Manually" marked Wallet Transaction
     /// as set up by mistake. The journals are never touched here.
     static func resetOnceForFreshSetup() {
+        _ = countingSince
         let key = "mora.automation.reset.1.0.60"
         guard !UserDefaults.standard.bool(forKey: key) else { return }
         for automation in allCases { automation.setupFinishedAt = nil }

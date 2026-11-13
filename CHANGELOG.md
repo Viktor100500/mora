@@ -1,5 +1,12 @@
 # Changelog
 
+## iPhone 1.0.61 — 2026-11-14
+
+iPhone 1.0.61 (build 62) · Mac unchanged (1.7.19, build 98)
+
+- **Working means a new purchase.** An automation card turns green only for a purchase received after its setup guide, or, without a setup, after the section starts counting on this iPhone. Older journal entries, such as Wallet notifications from 11 November still waiting for review, no longer show Working.
+
+
 ## iPhone 1.0.60 — 2026-11-14
 
 iPhone 1.0.60 (build 61) · Mac unchanged (1.7.19, build 98)
