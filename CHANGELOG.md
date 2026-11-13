@@ -1,5 +1,11 @@
 # Changelog
 
+## iPhone 1.0.56 — 2026-11-14
+
+iPhone 1.0.56 (build 57) · Mac unchanged (1.7.19, build 98)
+
+- **Centred tab selection.** The resting selection is centred on every tab again, the first and last included, and is only 2 points wider than a tab on each side. The capsule keeps 6 points before its first and last tab, so the selection stays 4 points from its rounded ends and never reaches a neighbouring label. Labels are slightly narrower and may shrink a little so long ones like "Transactions" fit inside the selection.
+
 ## iPhone 1.0.55 — 2026-11-14
 
 iPhone 1.0.55 (build 56) · Mac unchanged (1.7.19, build 98)
