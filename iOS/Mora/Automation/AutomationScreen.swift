@@ -48,7 +48,7 @@ struct AutomationScreen: View {
         .onChange(of: scenePhase) { _, phase in if phase == .active { reload() } }
     }
 
-    private func reload() { queue.reload(); templates = BankAlertLog.templates() }
+    private func reload() { CaptureAutomation.resetOnceForFreshSetup(); queue.reload(); templates = BankAlertLog.templates() }
 
     private func deliver() async {
         sending = true
@@ -78,26 +78,15 @@ struct AutomationScreen: View {
     private var automationsSection: some View {
         Section {
             ForEach(CaptureAutomation.allCases) { automation in
-                let waiting = automation.awaitingFirstRun(runs: queue.runs, alerts: queue.alerts)
-                AutomationRow(automation: automation, status: status(of: automation), waiting: waiting) {
-                    router.open(waiting ? .automationWaiting(automation) : .automationGuide(automation))
+                let state = automation.setupState(runs: queue.runs, alerts: queue.alerts)
+                AutomationRow(automation: automation, state: state,
+                              lastRun: automation.lastRun(runs: queue.runs, alerts: queue.alerts)) {
+                    router.open(state == .notSet ? .automationGuide(automation) : .automationWaiting(automation))
                 }
             }
         } header: { Text(L("Быстрые команды")) } footer: {
             Text(L("Каждая автоматизация — отдельная команда со своим действием Mora. Включите те, что подходят вашим картам: если одна покупка придёт из нескольких, Mora объединит их и покажет это в журнале."))
         }
-    }
-
-    private func status(of automation: CaptureAutomation) -> (text: String, color: Color) {
-        guard automation.available else { return (L("Нужна iOS 27"), .secondary) }
-        if automation.awaitingFirstRun(runs: queue.runs, alerts: queue.alerts) {
-            return (L("Настроена · ждём первую покупку, чтобы проверить"), .orange)
-        }
-        if automation == .walletTransaction, let last = queue.runs.first(where: { $0.delivery != .duplicate }), !WalletAutomationCheck.isReady(last) {
-            return (L("Нужно обновить: последняя оплата пришла не полностью"), .orange)
-        }
-        guard let date = automation.lastRun(runs: queue.runs, alerts: queue.alerts) else { return (L("Ещё не запускалась"), .secondary) }
-        return (L("Работает · последний запуск \(date.formatted(.relative(presentation: .named).locale(L10n.locale)))"), Color.moraGreen)
     }
 
     // MARK: Where purchases go
@@ -165,10 +154,12 @@ struct AutomationScreen: View {
 /// One automation: what it does, whether it works and its own setup button.
 private struct AutomationRow: View {
     let automation: CaptureAutomation
-    let status: (text: String, color: Color)
-    /// Set up and waiting for its first purchase.
-    let waiting: Bool
-    let setup: () -> Void
+    let state: CaptureAutomation.SetupState
+    let lastRun: Date?
+    let action: () -> Void
+
+    /// A soft yellow that stays readable in light and dark mode.
+    private static let waitingColor = Color(red: 0.86, green: 0.66, blue: 0.12)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -177,19 +168,49 @@ private struct AutomationRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(automation.title).font(.headline)
                     Text(automation.summary).font(.caption).foregroundStyle(.secondary)
-                    Text(status.text).font(.caption.weight(.medium)).foregroundStyle(status.color)
                 }
                 .fixedSize(horizontal: false, vertical: true)
             }
-            Button(action: setup) {
-                Label(L(waiting ? "Ждём покупку" : "Настроить"), systemImage: waiting ? "hourglass" : "wand.and.stars")
-                    .font(.subheadline.weight(.semibold))
+            HStack(spacing: 10) {
+                Button(action: action) {
+                    Label(title, systemImage: icon).font(.subheadline.weight(.semibold))
+                }
+                .buttonStyle(.bordered).controlSize(.small).tint(tint)
+                .disabled(!automation.available)
+                if let lastRun, automation.available {
+                    Text(lastRun.formatted(.relative(presentation: .named).locale(L10n.locale)))
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
             }
-            .buttonStyle(.bordered).controlSize(.small).tint(waiting ? .orange : .moraGreen)
-            .disabled(!automation.available)
             .padding(.leading, 52)
         }
         .padding(.vertical, 4)
+    }
+
+    private var title: String {
+        guard automation.available else { return L("Нужна iOS 27") }
+        return switch state {
+        case .notSet: L("Настроить")
+        case .waiting: L("Ждём покупку")
+        case .working: L("Работает")
+        }
+    }
+
+    private var icon: String {
+        guard automation.available else { return "lock" }
+        return switch state {
+        case .notSet: "wand.and.stars"
+        case .waiting: "hourglass"
+        case .working: "checkmark.circle.fill"
+        }
+    }
+
+    private var tint: Color {
+        switch state {
+        case .notSet: .moraGreen
+        case .waiting: Self.waitingColor
+        case .working: .green
+        }
     }
 }
 

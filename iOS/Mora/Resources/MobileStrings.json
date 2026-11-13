@@ -565,5 +565,6 @@
   "Вы настроили автоматизацию. Как только придёт SMS банка о покупке и Mora его прочитает, настройка подтвердится.": "You've set up the automation. As soon as a bank text about a purchase arrives and Mora reads it, the setup is confirmed.",
   "Вы настроили автоматизацию. Как только придёт уведомление банка о покупке и Mora его прочитает, настройка подтвердится.": "You've set up the automation. As soon as a bank notification about a purchase arrives and Mora reads it, the setup is confirmed.",
   "Настроена · ждём первую покупку, чтобы проверить": "Set up · waiting for the first purchase to confirm",
-  "Ждём покупку": "Waiting for Purchase"
+  "Ждём покупку": "Waiting for Purchase",
+  "Работает": "Working"
 }

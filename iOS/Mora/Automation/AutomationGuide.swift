@@ -544,7 +544,7 @@ struct AutomationWaitingView: View {
     @State private var latest: AutomationEntry?
     @State private var latestRun: WalletRun?
 
-    private var since: Date { (automation.setupFinishedAt ?? .now).addingTimeInterval(-60) }
+    private var since: Date { (automation.setupFinishedAt ?? .distantPast).addingTimeInterval(-60) }
     private var confirmed: Bool { latest != nil || latestRun != nil }
 
     var body: some View {
