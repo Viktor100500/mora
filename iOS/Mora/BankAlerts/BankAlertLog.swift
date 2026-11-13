@@ -387,27 +387,24 @@ actor BankAlertDelivery {
     }
 }
 
-/// The Shortcuts action for the "Message" automation (bank SMS). Automations made
-/// before Mora 1.0.48 also use it for bank app notifications and pass their Title;
-/// new ones use `LogBankNotificationIntent`. Runs without opening Mora, also on a
-/// locked iPhone, and never fails the automation.
+/// The Shortcuts action for the "Message" automation (bank SMS). Every parameter is in
+/// its sentence; bank app notifications use `LogBankNotificationIntent`. Runs without
+/// opening Mora, also on a locked iPhone, and never fails the automation.
 struct LogBankMessageIntent: AppIntent {
     static let title: LocalizedStringResource = "Log Bank Message"
-    static let description = IntentDescription("Reads a purchase from a bank text message or app notification. One-time codes and other messages are dropped without saving their text. A new message format waits for review in Mora once; later messages in the same format are sent automatically.")
+    static let description = IntentDescription("Reads a purchase from a bank text message. One-time codes and other messages are dropped without saving their text. A new message format waits for review in Mora once; later messages in the same format are sent automatically.")
     static let openAppWhenRun = false
     static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
 
     @Parameter(title: "Text") var text: String?
     @Parameter(title: "From") var source: String?
-    @Parameter(title: "Title") var title: String?
 
     static var parameterSummary: some ParameterSummary {
-        Summary("Log \(\.$text) from \(\.$source)") { \.$title }
+        Summary("Log \(\.$text) from \(\.$source)")
     }
 
     func perform() async throws -> some IntentResult {
-        let hasTitle = !(title ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        await BankAlertDelivery.logFromShortcut(title: title, text: text, source: source ?? "", channel: hasTitle ? .notification : .sms)
+        await BankAlertDelivery.logFromShortcut(title: nil, text: text, source: source ?? "", channel: .sms)
         return .result()
     }
 }

@@ -1,5 +1,13 @@
 # Changelog
 
+## iPhone 1.0.63 — 2026-11-14
+
+iPhone 1.0.63 (build 64) · Mac unchanged (1.7.19, build 98)
+
+- **One automation for all banks.** The Bank SMS guide now asks to choose the senders of all your banks in the Message trigger: iOS 27 needs a sender, and several can be chosen. The Bank Notification guide likewise chooses the apps of all banks at once, and its App field takes the notification's app instead of a typed name. The currency filter step is gone.
+- **Log Bank Message keeps every field in its sentence.** The action is now "Log Text from From" without a Title field in the collapsed area. Old notification automations that relied on its Title should use Log Bank Notification.
+
+
 ## iPhone 1.0.62 — 2026-11-14
 
 iPhone 1.0.62 (build 63) · Mac unchanged (1.7.19, build 98)
