@@ -131,21 +131,25 @@ private struct ManagedTabBarVisibility: ViewModifier {
         if #available(iOS 26, *), UIDevice.current.userInterfaceIdiom == .phone {
             content
                 .toolbar(.hidden, for: .tabBar)
-                // Whatever room UIKit's inset did not provide is reserved here. iOS 26 passes
-                // `additionalSafeAreaInsets` on and this stays 0; iOS 27's TabView drops it,
-                // and this spacer then keeps every screen's end above the bar.
-                .safeAreaInset(edge: .bottom, spacing: 0) {
-                    Color.clear
-                        .frame(height: max(0, GlassTabBar.reservedHeight(homeInset: Self.homeInset) - receivedBottom))
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
+                // Whatever room UIKit's inset did not provide is added as content margins.
+                // iOS 26 passes `additionalSafeAreaInsets` on and this stays 0. iOS 27's
+                // TabView resets that inset, and no safe-area inset reaches scroll views
+                // inside its NavigationStack; content margins travel through the
+                // environment instead, to every List and ScrollView of the tab, pushed
+                // screens included.
+                .contentMargins(.bottom, missingRoom, for: .scrollContent)
+                .contentMargins(.bottom, missingRoom, for: .scrollIndicators)
                 .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: {
                     receivedBottom = $0
                     TabBarDiagnostics.noteReceived($0)
                     TabBarDiagnostics.scheduleSnapshot()
                 }
         } else { content }
+    }
+
+    @available(iOS 26, *)
+    private var missingRoom: CGFloat {
+        max(0, GlassTabBar.reservedHeight(homeInset: Self.homeInset) - receivedBottom)
     }
 
     private static var homeInset: CGFloat {
@@ -450,6 +454,9 @@ private final class GlassTabBar: UIView {
         lifted ? CGSize(width: itemWidth + 16, height: capsuleSize.height + 8)
                : CGSize(width: min(itemWidth + 8, capsuleSize.width - 8), height: capsuleSize.height - 8)
     }
+    /// Where the resting lens sits for a tab: centred on it, but never closer than
+    /// 4 points to the capsule's ends, so the first and last tabs stay inside the bar.
+    private func restX(_ index: Int) -> CGFloat { clampedX(slot(index).midX) }
     private func clampedX(_ x: CGFloat) -> CGFloat {
         let half = lensSize(lifted: false).width / 2
         return min(max(x, 4 + half), capsuleSize.width - 4 - half)
@@ -501,7 +508,7 @@ private final class GlassTabBar: UIView {
                     selectedItems[index].frame = slot(index)
                 }
                 setLensBounds(lensSize(lifted: false))
-                setLensCenterX(slot(selectedIndex).midX)
+                setLensCenterX(restX(selectedIndex))
             }
         }
         applyContentInset()
@@ -535,6 +542,10 @@ private final class GlassTabBar: UIView {
         if let superview, superview.subviews.last !== self { superview.bringSubviewToFront(self) }
     }
     private static func setInset(_ inset: CGFloat, in controller: UITabBarController?) {
+        #if DEBUG
+        // Reproduces iOS 27, which resets this inset, in an iOS 26 simulator.
+        if ProcessInfo.processInfo.arguments.contains("--no-uikit-tab-inset") { return }
+        #endif
         for child in controller?.viewControllers ?? [] where abs(child.additionalSafeAreaInsets.bottom - inset) > 0.5 {
             child.additionalSafeAreaInsets.bottom = inset
         }
@@ -574,7 +585,7 @@ private final class GlassTabBar: UIView {
         selectedIndex = index
         updateAccessibility()
         guard trackedTouch == nil, !capsuleSize.equalTo(.zero) else { return }
-        moveLens(toX: slot(index).midX, animated: animated)
+        moveLens(toX: restX(index), animated: animated)
     }
     private func updateAccessibility() {
         for (index, item) in items.enumerated() {
@@ -603,7 +614,7 @@ private final class GlassTabBar: UIView {
         trackedTouch = touch
         let x = touch.location(in: glassContainer).x
         dragIndex = index(atX: clampedX(x))
-        dragStartLensX = slot(dragIndex).midX
+        dragStartLensX = restX(dragIndex)
         dragStartTouchX = x
         pendingUnlift?.cancel()
         if lens != nil, !isLensLifted { setLensLifted(true) }
@@ -643,7 +654,7 @@ private final class GlassTabBar: UIView {
         trackedTouch = nil
         if let index { selectedIndex = index }
         updateAccessibility()
-        moveLens(toX: slot(selectedIndex).midX, animated: true)
+        moveLens(toX: restX(selectedIndex), animated: true)
         if lens != nil, isLensLifted {
             // UIKit keeps a tapped lens lifted for its hang time, so a tap shows the lift.
             let remaining = liftTimestamp + Self.hangTime - CACurrentMediaTime()
