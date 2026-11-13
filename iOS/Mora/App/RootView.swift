@@ -443,16 +443,21 @@ private final class GlassTabBar: UIView {
     private var homeInset: CGFloat { window?.safeAreaInsets.bottom ?? 34 }
     private var isRTL: Bool { effectiveUserInterfaceLayoutDirection == .rightToLeft }
     private var capsuleSize: CGSize { glassContainer.bounds.size }
-    private var itemWidth: CGFloat { max(1, (capsuleSize.width - 8) / CGFloat(max(items.count, 1))) }
+    /// Room between the capsule's ends and the first and last tab. The resting lens is
+    /// 2 points wider than a tab on each side, so it stays centred on every tab and
+    /// still keeps 4 points from the capsule's rounded ends.
+    private static let innerPadding: CGFloat = 6
+    private static let lensOverhang: CGFloat = 2
+    private var itemWidth: CGFloat { max(1, (capsuleSize.width - Self.innerPadding * 2) / CGFloat(max(items.count, 1))) }
 
     /// The visual slot of an item, in the capsule's coordinates.
     private func slot(_ index: Int) -> CGRect {
         let visual = isRTL ? items.count - 1 - index : index
-        return CGRect(x: 4 + CGFloat(visual) * itemWidth, y: 0, width: itemWidth, height: capsuleSize.height)
+        return CGRect(x: Self.innerPadding + CGFloat(visual) * itemWidth, y: 0, width: itemWidth, height: capsuleSize.height)
     }
     private func lensSize(lifted: Bool) -> CGSize {
         lifted ? CGSize(width: itemWidth + 16, height: capsuleSize.height + 8)
-               : CGSize(width: min(itemWidth + 8, capsuleSize.width - 8), height: capsuleSize.height - 8)
+               : CGSize(width: itemWidth + Self.lensOverhang * 2, height: capsuleSize.height - 8)
     }
     /// Where the resting lens sits for a tab: centred on it, but never closer than
     /// 4 points to the capsule's ends, so the first and last tabs stay inside the bar.
@@ -462,7 +467,7 @@ private final class GlassTabBar: UIView {
         return min(max(x, 4 + half), capsuleSize.width - 4 - half)
     }
     private func index(atX x: CGFloat) -> Int {
-        let visual = min(max(Int((x - 4) / itemWidth), 0), items.count - 1)
+        let visual = min(max(Int((x - Self.innerPadding) / itemWidth), 0), items.count - 1)
         return isRTL ? items.count - 1 - visual : visual
     }
     private func setLensBounds(_ size: CGSize) {
@@ -733,7 +738,7 @@ private final class GlassTabBar: UIView {
             label.font = .systemFont(ofSize: 10, weight: .semibold)
             label.textAlignment = .center
             label.adjustsFontSizeToFitWidth = true
-            label.minimumScaleFactor = 0.7
+            label.minimumScaleFactor = 0.75
             badgeLabel.font = .systemFont(ofSize: 12, weight: .semibold)
             badgeLabel.textColor = .white
             badgeLabel.textAlignment = .center
@@ -754,7 +759,8 @@ private final class GlassTabBar: UIView {
         override func layoutSubviews() {
             super.layoutSubviews()
             icon.frame = CGRect(x: 0, y: bounds.midY - 22, width: bounds.width, height: 28)
-            label.frame = CGRect(x: 2, y: bounds.midY + 8, width: max(0, bounds.width - 4), height: 13)
+            // Narrower than the tab, so the text stays inside the lens's rounded ends.
+            label.frame = CGRect(x: 6, y: bounds.midY + 8, width: max(0, bounds.width - 12), height: 13)
             let width = max(18, badgeLabel.sizeThatFits(CGSize(width: 60, height: 18)).width + 10)
             badgeLabel.frame = CGRect(x: bounds.midX + 4, y: bounds.midY - 26, width: width, height: 18)
             badgeLabel.layer.cornerRadius = 9
