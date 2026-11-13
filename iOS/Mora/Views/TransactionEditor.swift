@@ -31,7 +31,14 @@ struct TransactionEditor: View {
     @State private var attemptedSave = false
     @State private var confirmDelete = false
     @State private var newTransactionID = UUID()
+    @State private var merchantSuggestions: [String] = []
+    @State private var suggestedCategory: UUID?
+    @State private var suggestionsReady = false
+    @State private var baseBalances: BaseBalances?
     @FocusState private var focus: Field?
+    private struct SuggestionKey: Equatable { var merchant: String; var kind: TransactionKind; var revision: UInt64 }
+    private struct BalanceKey: Equatable { var day: Date; var revision: UInt64 }
+    private struct BaseBalances { var key: BalanceKey; var values: [UUID: Decimal] }
     private enum Field: Hashable { case amount, merchant, destinationAmount, note, tags }
     private enum Required: Hashable { case merchant, amount, account, destination, destinationAmount }
 
@@ -77,7 +84,7 @@ struct TransactionEditor: View {
     private var currencySelection: Binding<String> {
         Binding(get: { purchaseCurrency }, set: { currency = $0 == account?.currency ? "" : $0 })
     }
-    private var suggestedCategory: UUID? {
+    nonisolated private static func suggestedCategory(merchant: String, kind: TransactionKind, in ledger: Ledger) -> UUID? {
         merchant.trimmingCharacters(in: .whitespaces).isEmpty ? nil : ledger.suggestedCategory(merchant: merchant, kind: kind)
     }
     private var title: String {
@@ -102,6 +109,8 @@ struct TransactionEditor: View {
     }
 
     var body: some View {
+        let draft = balanceDraft
+        let balanceKey = draft.map { BalanceKey(day: Calendar.current.startOfDay(for: max(Date(), $0.date)), revision: store.revision) }
         NavigationStack {
             Form {
                 notices
@@ -148,7 +157,7 @@ struct TransactionEditor: View {
                     }
                 }
                 if needsConversion { Section(L("Пересчет Visa")) { conversionPreview } }
-                if !needsConversion, let draft = balanceDraft, let fee = draft.sameCurrencyFee, let account {
+                if !needsConversion, let draft, let fee = draft.sameCurrencyFee, let account {
                     Section {
                         FinancialText(L("Будет списано с комиссией \(Money.plain(fee.percent))%: \(DisplayMoney.string(abs(draft.amount), currency: account.currency))"))
                     }
@@ -186,7 +195,7 @@ struct TransactionEditor: View {
                         }
                     }
                 }
-                balancePreview
+                balancePreview(draft)
                 Section {
                     if kind == .transfer { Text(L("Переводы изменяют остатки счетов и не включаются в доходы и расходы.")) }
                     if date > Date() { Text(L("Будущая операция попадет в отчет за свой месяц. Остатки счетов изменятся в дату операции.")) }
@@ -223,7 +232,24 @@ struct TransactionEditor: View {
             .onChange(of: kind) { _, new in if ledger.category(categoryID)?.kind != new { categoryID = nil } }
             .onChange(of: accountID) { _, id in if destinationID == id { destinationID = nil } }
             .onAppear { if transaction == nil && walletCapture == nil && amount.isEmpty { focus = .amount } }
-            .onAppear { if walletRun != nil && categoryID == nil { categoryID = suggestedCategory } }
+            .task(id: SuggestionKey(merchant: merchant, kind: kind, revision: store.revision)) {
+                let key = SuggestionKey(merchant: merchant, kind: kind, revision: store.revision), snapshot = ledger.withoutChangeHistory()
+                if suggestionsReady { do { try await Task.sleep(for: .milliseconds(150)) } catch { return } }
+                let value = await BackgroundWork.shared.perform {
+                    (Self.merchantSuggestions(query: key.merchant, kind: key.kind, in: snapshot),
+                     Self.suggestedCategory(merchant: key.merchant, kind: key.kind, in: snapshot))
+                }
+                guard !Task.isCancelled else { return }
+                merchantSuggestions = value.0; suggestedCategory = value.1; suggestionsReady = true
+            }
+            .task(id: balanceKey) {
+                guard let key = balanceKey else { return }
+                let snapshot = ledger.withoutChangeHistory()
+                let values = await BackgroundWork.shared.perform { snapshot.balances(through: key.day) }
+                guard !Task.isCancelled else { return }
+                baseBalances = BaseBalances(key: key, values: values)
+            }
+            .onAppear { if walletRun != nil && categoryID == nil { categoryID = Self.suggestedCategory(merchant: merchant, kind: kind, in: ledger) } }
         }
     }
 
@@ -282,8 +308,8 @@ struct TransactionEditor: View {
         }.buttonStyle(.plain)
     }
 
-    private var merchantSuggestions: [String] {
-        let query = merchant.trimmingCharacters(in: .whitespaces)
+    nonisolated private static func merchantSuggestions(query: String, kind: TransactionKind, in ledger: Ledger) -> [String] {
+        let query = query.trimmingCharacters(in: .whitespaces)
         guard query.count >= 2 else { return [] }
         var seen = Set<String>(), result: [String] = []
         for transaction in ledger.transactions.reversed() where transaction.kind == kind {
@@ -377,14 +403,15 @@ struct TransactionEditor: View {
         return needsConversion ? draft : (try? ledger.applyingPurchaseFee(to: draft))
     }
 
-    @ViewBuilder private var balancePreview: some View {
-        if let draft = balanceDraft {
+    @ViewBuilder private func balancePreview(_ draft: Transaction?) -> some View {
+        if let draft {
             let through = max(Date(), draft.date)
+            let cached = baseBalances.flatMap { $0.key == BalanceKey(day: Calendar.current.startOfDay(for: through), revision: store.revision) ? $0.values : nil }
             let accounts = [account, kind == .transfer && !standaloneTransfer ? destination : nil].compactMap { $0 }
             Section(L("Баланс после операции")) {
                 ForEach(accounts) { account in
                     LabeledContent(account.name) {
-                        FinancialText(DisplayMoney.string(ledger.projectedBalance(account, replacing: transaction?.id, with: draft, through: through), currency: account.currency))
+                        FinancialText(DisplayMoney.string(ledger.projectedBalance(account, replacing: transaction?.id, with: draft, through: through, base: cached?[account.id]), currency: account.currency))
                             .fontWeight(.semibold)
                     }
                 }

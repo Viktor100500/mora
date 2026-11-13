@@ -3,7 +3,7 @@ import Foundation
 public extension Ledger {
     /// A clean personal ledger never contains demo accounts or transactions.
     static func personal(baseCurrency: String) throws -> Ledger {
-        guard Locale.commonISOCurrencyCodes.contains(baseCurrency) else {
+        guard Locale.isoCurrencyCodeSet.contains(baseCurrency) else {
             throw LedgerError.invalid("Выберите поддерживаемую валюту отчетов.")
         }
         var ledger = Ledger.empty

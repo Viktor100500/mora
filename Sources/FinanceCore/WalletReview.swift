@@ -41,7 +41,7 @@ public struct WalletReviewDraft: Sendable {
         date = capture.date
         accountID = ledger.account(capture.account_id)?.archived == false ? capture.account_id : nil
         let explicit = capture.currency.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
-        if Locale.commonISOCurrencyCodes.contains(explicit) { currency = explicit }
+        if Locale.isoCurrencyCodeSet.contains(explicit) { currency = explicit }
         else {
             let raw = capture.amount.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
             let code = Locale.commonISOCurrencyCodes.first { raw.hasPrefix($0) || raw.hasSuffix($0) }

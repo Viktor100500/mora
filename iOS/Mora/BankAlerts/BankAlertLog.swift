@@ -94,12 +94,14 @@ enum BankAlertLog {
         case .parsed(let value):
             alert = BankAlert(receivedAt: date, source: source, text: BankMessage.normalized(text), state: .review, channel: channel)
             alert.apply(value)
-            if let run = pairableRun(for: alert, in: walletRuns, pairedIn: directory) {
+            // Nothing is saved before both lookups, so one read serves them.
+            let existing = alerts(in: directory)
+            if let run = pairableRun(for: alert, in: walletRuns, pairedIn: directory, existing: existing) {
                 alert.state = .duplicate; alert.walletRunID = run.id
                 alert.lastError = "Эта покупка уже пришла из Wallet: сообщение не отправлено."
             } else {
                 if value.automatic && !alert.income { alert.state = sending ? .waiting : .logged }
-                if var other = samePurchase(as: alert, in: directory) {
+                if var other = samePurchase(as: alert, in: directory, existing: existing) {
                     if other.state == .review && other.attempts == 0 && alert.state == .waiting {
                         // Save the winning purchase before suppressing the earlier review.
                         try save(alert, in: directory)
@@ -147,16 +149,16 @@ enum BankAlertLog {
 
     /// Different SMS/push wordings can describe one purchase. Require every identity
     /// field and exactly one candidate; missing data never authorizes suppressing a purchase.
-    static func samePurchase(as alert: BankAlert, in directory: URL) -> BankAlert? {
+    static func samePurchase(as alert: BankAlert, in directory: URL, existing: [BankAlert]? = nil) -> BankAlert? {
         let source = BankMessage.normalized(alert.source).lowercased()
         let merchant = MerchantName.normalized(alert.merchant)
         guard alert.wallet != true, !alert.income, !source.isEmpty, !merchant.isEmpty,
               alert.cardLast4.count == 4, alert.cardLast4.allSatisfy(\.isNumber),
-              Locale.commonISOCurrencyCodes.contains(alert.currency),
+              Locale.isoCurrencyCodeSet.contains(alert.currency),
               let amount = Money.parse(alert.amount), amount > 0 else { return nil }
         let key = formatKey(alert.text)
         guard !key.isEmpty else { return nil }
-        let all = alerts(in: directory)
+        let all = existing ?? alerts(in: directory)
         let paired = Set(all.compactMap(\.sameAs)).union(all.filter { $0.sameAs != nil }.map(\.id))
         let candidates = all.filter { other in
             other.id != alert.id && !paired.contains(other.id) && other.wallet != true && !other.income
@@ -191,8 +193,8 @@ enum BankAlertLog {
         return paid == amount && abs(run.receivedAt.timeIntervalSince(alert.receivedAt)) < window
     }
 
-    static func pairableRun(for alert: BankAlert, in runs: [WalletRun], pairedIn directory: URL) -> WalletRun? {
-        let paired = Set(alerts(in: directory).compactMap(\.walletRunID))
+    static func pairableRun(for alert: BankAlert, in runs: [WalletRun], pairedIn directory: URL, existing: [BankAlert]? = nil) -> WalletRun? {
+        let paired = Set((existing ?? alerts(in: directory)).compactMap(\.walletRunID))
         var candidates = runs.filter { !paired.contains($0.id) && $0.delivery != .duplicate && $0.delivery != .skipped && isSamePurchase(alert, $0) }
         guard alert.wallet == true else { return candidates.first }
         // A same-price run still missing its merchant must be completed, not
@@ -281,13 +283,13 @@ enum BankAlertLog {
         return template
     }
 
-    private static var encoder: JSONEncoder {
+    private nonisolated(unsafe) static let encoder: JSONEncoder = {
         let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601; return encoder
-    }
+    }()
 
-    private static var decoder: JSONDecoder {
+    private nonisolated(unsafe) static let decoder: JSONDecoder = {
         let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601; return decoder
-    }
+    }()
 }
 
 extension BankAlert {

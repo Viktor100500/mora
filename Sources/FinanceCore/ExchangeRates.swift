@@ -9,7 +9,7 @@ public struct ExchangeRateSnapshot: Codable, Equatable, Sendable {
     public static let providerURL = URL(string: "https://www.exchangerate-api.com")!
 
     public func validate() throws {
-        let currencies = Set(Locale.commonISOCurrencyCodes)
+        let currencies = Locale.isoCurrencyCodeSet
         guard ratesPerUSD["USD"] == 1, ratesPerUSD.count > 1,
               ratesPerUSD.keys.allSatisfy({ currencies.contains($0) }),
               ratesPerUSD.values.allSatisfy({ !$0.isNaN && $0 > 0 }),
@@ -44,7 +44,7 @@ public struct ExchangeRateSnapshot: Codable, Equatable, Sendable {
               let next = response.time_next_update_unix else {
             throw LedgerError.invalid("Сервис курсов временно недоступен.")
         }
-        let currencies = Set(Locale.commonISOCurrencyCodes)
+        let currencies = Locale.isoCurrencyCodeSet
         let snapshot = ExchangeRateSnapshot(
             ratesPerUSD: rates.filter { currencies.contains($0.key) },
             quotedAt: Date(timeIntervalSince1970: quoted), fetchedAt: fetchedAt,

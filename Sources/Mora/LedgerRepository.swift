@@ -70,6 +70,17 @@ actor LedgerRepository {
         let language = L10n.language
         if let current, current.ledger == ledger, current.isDemo == demo, current.writeBlocked == blocked, presentationLanguage == language { return current }
         revision &+= 1
+        #if os(iOS)
+        // iPhone never passes expectedToken and reads only the newest undo/redo description.
+        let token = ""
+        let undo = ledger.changeHistory?.undo ?? [], redo = ledger.changeHistory?.redo ?? []
+        let undoDescriptions = undo.indices.suffix(1).map { index in
+            ChangeDescriptions.between(undo[index], index + 1 < undo.count ? undo[index + 1] : ledger, language: language)
+        }
+        let redoDescriptions = redo.indices.suffix(1).map { index in
+            ChangeDescriptions.between(index + 1 < redo.count ? redo[index + 1] : ledger, redo[index], language: language)
+        }
+        #else
         let token = SHA256.hash(data: try LedgerFile.encode(ledger)).map { String(format: "%02x", $0) }.joined()
         let undo = ledger.changeHistory?.undo ?? [], redo = ledger.changeHistory?.redo ?? []
         let undoDescriptions = undo.indices.reversed().map { index in
@@ -78,6 +89,7 @@ actor LedgerRepository {
         let redoDescriptions = redo.indices.reversed().map { index in
             ChangeDescriptions.between(index + 1 < redo.count ? redo[index + 1] : ledger, redo[index], language: language)
         }
+        #endif
         var imports = ImportPresentation(batches: ledger.importHistory.sorted { $0.createdAt > $1.createdAt },
             transactions: Dictionary(uniqueKeysWithValues: ledger.transactions.map { ($0.id, $0) }))
         for batch in imports.batches { imports.previews[batch.id] = try? ledger.importRollbackPreview(batch.id) }

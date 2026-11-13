@@ -83,11 +83,13 @@ struct AnalyticsScreen: View {
                                 CategoryDonut(totals: report.categories, expense: report.summary.expense, currency: currency).frame(height: 220)
                                 ForEach(report.categories) { total in
                                     Button {
-                                        router.transactionFilter = TransactionFilterRequest(month: router.month, categoryID: total.id)
+                                        // "Uncategorized" has no id: it opens the operations still waiting for a category.
+                                        router.transactionFilter = TransactionFilterRequest(month: router.month, categoryID: total.id, uncategorized: total.id == nil)
                                         router.tab = .transactions
                                     } label: {
                                         CategoryShareRow(total: total, expense: report.summary.expense, currency: currency)
-                                    }.buttonStyle(.plain).disabled(total.id == nil)
+                                            .contentShape(Rectangle())
+                                    }.buttonStyle(.plain)
                                 }
                             }
                         }

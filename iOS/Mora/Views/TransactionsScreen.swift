@@ -54,7 +54,7 @@ struct TransactionsScreen: View {
                         }
                     } header: {
                         HStack {
-                            Text(group.day.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(L10n.locale)).capitalized(with: L10n.locale))
+                            Text(Self.dayTitle(group.day))
                             Spacer()
                             let total = dayExpense(group.rows)
                             if total > 0 { FinancialText("−" + DisplayMoney.string(total, currency: store.baseCurrency)) }
@@ -65,7 +65,7 @@ struct TransactionsScreen: View {
             .listStyle(.insetGrouped)
             .environment(\.editMode, $editMode)
             .refreshable { await store.reloadFromDisk(); await cloud.refresh() }
-            .searchable(text: $filters.text, prompt: L("Поиск по описанию, заметкам и тегам"))
+            .searchable(text: $filters.text, prompt: L("Описание, заметки, теги"))
             .navigationTitle(L("Операции"))
             .toolbar { toolbar }
             .safeAreaInset(edge: .bottom) { if editMode.isEditing { bulkBar } }
@@ -95,6 +95,12 @@ struct TransactionsScreen: View {
             .onAppear(perform: applyRequestedFilter)
             .onChange(of: router.transactionFilter) { _, _ in applyRequestedFilter() }
         }
+    }
+
+    /// Only the first letter is capitalized: "Пятница, 13 ноября", not "13 Ноября".
+    private static func dayTitle(_ day: Date) -> String {
+        let title = day.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(L10n.locale))
+        return title.prefix(1).capitalized(with: L10n.locale) + title.dropFirst()
     }
 
     private func row(_ transaction: Transaction) -> some View {
@@ -138,20 +144,25 @@ struct TransactionsScreen: View {
     }
 
     private func totals(_ result: TransactionSearch.Result) -> some View {
-        HStack(spacing: 12) {
+        // Amounts keep their line on a small iPhone: they shrink a little before the
+        // sign could wrap away from the number.
+        HStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(L("Доходы")).font(.caption).foregroundStyle(.secondary)
                 FinancialText("+" + DisplayMoney.string(result.income, currency: store.baseCurrency)).font(.subheadline.weight(.semibold)).foregroundStyle(Color.moraGreen)
+                    .lineLimit(1).minimumScaleFactor(0.7)
             }
-            Spacer()
+            Spacer(minLength: 8)
             VStack(alignment: .center, spacing: 2) {
-                Text(L("Операций")).font(.caption).foregroundStyle(.secondary)
-                Text("\(result.rows.count)").font(.subheadline.weight(.semibold))
+                Text(L("Операций")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                Text("\(result.rows.count)").font(.subheadline.weight(.semibold)).monospacedDigit()
             }
-            Spacer()
+            .fixedSize()
+            Spacer(minLength: 8)
             VStack(alignment: .trailing, spacing: 2) {
                 Text(L("Расходы")).font(.caption).foregroundStyle(.secondary)
                 FinancialText("−" + DisplayMoney.string(result.expense, currency: store.baseCurrency)).font(.subheadline.weight(.semibold))
+                    .lineLimit(1).minimumScaleFactor(0.7)
             }
         }
     }
@@ -223,6 +234,7 @@ struct TransactionsScreen: View {
         router.transactionFilter = nil
         var next = TransactionSearch(startDate: Dates.month(request.month))
         if let category = request.categoryID { next.categoryIDs = [category] }
+        if request.uncategorized { next.categoryIDs = []; next.includesUncategorized = true }
         if let account = request.accountID { next.accountIDs = [account] }
         filters = next
     }

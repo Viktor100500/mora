@@ -1,5 +1,10 @@
 import Foundation
 
+public extension Locale {
+    /// `commonISOCurrencyCodes` is rebuilt on every access; membership checks share one set.
+    static let isoCurrencyCodeSet = Set(Locale.commonISOCurrencyCodes)
+}
+
 public enum TransactionKind: String, Codable, CaseIterable, Identifiable, Sendable {
     case expense, income, transfer
     public var id: String { rawValue }
@@ -205,12 +210,23 @@ public struct Ledger: Codable, Equatable, Sendable {
         return convert(transaction.amount, currency: account.currency)
     }
     public func balance(_ account: Account, through date: Date = Date()) -> Decimal {
-        transactions.filter { $0.date < Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: date))! }.reduce(account.openingBalance) { sum, t in
+        let end = Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: date))!
+        return transactions.filter { $0.date < end }.reduce(account.openingBalance) { sum, t in
             var result = sum
             if t.accountID == account.id { result += t.amount }
             if t.kind == .transfer && t.destinationAccountID == account.id { result += t.destinationAmount ?? 0 }
             return result
         }
+    }
+    /// Every account's `balance(_:through:)` in one pass over the transactions.
+    public func balances(through date: Date = Date()) -> [UUID: Decimal] {
+        let end = Calendar.current.date(byAdding: .day, value: 1, to: Calendar.current.startOfDay(for: date))!
+        var result = Dictionary(accounts.map { ($0.id, $0.openingBalance) }, uniquingKeysWith: { first, _ in first })
+        for t in transactions where t.date < end {
+            if result[t.accountID] != nil { result[t.accountID]! += t.amount }
+            if t.kind == .transfer, let destination = t.destinationAccountID, result[destination] != nil { result[destination]! += t.destinationAmount ?? 0 }
+        }
+        return result
     }
     public var missingCurrencies: [String] {
         let historicalAccounts = Set(transactions.filter { $0.kind != .transfer }.map(\.accountID))
@@ -250,7 +266,7 @@ public struct Ledger: Codable, Equatable, Sendable {
         }
         func unique(_ ids: [UUID]) -> Bool { Set(ids).count == ids.count }
         guard unique(accounts.map(\.id)), unique(categories.map(\.id)), unique(transactions.map(\.id)), unique(budgets.map(\.id)), unique(goals.map(\.id)), unique(recurring.map(\.id)), unique(rules.map(\.id)) else { throw LedgerError.invalid("В данных найдены повторяющиеся идентификаторы.") }
-        let currencies = Set(Locale.commonISOCurrencyCodes)
+        let currencies = Locale.isoCurrencyCodeSet
         guard currencies.contains(preferences.baseCurrency), preferences.rates[preferences.baseCurrency] == 1, preferences.rates.keys.allSatisfy({ currencies.contains($0) }), preferences.rates.values.allSatisfy({ $0 > 0 && !$0.isNaN }) else { throw LedgerError.invalid("Некорректные курсы валют.") }
         try preferences.exchangeRateSnapshot?.validate()
         guard accounts.allSatisfy({ currencies.contains($0.currency) && !$0.openingBalance.isNaN && !$0.name.trimmingCharacters(in: .whitespaces).isEmpty }) else { throw LedgerError.invalid("Проверьте названия и валюты счетов.") }
@@ -336,14 +352,28 @@ public enum Dates: Sendable {
         format: "\(year: .defaultDigits)-\(month: .twoDigits)-\(day: .twoDigits)",
         locale: Locale(identifier: "en_US_POSIX"), timeZone: .autoupdatingCurrent, calendar: Calendar(identifier: .gregorian))
     public static func string(_ date: Date) -> String { date.formatted(dayStyle) }
+    private final class FormatterCache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var formatters: [String: DateFormatter] = [:]
+        private let iso8601 = ISO8601DateFormatter()
+        func isoDate(_ string: String) -> Date? { lock.lock(); defer { lock.unlock() }; return iso8601.date(from: string) }
+        func formatter(_ pattern: String) -> DateFormatter {
+            lock.lock(); defer { lock.unlock() }
+            if let cached = formatters[pattern] { return cached }
+            let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = pattern; f.isLenient = false
+            formatters[pattern] = f
+            return f
+        }
+    }
+    private static let formatterCache = FormatterCache()
     public static func parse(_ string: String, format: String = "auto") -> Date? {
         let s = string.trimmingCharacters(in: .whitespacesAndNewlines)
         let formats = format == "auto" ? ["yyyy-MM-dd", "dd.MM.yyyy", "yyyy-MM-dd HH:mm:ss", "yyyy-MM-dd'T'HH:mm:ss"] : [format]
         for pattern in formats {
-            let f = DateFormatter(); f.locale = Locale(identifier: "en_US_POSIX"); f.dateFormat = pattern; f.isLenient = false
+            let f = formatterCache.formatter(pattern)
             if let date = f.date(from: s), f.string(from: date) == s { return Calendar.current.startOfDay(for: date) }
         }
-        if format == "auto", let date = ISO8601DateFormatter().date(from: s) { return Calendar.current.startOfDay(for: date) }
+        if format == "auto", let date = formatterCache.isoDate(s) { return Calendar.current.startOfDay(for: date) }
         return nil
     }
 }

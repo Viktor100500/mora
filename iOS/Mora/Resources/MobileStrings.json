@@ -577,5 +577,6 @@
   "В поле App так же выберите свойство с названием приложения: так Mora узнает, какой банк прислал уведомление. Нажмите «Готово».": "In the App field, choose the property with the app's name the same way, so Mora knows which bank sent the notification. Tap Done.",
   "Когда я получаю сообщение от банка": "When I get a message from a bank",
   "Отправители: ваши банки · Запускать сразу": "Senders: your banks · Run Immediately",
-  "Укажите «Отправителя», чтобы включить автоматизацию": "Configure “Sender” to enable this automation"
+  "Укажите «Отправителя», чтобы включить автоматизацию": "Configure “Sender” to enable this automation",
+  "Описание, заметки, теги": "Descriptions, notes, tags"
 }

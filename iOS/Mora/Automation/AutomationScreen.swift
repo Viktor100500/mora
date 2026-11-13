@@ -152,7 +152,8 @@ private struct AutomationRow: View {
             }
             HStack(spacing: 10) {
                 Button(action: action) {
-                    Label(title, systemImage: icon).font(.subheadline.weight(.semibold))
+                    // Not a Label: a List row gives Labels a wide icon column.
+                    HStack(spacing: 5) { Image(systemName: icon); Text(title) }.font(.subheadline.weight(.semibold))
                 }
                 .buttonStyle(.bordered).controlSize(.small).tint(tint)
                 .disabled(!automation.available)
@@ -190,7 +191,8 @@ private struct AutomationRow: View {
         switch state {
         case .notSet: .moraGreen
         case .waiting: Self.waitingColor
-        case .working: .green
+        // System green text on its own pale fill was hard to read.
+        case .working: .moraGreen
         }
     }
 }
@@ -205,15 +207,11 @@ struct AutomationEntryRow: View {
         HStack(alignment: .top, spacing: 12) {
             IconTile(icon: status.icon, color: status.color, size: 36)
             VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(title).font(.body.weight(.medium)).lineLimit(2)
-                    Spacer(minLength: 8)
-                    if !amount.isEmpty { FinancialText(amount).font(.subheadline.weight(.semibold)) }
-                }
-                SourceBadge(entry.source)
+                JournalHeadline(title: title, amount: amount) { SourceBadge(entry.source) }
                 Text(L(status.text)).font(.caption).foregroundStyle(status.color == "orange" ? Color.orange : Color.secondary)
                 if let duplicate = entry.duplicate {
-                    Label(duplicate, systemImage: "square.on.square").font(.caption).foregroundStyle(.secondary)
+                    HStack(alignment: .firstTextBaseline, spacing: 4) { Image(systemName: "square.on.square"); Text(duplicate) }
+                        .font(.caption).foregroundStyle(.secondary)
                 }
                 Text(meta).font(.caption2).foregroundStyle(.secondary)
             }
@@ -241,6 +239,46 @@ struct AutomationEntryRow: View {
         switch entry.item {
         case .wallet(let run): return [run.card.isEmpty ? L("Карта не передана") : run.card, date].joined(separator: " · ")
         case .bank(let alert): return [alert.source.isEmpty ? nil : alert.card, date].compactMap { $0 }.joined(separator: " · ")
+        }
+    }
+}
+
+/// Merchant, amount and source of a journal or review row. A short merchant shares
+/// the line with the amount; a long one takes the whole width and the amount moves
+/// down next to the source badge, so a large amount never wraps or cuts the name.
+struct JournalHeadline<Badge: View>: View {
+    let title: String
+    let amount: String
+    @ViewBuilder var badge: Badge
+
+    private var amountText: some View {
+        FinancialText(amount).font(.subheadline.weight(.semibold)).lineLimit(1).fixedSize()
+    }
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(title).font(.body.weight(.medium)).lineLimit(1).fixedSize()
+                    Spacer(minLength: 0)
+                    if !amount.isEmpty { amountText }
+                }
+                badge
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.body.weight(.medium)).lineLimit(3).frame(maxWidth: .infinity, alignment: .leading)
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .center, spacing: 8) {
+                        badge.fixedSize()
+                        Spacer(minLength: 0)
+                        if !amount.isEmpty { amountText }
+                    }
+                    VStack(alignment: .leading, spacing: 4) {
+                        badge
+                        if !amount.isEmpty { amountText }
+                    }
+                }
+            }
         }
     }
 }

@@ -64,18 +64,23 @@ struct AccountsScreen: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(account.name).font(.body.weight(.medium)).lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        // The balance already shows the currency.
-                        Text(L(account.kind.title)).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                        Spacer(minLength: 0)
-                        FinancialText(DisplayMoney.string(store.balance(account), currency: account.currency))
-                            .font(.callout.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.7)
-                            .layoutPriority(1)
+                    let balance = FinancialText(DisplayMoney.string(store.balance(account), currency: account.currency))
+                        .font(.callout.weight(.semibold)).lineLimit(1)
+                    // The balance already shows the currency. A balance in the millions takes
+                    // the line alone: the icon already tells the account type.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(L(account.kind.title)).font(.caption).foregroundStyle(.secondary).lineLimit(1).fixedSize()
+                            Spacer(minLength: 0)
+                            balance.fixedSize()
+                        }
+                        balance.minimumScaleFactor(0.7).frame(maxWidth: .infinity, alignment: .trailing)
                     }
                 }
             }
             .padding(.vertical, 2)
-            .opacity(account.archived ? 0.6 : 1)
+            // Dimmed, yet still readable on the card.
+            .opacity(account.archived ? 0.75 : 1)
         }
         .swipeActions(edge: .trailing) {
             if account.archived {
@@ -96,10 +101,13 @@ struct AccountDetailScreen: View {
     @EnvironmentObject private var router: AppRouter
     let accountID: UUID
     @State private var deleting = false
+    /// The 200 newest rows; nil until the first background result.
+    @State private var recentRows: [Transaction]?
+
+    private struct RowsKey: Equatable { var accountID: UUID; var revision: UInt64 }
 
     var body: some View {
         if let account = store.ledger.account(accountID) {
-            let rows = store.ledger.transactions.filter { $0.accountID == account.id || $0.destinationAccountID == account.id }.sorted { $0.date > $1.date }
             List {
                 Section {
                     VStack(alignment: .leading, spacing: 10) {
@@ -132,11 +140,21 @@ struct AccountDetailScreen: View {
                     }
                 }
                 Section(L("Операции")) {
-                    if rows.isEmpty { Text(L("Операций нет")).foregroundStyle(.secondary) }
-                    ForEach(rows.prefix(200)) { row in
-                        Button { router.open(.transaction(row)) } label: { TransactionRow(transaction: row, ledger: store.ledger) }.buttonStyle(.plain)
+                    if let recentRows {
+                        if recentRows.isEmpty { Text(L("Операций нет")).foregroundStyle(.secondary) }
+                        ForEach(recentRows) { row in
+                            Button { router.open(.transaction(row)) } label: { TransactionRow(transaction: row, ledger: store.ledger) }.buttonStyle(.plain)
+                        }
                     }
                 }
+            }
+            .task(id: RowsKey(accountID: account.id, revision: store.revision)) {
+                let id = account.id, snapshot = store.ledger.withoutChangeHistory()
+                let value = await BackgroundWork.shared.perform {
+                    Array(snapshot.transactions.filter { $0.accountID == id || $0.destinationAccountID == id }.sorted { $0.date > $1.date }.prefix(200))
+                }
+                guard !Task.isCancelled else { return }
+                recentRows = value
             }
             .navigationTitle(account.name)
             .confirmationDialog(L("Удалить счет «\(account.name)» окончательно?"), isPresented: $deleting, titleVisibility: .visible) {

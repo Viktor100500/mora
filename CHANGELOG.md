@@ -1,5 +1,21 @@
 # Changelog
 
+## iPhone 1.0.67 · Mac 1.7.20 — 2026-11-13
+
+iPhone 1.0.67 (build 68) · Mac 1.7.20 (build 99)
+
+A design and performance polish pass over the iPhone app, checked on iPhone 13 mini and iPhone 17 Pro.
+
+- **Long descriptions fit.** In Overview, Transactions, account history and Analytics a description that fits on one line still shares it with the amount. A longer one now gets the whole row width (up to two lines), and the amount moves down to the category line, so neither the description nor a large amount is cut.
+- **Totals on small iPhones.** The Income / Transactions / Expenses line of the Transactions tab keeps each amount on one line; the sign no longer wraps away from the number.
+- **Accounts with large balances.** A balance in the millions takes its line alone instead of squeezing the account type into "Bank accou…". Archived accounts are dimmed less and stay readable.
+- **Uncategorized in Analytics.** The row is no longer greyed out like a disabled control: it has normal contrast and opens the month's transactions without a category.
+- **Automation / Shortcuts.** The status buttons and source badges had a wide gap between icon and text; the icon now sits next to its label, and Working uses the Mora green instead of pale system green. In the journal and in To Review a long merchant takes the whole width (up to three lines) and a large amount no longer wraps onto a second line or cuts the name.
+- **Day headings in Russian.** "Пятница, 13 ноября" instead of "Пятница, 13 Ноября"; the search prompt is shorter and fits a small screen.
+- **Less work in the background of an open app.** Cloud sync no longer re-reads and compares the whole ledger file every 8 seconds when nothing changed, and its poll slows to 16 and then 32 seconds while idle; a local edit, pull to refresh or reopening the app still syncs at once. Automatic categorization (iPhone and Mac) repeats its pass only after the ledger changes. Control Center, a notification banner or the app switcher no longer restart every sync loop.
+- **Smoother editing.** Merchant suggestions, the suggested category and the balance preview of the transaction editor are computed off the main thread; account balances are computed in one pass; an account's history is prepared in the background; the translations are warmed up before the first frame. Saving a change on iPhone skips work only the Mac uses.
+- **Background time.** The background-task assertion of the closing sync is always released when iOS asks for it.
+- **Core.** Date parsing and currency checks reuse their formatters and code sets, which speeds up CSV import on both platforms.
 ## iPhone 1.0.66 — 2026-11-14
 
 iPhone 1.0.66 (build 67) · Mac unchanged (1.7.19, build 98)
