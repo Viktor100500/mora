@@ -117,11 +117,25 @@ enum CaptureAutomation: String, CaseIterable, Identifiable, Sendable {
         nonmutating set { UserDefaults.standard.set(newValue, forKey: "mora.automation.setup.\(rawValue)") }
     }
 
-    /// Set up, but nothing has come from it since.
-    func awaitingFirstRun(runs: [WalletRun], alerts: [BankAlert]) -> Bool {
-        guard let finished = setupFinishedAt else { return false }
-        guard let last = lastRun(runs: runs, alerts: alerts) else { return true }
-        return last < finished.addingTimeInterval(-60)
+    enum SetupState { case notSet, waiting, working }
+
+    /// Told by the card's button alone: never set up, set up but no purchase since, or
+    /// at least one purchase received through this automation.
+    func setupState(runs: [WalletRun], alerts: [BankAlert]) -> SetupState {
+        let finished = setupFinishedAt
+        if let last = lastRun(runs: runs, alerts: alerts), finished.map({ last >= $0.addingTimeInterval(-60) }) ?? true { return .working }
+        return finished == nil ? .notSet : .waiting
+    }
+
+    /// Mora 1.0.55 starts the automation section from scratch once: setup marks and the
+    /// journals are cleared, purchases still waiting for sending or review stay.
+    static func resetOnceForFreshSetup() {
+        let key = "mora.automation.reset.1.0.55"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        for automation in allCases { automation.setupFinishedAt = nil }
+        WalletRunLog.clear()
+        BankAlertLog.clear()
+        UserDefaults.standard.set(true, forKey: key)
     }
 
     /// When this automation last passed something to Mora.

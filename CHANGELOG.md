@@ -1,5 +1,13 @@
 # Changelog
 
+## iPhone 1.0.55 — 2026-11-14
+
+iPhone 1.0.55 (build 56) · Mac unchanged (1.7.19, build 98)
+
+- **The button tells the state.** Automation cards no longer show a status line. Their button reads Set Up until the setup guide was completed, a soft yellow Waiting for Purchase until a purchase arrives through that automation, and a green Working afterwards; the time of the last run sits to the right of it. Waiting and Working open the confirmation screen with Show Instructions Again.
+- **Fresh start.** Opening Automation / Shortcuts in 1.0.55 clears its setup marks and journal once, so the setup can be tried from scratch. Purchases still waiting to be sent or reviewed are kept.
+
+
 ## iPhone 1.0.54 — 2026-11-14
 
 iPhone 1.0.54 (build 55) · Mac unchanged (1.7.19, build 98)
