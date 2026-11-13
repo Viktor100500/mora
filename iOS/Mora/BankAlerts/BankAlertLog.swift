@@ -40,6 +40,9 @@ struct BankAlert: Codable, Identifiable, Equatable, Sendable {
     var serverState: String?
     /// The Wallet run of the same purchase. A pair is never matched again.
     var walletRunID: UUID?
+    /// Came from the Wallet notification action: it completes a Wallet purchase and is
+    /// never booked by itself. `source` is the notification title, the card or its bank.
+    var wallet: Bool?
 
     /// The card name sent to the shared database. Mora links it to an account
     /// the first time, like a Wallet card.
@@ -54,7 +57,7 @@ struct BankAlert: Codable, Identifiable, Equatable, Sendable {
         guard let value = Money.parse(amount), value > 0 else { return nil }
         return BankMessage.Parsed(amount: value, currency: currency.isEmpty ? nil : currency, merchant: merchant,
                                   cardLast4: cardLast4.isEmpty ? nil : cardLast4, direction: income ? .income : .expense,
-                                  automatic: false, amountText: amountText, merchantText: merchantText)
+                                  automatic: false, amountText: amountText, merchantText: merchantText, wallet: wallet == true)
     }
 }
 
@@ -94,6 +97,31 @@ enum BankAlertLog {
         return alert
     }
 
+    /// A Wallet notification, passed field by field by its own action and never read as a
+    /// bank message. Its fields are kept as received, also when no purchase is found in them.
+    @discardableResult
+    static func recordWallet(title: String, subtitle: String, body: String, at date: Date = .now,
+                             directory: URL = directory, walletRuns: [WalletRun] = WalletRunLog.runs()) throws -> BankAlert {
+        let fields = [("Title", title), ("Subtitle", subtitle), ("Body", body)]
+            .map { ($0.0, BankMessage.normalized($0.1)) }.filter { !$0.1.isEmpty }
+        // Wallet is reported to name the card in the title; on some iPhones it is the card's bank.
+        let card = BankMessage.normalized(title).components(separatedBy: "\n").first ?? ""
+        var alert = BankAlert(receivedAt: date, source: card.isEmpty ? "Wallet" : card,
+                              text: fields.map { "\($0.0): \($0.1)" }.joined(separator: "\n"), state: .ignored, ignoredReason: .noTransaction)
+        if let value = BankMessage.walletNotification(subtitle: subtitle, body: body) {
+            alert.state = .review; alert.ignoredReason = nil
+            alert.apply(value)
+            if let run = pairableRun(for: alert, in: walletRuns, pairedIn: directory) {
+                alert.state = .duplicate; alert.walletRunID = run.id
+                alert.lastError = "Эта покупка уже пришла из Wallet: сообщение не отправлено."
+            }
+        }
+        alert.wallet = true
+        try save(alert, in: directory)
+        prune(before: date.addingTimeInterval(-Double(keptDays) * 86_400), in: directory)
+        return alert
+    }
+
     // MARK: Working together with the Wallet automation
 
     /// A tap in a shop starts the Wallet automation and the bank reports the same purchase.
@@ -103,12 +131,22 @@ enum BankAlertLog {
     static func isSamePurchase(_ alert: BankAlert, _ run: WalletRun) -> Bool {
         guard !alert.income, let amount = Money.parse(alert.amount), amount > 0,
               let paid = Money.parse(run.amount).map(abs) else { return false }
-        return paid == amount && abs(run.receivedAt.timeIntervalSince(alert.receivedAt)) < pairWindow
+        let window = alert.wallet == true ? WalletDelivery.completionHold : pairWindow
+        return paid == amount && abs(run.receivedAt.timeIntervalSince(alert.receivedAt)) < window
     }
 
     static func pairableRun(for alert: BankAlert, in runs: [WalletRun], pairedIn directory: URL) -> WalletRun? {
         let paired = Set(alerts(in: directory).compactMap(\.walletRunID))
-        return runs.first { !paired.contains($0.id) && $0.delivery != .duplicate && $0.delivery != .skipped && isSamePurchase(alert, $0) }
+        var candidates = runs.filter { !paired.contains($0.id) && $0.delivery != .duplicate && $0.delivery != .skipped && isSamePurchase(alert, $0) }
+        guard alert.wallet == true else { return candidates.first }
+        // A same-price run still missing its merchant must be completed, not
+        // treated as an already complete duplicate of this notification.
+        candidates = candidates.filter { !$0.sentMerchant.isEmpty }
+        let cardKey = BankMessage.normalized(alert.source).lowercased()
+        if runs.contains(where: { !$0.card.isEmpty && BankMessage.normalized($0.card).lowercased() == cardKey }) {
+            candidates = candidates.filter { BankMessage.normalized($0.card).lowercased() == cardKey }
+        }
+        return candidates.count == 1 ? candidates.first : nil
     }
 
     /// Runs right after a Wallet purchase is saved or gets its amount, before it is sent.
@@ -121,6 +159,7 @@ enum BankAlertLog {
         where run.delivery == .waiting && !paired.contains(run.id) && now.timeIntervalSince(run.receivedAt) < pairWindow {
             guard let index = alerts.firstIndex(where: {
                 $0.walletRunID == nil && [.review, .waiting, .logged, .delivered].contains($0.state) && isSamePurchase($0, run)
+                    && ($0.wallet != true || pairableRun(for: $0, in: WalletRunLog.runs(in: walletDirectory), pairedIn: directory)?.id == run.id)
             }) else { continue }
             alerts[index].walletRunID = run.id
             if alerts[index].state == .delivered {
@@ -194,7 +233,7 @@ extension BankAlert {
     mutating func apply(_ value: BankMessage.Parsed) {
         amount = Money.plain(value.amount); currency = value.currency ?? ""
         merchant = value.merchant; cardLast4 = value.cardLast4 ?? ""; income = value.direction == .income
-        amountText = value.amountText; merchantText = value.merchantText
+        amountText = value.amountText; merchantText = value.merchantText; wallet = value.wallet ? true : nil
     }
 }
 
@@ -204,10 +243,12 @@ actor BankAlertDelivery {
     static let shared = BankAlertDelivery()
     typealias Transport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
     private let directory: URL
+    private let wallet: WalletDelivery
     private let transport: Transport
 
-    init(directory: URL = BankAlertLog.directory, transport: @escaping Transport = { try await URLSession.shared.data(for: $0) }) {
-        self.directory = directory; self.transport = transport
+    init(directory: URL = BankAlertLog.directory, wallet: WalletDelivery = .shared,
+         transport: @escaping Transport = { try await URLSession.shared.data(for: $0) }) {
+        self.directory = directory; self.wallet = wallet; self.transport = transport
     }
 
     func deliverWaiting(with sender: WalletSender? = WalletSender.current()) async {
@@ -235,7 +276,9 @@ actor BankAlertDelivery {
     func confirm(_ edited: BankAlert, sending: Bool) async -> Bool {
         var alert = edited
         var learned = false
-        if let parsed = alert.parsed { learned = (try? BankAlertLog.learn(from: alert.text, source: alert.source, parsed: parsed)) != nil }
+        // A Wallet notification already has a fixed format; a learned one would book it without a card.
+        if alert.wallet == true { learned = true }
+        else if let parsed = alert.parsed { learned = (try? BankAlertLog.learn(from: alert.text, source: alert.source, parsed: parsed)) != nil }
         guard alert.state != .duplicate else { try? BankAlertLog.save(alert, in: directory); return learned }
         alert.state = alert.income ? .skipped : sending ? .waiting : .logged
         if alert.income { alert.lastError = "Возвраты и зачисления пока добавляются вручную." }
@@ -244,16 +287,15 @@ actor BankAlertDelivery {
         return learned
     }
 
-    /// Wallet passes no amount for transit taps and deferred authorizations. When the
-    /// bank reports the amount meanwhile, it completes the Wallet purchase instead of
-    /// becoming a second one.
+    /// Wallet passes no amount, and often no merchant, for transit taps and deferred
+    /// authorizations. When the bank or Wallet's own notification reports them meanwhile,
+    /// they complete the Wallet purchase instead of becoming a second one.
     func completeWallet(_ id: UUID, now: Date = .now) async {
         guard var alert = BankAlertLog.alerts(in: directory).first(where: { $0.id == id }),
               alert.state != .duplicate, alert.state != .ignored, !alert.income, !alert.amount.isEmpty,
-              let run = WalletRunLog.runs().first(where: {
-                  $0.delivery == .awaitingAmount && abs($0.receivedAt.timeIntervalSince(alert.receivedAt)) < BankAlertLog.pairWindow
-              }) else { return }
-        await WalletDelivery.shared.addAmount([alert.amount, alert.currency].filter { !$0.isEmpty }.joined(separator: " "), now: now)
+              let run = await wallet.complete(amount: [alert.amount, alert.currency].filter { !$0.isEmpty }.joined(separator: " "),
+                                              merchant: alert.merchant, card: alert.wallet == true ? alert.source : nil,
+                                              reportedAt: alert.receivedAt, now: now) else { return }
         alert.state = .duplicate; alert.walletRunID = run.id
         alert.lastError = "Сумма добавлена к покупке из Wallet, которая пришла без суммы."
         try? BankAlertLog.save(alert, in: directory)
@@ -308,6 +350,34 @@ struct LogBankMessageIntent: AppIntent {
             await WalletDelivery.shared.deliverWaiting(with: sender)
             await BankAlertDelivery.shared.deliverWaiting(with: sender)
         }
+        return .result()
+    }
+}
+
+/// The Shortcuts action for the iOS 27 "Notification" automation of the Wallet app. Wallet
+/// starts the "Transaction" automation before a transit tap is priced; its notification
+/// brings the amount and merchant later and completes that purchase. Separate from bank
+/// messages: nothing here is read as a text message. Each field of the notification is
+/// picked once, in the sentence of the action.
+struct LogWalletNotificationIntent: AppIntent {
+    static let title: LocalizedStringResource = "Log Wallet Notification"
+    static let description = IntentDescription("Completes a Wallet purchase that arrived without amount or merchant, such as a transit tap, from the Wallet notification. Pass the Title, Subtitle and Body of the notification.")
+    static let openAppWhenRun = false
+    static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
+
+    @Parameter(title: "Title") var title: String?
+    @Parameter(title: "Subtitle") var subtitle: String?
+    @Parameter(title: "Body") var body: String?
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("Log Wallet notification \(\.$title), \(\.$subtitle), \(\.$body)")
+    }
+
+    func perform() async throws -> some IntentResult {
+        guard let alert = try? BankAlertLog.recordWallet(title: title ?? "", subtitle: subtitle ?? "", body: body ?? "") else { return .result() }
+        await BankAlertDelivery.shared.completeWallet(alert.id)
+        if let sender = WalletSender.current() { await WalletDelivery.shared.deliverWaiting(with: sender) }
+        await WalletBackgroundDelivery.scheduleIfNeeded()
         return .result()
     }
 }

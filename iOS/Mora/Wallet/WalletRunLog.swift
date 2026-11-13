@@ -1,5 +1,6 @@
 import Foundation
 import AppIntents
+import FinanceCore
 
 /// One run of the Wallet automation as Mora received it. Its id is also the
 /// event id sent to the server, so every retry of the same purchase is one capture.
@@ -61,9 +62,13 @@ struct WalletRun: Codable, Identifiable, Equatable, Sendable {
     /// Sent as the merchant: Wallet sometimes fills only the transaction name. For a transit
     /// tap the name is the card itself or the word "Transaction", which is no merchant.
     var sentMerchant: String {
-        if !merchant.isEmpty { return merchant }
-        let placeholder = name.caseInsensitiveCompare(card) == .orderedSame || ["transaction", "транзакция"].contains(name.lowercased())
-        return placeholder ? "" : name
+        func isPlaceholder(_ value: String) -> Bool {
+            let key = BankMessage.normalized(value).lowercased()
+            return key == BankMessage.normalized(card).lowercased() || ["transaction", "транзакция"].contains(key)
+        }
+        if !merchant.isEmpty && !isPlaceholder(merchant) { return merchant }
+        // Without a card, Name alone cannot distinguish a merchant from the card itself.
+        return card.isEmpty || isPlaceholder(name) ? "" : name
     }
 
     init(id: UUID = UUID(), receivedAt: Date, amount: String, merchant: String, card: String, name: String = "", delivery: Delivery = .logged) {
@@ -113,6 +118,13 @@ enum WalletRunLog {
                        awaitingAmount: Bool = false, sending: Bool, at date: Date = .now, in directory: URL = directory) throws -> WalletRun {
         var run = WalletRun(receivedAt: date, amount: clean(amount), merchant: clean(merchant), card: clean(card), name: clean(name))
         run.action = action
+        // For a transit tap Wallet may leave "Card or Pass" empty and pass the card as the Name.
+        if run.card.isEmpty, run.merchant.isEmpty, !run.name.isEmpty,
+           let known = runs(in: directory).lazy.map(\.card).first(where: {
+               !$0.isEmpty && BankMessage.normalized($0).caseInsensitiveCompare(BankMessage.normalized(run.name)) == .orderedSame
+           }) {
+            run.card = known
+        }
         // An incomplete purchase is kept as waiting until a possible repeat run is seen, then left for the user.
         run.delivery = !sending ? .logged : awaitingAmount ? .awaitingAmount : .waiting
         let missing = [(run.amount, "сумма"), (run.merchant, "продавец"), (run.card, "карта")]
@@ -275,6 +287,8 @@ struct MoraAppShortcuts: AppShortcutsProvider {
                     shortTitle: "Start Wallet Payment", systemImageName: "wallet.pass")
         AppShortcut(intent: AddWalletAmountIntent(), phrases: ["Add Wallet amount in \(.applicationName)"],
                     shortTitle: "Finish Wallet Payment", systemImageName: "dollarsign.circle")
+        AppShortcut(intent: LogWalletNotificationIntent(), phrases: ["Log Wallet notification in \(.applicationName)"],
+                    shortTitle: "Log Wallet Notification", systemImageName: "bell.badge")
         AppShortcut(intent: LogBankMessageIntent(), phrases: ["Log bank message in \(.applicationName)"],
                     shortTitle: "Log Bank Message", systemImageName: "message")
     }

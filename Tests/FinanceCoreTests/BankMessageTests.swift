@@ -20,6 +20,24 @@ final class BankMessageTests: XCTestCase {
         XCTAssertFalse(value.automatic)
     }
 
+    func testWalletNotificationIsReadFieldByField() throws {
+        let transit = try XCTUnwrap(BankMessage.walletNotification(subtitle: "", body: "Njtransit Paygo Iron, Jersey City, NJ\n$5.45"))
+        XCTAssertTrue(transit.wallet)
+        XCTAssertFalse(transit.automatic)
+        XCTAssertEqual(transit.amount, Decimal(string: "5.45"))
+        XCTAssertEqual(transit.currency, "USD")
+        XCTAssertEqual(transit.merchant, "Njtransit Paygo Iron")
+        let split = try XCTUnwrap(BankMessage.walletNotification(subtitle: "Port Authority of New York & New Jersey, New York, NY", body: "$3.25"))
+        XCTAssertEqual(split.merchant, "Port Authority of New York & New Jersey"); XCTAssertEqual(split.amount, Decimal(string: "3.25"))
+        let inline = try XCTUnwrap(BankMessage.walletNotification(subtitle: "", body: "Metropolitan Transportation Authority $3.00"))
+        XCTAssertEqual(inline.merchant, "Metropolitan Transportation Authority"); XCTAssertEqual(inline.amount, 3)
+        XCTAssertNil(BankMessage.walletNotification(subtitle: "", body: "Your card is ready for Apple Pay"))
+        XCTAssertNil(BankMessage.walletNotification(subtitle: "MTA", body: "Payment declined $3.00"))
+        XCTAssertNil(BankMessage.walletNotification(subtitle: "Cafe", body: "Refund $3.00"))
+        XCTAssertEqual(BankMessage.parse("Raiffeisen banka a.d. Beograd\nNjtransit Paygo Iron, Jersey City, NJ\n$5.45"), .ignored(.noTransaction),
+                       "bank messages are never read as Wallet notifications")
+    }
+
     private let raiffeisen = """
         Koriscenje kartice 4054**5109
         Datum: 04.11.2026 22:07:20

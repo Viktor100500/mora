@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.7.18 — 2026-11-13
+
+Mac 1.7.18 (build 97) · iPhone 1.0.45 (build 46)
+
+- **Wallet notification action restored.** Restores `Log Wallet Notification` with the same intent and Title, Subtitle and Body parameters as the 9 November preview. The three Wallet changes remained on `feature/wallet-transit-notification` and were absent from subsequent main builds.
+- **Card names stay cards.** A known card passed only as Wallet's Name is recovered from the local journal. An unverified Name without a card is never sent as a merchant; explicit card names and generic transaction placeholders are excluded too. Review forms do not suggest an earlier amount for a merchant that equals the supplied card.
+- **Delayed transit prices.** Restores completion from Wallet notifications, retaining the tap's event ID, card and time. Incomplete taps wait up to 20 minutes for a delayed notification. Ambiguous taps and known card mismatches wait for review instead of taking another purchase's amount.
+
+
 ## iPhone 1.0.44 — 2026-11-12
 
 iPhone 1.0.44 (build 45)

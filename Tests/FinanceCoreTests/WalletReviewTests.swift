@@ -10,6 +10,21 @@ final class WalletReviewTests: XCTestCase {
         let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode(CloudCapture.self, from: JSONSerialization.data(withJSONObject: object))
     }
+    func testCardNameAndTransactionPlaceholderHaveNoAmountSuggestion() throws {
+        var ledger = Ledger.empty
+        ledger.accounts = [Account(name: "USD", currency: "USD")]
+        let account = ledger.accounts[0].id
+        ledger.transactions = [Transaction(date: .now, merchant: "Visa Debit", amount: -3, accountID: account)]
+        for name in ["Visa Debit", "Transaction", "Транзакция"] {
+            var item = try capture(account: account, amount: "", merchant: name)
+            item.card = "Visa Debit"
+            let draft = WalletReviewDraft(capture: item, ledger: ledger)
+            XCTAssertEqual(draft.merchant, "")
+            XCTAssertNil(draft.suggestion)
+            XCTAssertFalse(WalletReviewDraft.canBookAutomatically(item, in: ledger))
+        }
+    }
+
     func testPrefillKeepsLinkedAccountAmountTimestampAndSenderAndTreatsDollarsAsUSD() throws {
         var ledger = Ledger.empty
         ledger.accounts = [Account(name: "Other"), Account(name: "Alta", currency: "EUR")]

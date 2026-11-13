@@ -29,11 +29,14 @@ public enum BankMessage {
         /// The exact pieces of text the values came from, for learning a template.
         public var amountText: String
         public var merchantText: String
+        /// Read from a Wallet notification: it completes a Wallet purchase and is never booked by itself.
+        public var wallet: Bool
 
         public init(amount: Decimal, currency: String?, merchant: String, cardLast4: String?, direction: Direction,
-                    automatic: Bool, amountText: String, merchantText: String) {
+                    automatic: Bool, amountText: String, merchantText: String, wallet: Bool = false) {
             self.amount = amount; self.currency = currency; self.merchant = merchant; self.cardLast4 = cardLast4
             self.direction = direction; self.automatic = automatic; self.amountText = amountText; self.merchantText = merchantText
+            self.wallet = wallet
         }
     }
 
@@ -55,6 +58,27 @@ public enum BankMessage {
         return .parsed(Parsed(amount: amount.value, currency: amount.currency, merchant: merchant.map(cleanMerchant) ?? "",
                               cardLast4: card, direction: direction ?? .expense, automatic: false,
                               amountText: amount.text, merchantText: merchant ?? ""))
+    }
+
+    /// A Wallet notification of a card payment, read field by field and never as a bank
+    /// message. The merchant is the subtitle or a line of the body, as "Merchant, City, ST";
+    /// the amount stands alone on a line or ends one:
+    ///
+    ///     Njtransit Paygo Iron, Jersey City, NJ
+    ///     $5.45
+    public static func walletNotification(subtitle: String, body: String) -> Parsed? {
+        let text = normalized(subtitle) + "\n" + normalized(body)
+        guard ignoredReason(text) == nil, !contains(text, incomeWords) else { return nil }
+        let lines = text.components(separatedBy: "\n").filter { !$0.isEmpty }
+        guard let priced = lines.last(where: { !amounts(in: $0).isEmpty }), let amount = amounts(in: priced).last,
+              priced.hasSuffix(amount.text) else { return nil }
+        let line = lines.map { $0 == priced ? String($0.dropLast(amount.text.count)).trimmingCharacters(in: .whitespaces) : $0 }
+            .first { $0.contains(where: \.isLetter) && amounts(in: $0).isEmpty } ?? ""
+        // The place follows the merchant: "…, Jersey City, NJ".
+        var parts = line.components(separatedBy: ", ")
+        if parts.count >= 3, let region = parts.last, region.count == 2, region == region.uppercased() { parts.removeLast(2) }
+        return Parsed(amount: amount.value, currency: amount.currency, merchant: cleanMerchant(parts.joined(separator: ", ")),
+                      cardLast4: nil, direction: .expense, automatic: false, amountText: amount.text, merchantText: line, wallet: true)
     }
 
     // MARK: Filters

@@ -46,17 +46,24 @@ struct WalletSender: Codable, Equatable, Sendable {
 /// is dropped: a purchase without amount or merchant waits on the iPhone until
 /// the user processes it in the transaction form.
 actor WalletDelivery {
-    static let shared = WalletDelivery()
+    static let shared = WalletDelivery(bankAlerts: BankAlertLog.directory)
     /// How long the first action of the automation waits for its amount action,
     /// and an empty run waits for a complete run of the same payment.
     static let amountGrace: TimeInterval = 2 * 60
+    /// Wallet starts the automation before a transit tap is priced; its notification or the
+    /// bank's message brings the amount minutes later (13 for NJ Transit on 9 Nov 2026). A
+    /// purchase without amount or merchant waits this long for one before it goes to review.
+    static let completionHold: TimeInterval = 20 * 60
 
     typealias Transport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
     private let directory: URL
+    /// The journal of bank messages and notifications; nil when nothing can complete a purchase.
+    private let bankAlerts: URL?
     private let transport: Transport
 
-    init(directory: URL = WalletRunLog.directory, transport: @escaping Transport = { try await URLSession.shared.data(for: $0) }) {
-        self.directory = directory; self.transport = transport
+    init(directory: URL = WalletRunLog.directory, bankAlerts: URL? = nil,
+         transport: @escaping Transport = { try await URLSession.shared.data(for: $0) }) {
+        self.directory = directory; self.bankAlerts = bankAlerts; self.transport = transport
     }
 
     enum Outcome: Equatable {
@@ -84,13 +91,48 @@ actor WalletDelivery {
         try? WalletRunLog.save(run, in: directory)
     }
 
+    /// A bank message or a Wallet notification reports what Wallet did not pass at the tap:
+    /// completes one unambiguous unfinished purchase saved shortly before it.
+    /// A title matching a known card restricts completion to that card.
+    func complete(amount: String, merchant: String, card: String? = nil, reportedAt: Date, now: Date = .now) -> WalletRun? {
+        let waiting = WalletRunLog.runs(in: directory).filter {
+            let passed = reportedAt.timeIntervalSince($0.receivedAt)
+            let needsFields = $0.amount.isEmpty || $0.sentMerchant.isEmpty
+            let amountMatches = $0.amount.isEmpty || Money.parse($0.amount) == Money.parse(amount)
+            return [.waiting, .awaitingAmount].contains($0.delivery) && needsFields && amountMatches && passed > -60 && passed < Self.completionHold
+        }
+        let named = waiting.filter { run in
+            card.map { BankMessage.normalized(run.card).caseInsensitiveCompare(BankMessage.normalized($0)) == .orderedSame } == true
+        }
+        // The title may be the issuer instead of a card. Use that fallback only for
+        // one unfinished purchase; multiple candidates require review, never a guess.
+        let namesKnownCard = card.map { title in
+            WalletRunLog.runs(in: directory).contains {
+                !$0.card.isEmpty && BankMessage.normalized($0.card).caseInsensitiveCompare(BankMessage.normalized(title)) == .orderedSame
+            }
+        } == true
+        let candidates = namesKnownCard ? named : waiting
+        guard candidates.count == 1, var run = candidates.first else { return nil }
+        run.amount = amount
+        if run.sentMerchant.isEmpty { run.merchant = merchant }
+        run.delivery = .waiting
+        run.log("Сумма получена из уведомления Wallet или сообщения банка", at: now)
+        do { try WalletRunLog.save(run, in: directory) }
+        catch { return nil }
+        return run
+    }
+
     /// Sends purchases oldest first and stops at the first connection problem. A purchase
     /// without amount or merchant waits for review in the shared inbox on every device.
     func deliverWaiting(with sender: WalletSender, now: Date = .now) async {
         let all = WalletRunLog.runs(in: directory)
+        // The first notification also needs the full window: an empty journal does
+        // not mean that the user's notification automation is disabled.
+        let hold = bankAlerts == nil ? 0 : Self.completionHold
         // Incomplete purchases go to the shared inbox too, so the Mac and the iPhone review the
         // same list; older builds kept them on the iPhone (`incomplete`, `late`).
         for var run in all.reversed() where [.waiting, .awaitingAmount, .incomplete, .late].contains(run.delivery) {
+            if run.amount.isEmpty || run.sentMerchant.isEmpty, now.timeIntervalSince(run.receivedAt) < hold { continue }
             if run.delivery == .awaitingAmount {
                 guard now.timeIntervalSince(run.receivedAt) >= Self.amountGrace else { continue }
                 run.log("Сумма не пришла: «Быстрые команды» прервались, читая сумму", at: now)
@@ -187,6 +229,10 @@ enum WalletBackgroundDelivery {
     /// Sends what waits and asks iOS for another attempt while something still waits.
     static func run() async {
         if let sender = WalletSender.current() {
+            // A notification can arrive before Shortcuts has saved its tap.
+            for alert in BankAlertLog.alerts() where alert.wallet == true && alert.state == .review {
+                await BankAlertDelivery.shared.completeWallet(alert.id)
+            }
             BankAlertLog.reconcileWallet()
             await WalletDelivery.shared.deliverWaiting(with: sender)
             await BankAlertDelivery.shared.deliverWaiting(with: sender)

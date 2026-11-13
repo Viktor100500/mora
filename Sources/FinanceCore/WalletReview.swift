@@ -31,7 +31,10 @@ public struct WalletReviewDraft: Sendable {
         let formatter = DateFormatter()
         formatter.locale = locale; formatter.timeZone = timeZone
         formatter.dateStyle = .medium; formatter.timeStyle = .short
-        merchant = capture.merchant.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rawMerchant = capture.merchant.trimmingCharacters(in: .whitespacesAndNewlines)
+        let key = BankMessage.normalized(rawMerchant).lowercased()
+        let cardKey = BankMessage.normalized(capture.card ?? "").lowercased()
+        merchant = key == cardKey || ["transaction", "транзакция"].contains(key) ? "" : rawMerchant
         note = ["Apple Wallet", capture.label, capture.card ?? "",
                     formatter.string(from: capture.date)].filter { !$0.isEmpty }.joined(separator: " · ")
         amount = Money.parse(capture.amount).flatMap { $0 > 0 ? Money.plain($0) : nil } ?? ""
