@@ -1,30 +1,21 @@
 import SwiftUI
 
-/// Setup of the Wallet "Transaction" automation. iOS 27 keeps an automation's
-/// trigger inside the shortcut and shares it, so one link adds everything; older
-/// iOS cannot, and each step shows what the Shortcuts screen looks like. The
-/// last step checks the next payment from the run journal.
+/// Building the Wallet "Transaction" automation by hand, on iOS older than 27 or
+/// when the user chooses to. Each step shows what the Shortcuts screen looks like;
+/// the last step checks the next payment from the run journal. The ready iOS 27
+/// automation is added through `AutomationGuide`.
 struct WalletAutomationGuide: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @State private var step = 0
     @State private var startedAt = Date()
     @State private var latest: WalletRun?
-    @State private var manual = !Self.oneTapAvailable
+    /// Back on the first step returns to the ready automation instead of this intro.
+    var exitManual: (() -> Void)?
+    private let manual = true
 
-    /// Built by cloud/shortcuts/build_wallet_automation.py and signed on an iOS 27 iPhone
-    /// (macOS 26 drops the trigger when signing): the Transaction trigger, then Start
-    /// Wallet Payment and Finish Wallet Payment wired to its Merchant, Name, Card or
-    /// Pass and Amount. No key or personal data. The signature expires on 8 Dec 2027.
-    static let templateFile = Bundle.main.url(forResource: "Mora Apple Pay", withExtension: "shortcut")
     /// Undocumented, checked on iOS 26 and 27: opens the Automation tab of Shortcuts.
     static let automationsURL = URL(string: "shortcuts://automations")!
-    static var oneTapAvailable: Bool {
-        #if DEBUG
-        if ProcessInfo.processInfo.arguments.contains("--wallet-one-tap") { return true }
-        #endif
-        return templateFile != nil && ProcessInfo.processInfo.isOperatingSystemAtLeast(OperatingSystemVersion(majorVersion: 27, minorVersion: 0, patchVersion: 0))
-    }
     private var steps: Int { manual ? 5 : 3 }
 
     var body: some View {
@@ -49,6 +40,7 @@ struct WalletAutomationGuide: View {
             .task(id: step) {
                 // The last step watches the journal for the first payment after the setup.
                 guard step == steps else { return }
+                CaptureAutomation.walletTransaction.setupFinishedAt = startedAt
                 while !Task.isCancelled {
                     latest = WalletRunLog.runs().first { $0.receivedAt >= startedAt.addingTimeInterval(-60) }
                     do { try await Task.sleep(for: .seconds(2)) } catch { return }
@@ -68,62 +60,7 @@ struct WalletAutomationGuide: View {
 
     @ViewBuilder private var content: some View {
         if step == 0 { intro }
-        else if !manual { oneTapContent }
         else { manualContent }
-    }
-
-    @ViewBuilder private var oneTapContent: some View {
-        if step == 1 {
-            header(1, "Добавьте автоматизацию", "Одна готовая команда: триггер «Транзакция» и оба действия Mora уже связаны.")
-            GuideMock {
-                VStack(spacing: 8) {
-                    HStack(spacing: 10) {
-                        WalletAppIcon()
-                        Text(L("Когда я прикладываю карту Wallet")).font(.subheadline.weight(.semibold))
-                        Spacer(minLength: 0)
-                    }
-                    .padding(12)
-                    .background(Color.moraCard, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    ActionMock(title: "Start Wallet Payment", parts: [.text("Start payment at "), .token("Продавец"), .text(" named "), .token("Имя"), .text(" with "), .token("Карта или пропуск")])
-                    ActionMock(title: "Finish Wallet Payment", parts: [.text("Finish payment of "), .token("Сумма")])
-                }
-            }
-            instructions(["Нажмите «Добавить в Быстрые команды» и выберите «Быстрые команды».",
-                          "Нажмите «Добавить быструю команду».",
-                          "Вернитесь в Mora и нажмите «Дальше»."])
-            Button { withAnimation { manual = true; step = 1 } } label: {
-                Text(L("Настроить вручную")).font(.subheadline).frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.plain).foregroundStyle(Color.moraGreen)
-        } else if step == 2 {
-            header(2, "Включите автоматизацию", "iOS добавляет чужие автоматизации выключенными: включить её может только владелец iPhone.")
-            GuideMock {
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack(spacing: 6) {
-                            WalletAppIcon()
-                            Image(systemName: "arrow.right").font(.caption).foregroundStyle(.secondary)
-                            Image(systemName: "leaf.fill").font(.caption).foregroundStyle(.white)
-                                .frame(width: 24, height: 24).background(Color.moraGreen, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                        }
-                        Text(L("Когда я прикладываю карту Wallet")).font(.subheadline.weight(.semibold))
-                        Text("Mora Apple Pay").font(.caption).foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: 0)
-                    Capsule().fill(Color.green).frame(width: 50, height: 30)
-                        .overlay(alignment: .trailing) { Circle().fill(.white).padding(2) }
-                }
-                .padding(14)
-                .background(Color.moraCard, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            }
-            instructions(["Нажмите «Открыть автоматизации».",
-                          "Откройте триггер «Транзакция» в Mora Apple Pay и отметьте карты, которыми платите.",
-                          "Включите переключатель у «Когда я прикладываю карту Wallet» (Mora Apple Pay).",
-                          "Если iOS спросит, выберите «Запускать сразу». Вернитесь в Mora."])
-        } else {
-            header(3, "Проверьте настройку", "Заплатите чем-нибудь Apple Pay — Mora покажет здесь, что передал Wallet.")
-            WalletAutomationCheck(run: latest)
-        }
     }
 
     @ViewBuilder private var manualContent: some View {
@@ -228,26 +165,9 @@ struct WalletAutomationGuide: View {
             switch step {
             case 0:
                 primary("Начать") { startedAt = Date(); step = 1 }
-            case 1 where !manual:
-                if let file = Self.templateFile {
-                    ShareLink(item: file, preview: SharePreview("Mora Apple Pay")) {
-                        Text(L("Добавить в Быстрые команды")).fontWeight(.semibold).frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent).controlSize(.large).tint(.moraGreen)
-                }
-                HStack(spacing: 10) {
-                    Button { step -= 1 } label: { Text(L("Назад")).frame(maxWidth: .infinity) }.buttonStyle(.bordered).controlSize(.large)
-                    Button { step += 1 } label: { Text(L("Дальше")).frame(maxWidth: .infinity) }.buttonStyle(.bordered).controlSize(.large).tint(.moraGreen)
-                }
-            case 2 where !manual:
-                primary("Открыть автоматизации") { openURL(Self.automationsURL) }
-                HStack(spacing: 10) {
-                    Button { step -= 1 } label: { Text(L("Назад")).frame(maxWidth: .infinity) }.buttonStyle(.bordered).controlSize(.large)
-                    Button { step += 1 } label: { Text(L("Дальше")).frame(maxWidth: .infinity) }.buttonStyle(.bordered).controlSize(.large).tint(.moraGreen)
-                }
             case 1..<steps:
                 HStack(spacing: 10) {
-                    Button { step -= 1 } label: { Text(L("Назад")).frame(maxWidth: .infinity) }.buttonStyle(.bordered).controlSize(.large)
+                    Button { if step == 1, let exitManual { exitManual() } else { step -= 1 } } label: { Text(L("Назад")).frame(maxWidth: .infinity) }.buttonStyle(.bordered).controlSize(.large)
                     primary("Дальше") { step += 1 }
                 }
             default:

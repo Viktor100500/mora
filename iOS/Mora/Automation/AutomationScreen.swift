@@ -78,7 +78,10 @@ struct AutomationScreen: View {
     private var automationsSection: some View {
         Section {
             ForEach(CaptureAutomation.allCases) { automation in
-                AutomationRow(automation: automation, status: status(of: automation)) { router.open(.automationGuide(automation)) }
+                let waiting = automation.awaitingFirstRun(runs: queue.runs, alerts: queue.alerts)
+                AutomationRow(automation: automation, status: status(of: automation), waiting: waiting) {
+                    router.open(waiting ? .automationWaiting(automation) : .automationGuide(automation))
+                }
             }
         } header: { Text(L("Быстрые команды")) } footer: {
             Text(L("Каждая автоматизация — отдельная команда со своим действием Mora. Включите те, что подходят вашим картам: если одна покупка придёт из нескольких, Mora объединит их и покажет это в журнале."))
@@ -87,6 +90,9 @@ struct AutomationScreen: View {
 
     private func status(of automation: CaptureAutomation) -> (text: String, color: Color) {
         guard automation.available else { return (L("Нужна iOS 27"), .secondary) }
+        if automation.awaitingFirstRun(runs: queue.runs, alerts: queue.alerts) {
+            return (L("Настроена · ждём первую покупку, чтобы проверить"), .orange)
+        }
         if automation == .walletTransaction, let last = queue.runs.first(where: { $0.delivery != .duplicate }), !WalletAutomationCheck.isReady(last) {
             return (L("Нужно обновить: последняя оплата пришла не полностью"), .orange)
         }
@@ -160,6 +166,8 @@ struct AutomationScreen: View {
 private struct AutomationRow: View {
     let automation: CaptureAutomation
     let status: (text: String, color: Color)
+    /// Set up and waiting for its first purchase.
+    let waiting: Bool
     let setup: () -> Void
 
     var body: some View {
@@ -174,9 +182,10 @@ private struct AutomationRow: View {
                 .fixedSize(horizontal: false, vertical: true)
             }
             Button(action: setup) {
-                Label(L("Настроить"), systemImage: "wand.and.stars").font(.subheadline.weight(.semibold))
+                Label(L(waiting ? "Ждём покупку" : "Настроить"), systemImage: waiting ? "hourglass" : "wand.and.stars")
+                    .font(.subheadline.weight(.semibold))
             }
-            .buttonStyle(.bordered).controlSize(.small).tint(.moraGreen)
+            .buttonStyle(.bordered).controlSize(.small).tint(waiting ? .orange : .moraGreen)
             .disabled(!automation.available)
             .padding(.leading, 52)
         }

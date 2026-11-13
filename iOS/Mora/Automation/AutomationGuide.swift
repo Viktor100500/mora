@@ -10,6 +10,7 @@ struct AutomationGuide: View {
     @State private var step = 0
     @State private var startedAt = Date()
     @State private var latest: AutomationEntry?
+    @State private var latestRun: WalletRun?
     @State private var manual: Bool
 
     init(automation: CaptureAutomation) {
@@ -29,6 +30,15 @@ struct AutomationGuide: View {
     private var steps: Int { pages.count + 1 }
 
     var body: some View {
+        // The Wallet "Transaction" automation keeps its own drawn guide for building by hand.
+        if automation == .walletTransaction && manual {
+            WalletAutomationGuide(exitManual: automation.oneTapAvailable ? { manual = false; step = 0 } : nil)
+        } else {
+            guide
+        }
+    }
+
+    private var guide: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 if step > 0 { progress.padding(.horizontal, 20).padding(.top, 4) }
@@ -46,11 +56,16 @@ struct AutomationGuide: View {
                 ToolbarItem(placement: .cancellationAction) { Button(L("Закрыть")) { dismiss() } }
             }
             .animation(.spring(duration: 0.35), value: step)
+            // Back on the intro offers the ready automation again after "Build it by hand".
+            .onChange(of: step) { _, value in if value == 0 { manual = !automation.oneTapAvailable } }
             .task(id: step) {
                 // The last step watches the journal for the first entry from this automation.
                 guard step == steps else { return }
+                automation.setupFinishedAt = startedAt
                 while !Task.isCancelled {
-                    latest = AutomationJournal.entries().first { $0.source == automation && $0.date >= startedAt.addingTimeInterval(-60) }
+                    let since = startedAt.addingTimeInterval(-60)
+                    latest = AutomationJournal.entries().first { $0.source == automation && $0.date >= since }
+                    if automation == .walletTransaction { latestRun = WalletRunLog.runs().first { $0.receivedAt >= since } }
                     do { try await Task.sleep(for: .seconds(2)) } catch { return }
                 }
             }
@@ -146,25 +161,34 @@ struct AutomationGuide: View {
 
     // MARK: Ready automation (iOS 27)
 
+    /// The steps as Shortcuts shows them on iOS 27: share sheet, the shared shortcut,
+    /// its editor with "Automation is turned off", then the switch in the Automation tab.
     private var oneTapPages: [Page] {
         let name = automation.templateName
-        var enable = ["Нажмите «Открыть автоматизации»: откроется вкладка «Автоматизация» в «Быстрых командах»."]
-        switch automation {
-        case .bankNotification: enable.append("Нажмите на «\(name)» и в триггере «Уведомление» выберите приложение своего банка.")
-        case .bankSMS: enable.append("Нажмите на «\(name)» и проверьте символ валюты в «Сообщение содержит»: он должен быть в SMS о ваших покупках.")
-        default: break
+        let edit: [String] = switch automation {
+        case .bankSMS: ["Проверьте символ валюты в триггере: он должен быть в SMS о ваших покупках. Остальное не меняйте.",
+                        "Нажмите «‹» в левом верхнем углу."]
+        case .bankNotification: ["Нажмите на приложение в триггере и выберите приложение своего банка. Остальное не меняйте.",
+                                 "Нажмите «‹» в левом верхнем углу."]
+        default: ["Здесь ничего менять не нужно.", "Нажмите «‹» в левом верхнем углу."]
         }
-        enable += ["Включите переключатель справа от «\(name)» — он станет зелёным.",
-                   "Если iOS спросит, выберите «Запускать сразу». Вернитесь в Mora."]
         return [
-            Page(title: "Добавьте готовую автоматизацию", subtitle: "Триггер «\(automation.trigger)» и действие Mora в ней уже связаны.",
-                 lines: ["Нажмите «Добавить в Быстрые команды» и выберите «Быстрые команды».",
-                         "Нажмите «Добавить быструю команду».",
-                         "Вернитесь в Mora и нажмите «Дальше»."],
-                 mock: AnyView(VStack(spacing: 8) { TriggerMock(automation: automation); actionMock })),
-            Page(title: "Включите автоматизацию",
+            Page(title: "Отправьте в «Быстрые команды»", subtitle: "Mora откроет меню «Поделиться» с готовой автоматизацией.",
+                 lines: ["Нажмите «Добавить в Быстрые команды» внизу.",
+                         "В строке приложений выберите «Быстрые команды»."],
+                 mock: AnyView(ShareSheetMock(name: name))),
+            Page(title: "Нажмите «Добавить быструю команду»", subtitle: "«Быстрые команды» покажут карточку «\(name)».",
+                 lines: ["Нажмите синюю кнопку «Добавить быструю команду» внизу экрана."],
+                 mock: AnyView(AddShortcutMock(name: name))),
+            Page(title: "Вернитесь назад",
+                 subtitle: "Откроется готовая команда: триггер и действия Mora уже связаны. Надпись «Автоматизация выключена» над триггером — это нормально, её включают на следующем шаге.",
+                 lines: edit, mock: AnyView(EditorMock(automation: automation))),
+            Page(title: "Включите переключатель",
                  subtitle: "iOS добавляет чужие автоматизации выключенными, и включить их может только владелец iPhone. Это единственное, что нужно сделать руками.",
-                 lines: enable, mock: AnyView(EnableMock(automation: automation))),
+                 lines: ["Вы на вкладке «Автоматизация». Найдите строку с подписью «\(name)». Если команду добавляли раньше, в конце будет номер, например «\(name) 1».",
+                         "Включите переключатель справа от неё — он станет зелёным.",
+                         "Вернитесь в Mora: «◀ Mora» в левом верхнем углу экрана."],
+                 mock: AnyView(EnableMock(automation: automation))),
         ]
     }
 
@@ -228,7 +252,10 @@ struct AutomationGuide: View {
         case .bankNotification:
             ActionMock(title: "Log Bank Notification", parts: [.text("Log notification "), .token("Title"), .text(", "), .token("Body"), .text(" from Chase")])
         case .walletTransaction:
-            ActionMock(title: "Start Wallet Payment", parts: [.text("Start payment at "), .token("Продавец")])
+            VStack(spacing: 8) {
+                ActionMock(title: "Start Wallet Payment", parts: [.text("Start payment at "), .token("Merchant"), .text(" named "), .token("Name"), .text(" with "), .token("Card or Pass")])
+                ActionMock(title: "Finish Wallet Payment", parts: [.text("Finish payment of "), .token("Amount")])
+            }
         }
     }
 
@@ -239,11 +266,15 @@ struct AutomationGuide: View {
         case .walletNotification: "Заплатите Apple Pay, например за проезд. Когда Wallet покажет уведомление о покупке, Mora отметит его здесь."
         case .bankSMS: "Дождитесь SMS банка о покупке — Mora покажет здесь, что из него прочитала."
         case .bankNotification: "Дождитесь уведомления банка о покупке — Mora покажет здесь, что из него прочитала."
-        case .walletTransaction: ""
+        case .walletTransaction: "Заплатите чем-нибудь Apple Pay — Mora покажет здесь, что передал Wallet."
         }
     }
 
-    private var check: some View {
+    @ViewBuilder private var check: some View {
+        if automation == .walletTransaction { WalletAutomationCheck(run: latestRun) } else { entryCheck }
+    }
+
+    private var entryCheck: some View {
         Card {
             if let latest {
                 VStack(alignment: .leading, spacing: 10) {
@@ -275,8 +306,11 @@ struct AutomationGuide: View {
                         Text(L("Добавить в Быстрые команды")).fontWeight(.semibold).frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent).controlSize(.large).tint(.moraGreen)
-                } else if !manual && step == 2 {
-                    primary(L("Открыть автоматизации")) { openURL(WalletAutomationGuide.automationsURL) }
+                } else if !manual && step == 4 {
+                    Button { openURL(WalletAutomationGuide.automationsURL) } label: {
+                        Label(L("Открыть автоматизации"), systemImage: "arrow.up.forward.app").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered).controlSize(.large).tint(.moraGreen)
                 } else if manual && step == 1 {
                     Button { if let url = URL(string: "shortcuts://") { openURL(url) } } label: {
                         Label(L("Открыть «Быстрые команды»"), systemImage: "arrow.up.forward.app").frame(maxWidth: .infinity)
@@ -290,7 +324,7 @@ struct AutomationGuide: View {
             } else {
                 HStack(spacing: 10) {
                     Button { step -= 1 } label: { Text(L("Назад")).frame(maxWidth: .infinity) }.buttonStyle(.bordered).controlSize(.large)
-                    primary(latest == nil ? L("Проверю позже") : L("Готово")) { dismiss() }
+                    primary(latest == nil && latestRun == nil ? L("Проверю позже") : L("Готово")) { dismiss() }
                 }
             }
         }
@@ -307,6 +341,8 @@ struct AutomationGuide: View {
 /// The trigger of an automation as the Shortcuts Automation tab shows it.
 private struct TriggerMock: View {
     let automation: CaptureAutomation
+    /// The trigger sentence of the Automation tab.
+    static func sentence(_ automation: CaptureAutomation) -> String { TriggerMock(automation: automation).title }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -322,7 +358,7 @@ private struct TriggerMock: View {
     }
 
     @ViewBuilder private var appIcon: some View {
-        if automation == .walletNotification { WalletAppIcon() }
+        if automation == .walletNotification || automation == .walletTransaction { WalletAppIcon() }
         else {
             Image(systemName: automation == .bankSMS ? "message.fill" : "building.columns.fill").font(.caption).foregroundStyle(.white)
                 .frame(width: 30, height: 24)
@@ -330,8 +366,9 @@ private struct TriggerMock: View {
         }
     }
 
-    private var title: String {
+    var title: String {
         switch automation {
+        case .walletTransaction: "Когда я прикладываю пропуск или карту Wallet"
         case .walletNotification: "Когда я получаю уведомление от Wallet"
         case .bankSMS: "Когда я получаю сообщение, содержащее «$»"
         default: "Когда я получаю уведомление от приложения банка"
@@ -341,6 +378,7 @@ private struct TriggerMock: View {
     private var detail: String {
         switch automation {
         case .bankSMS: "Триггер «Сообщение» · Запускать сразу"
+        case .walletTransaction: "Триггер «Транзакция» · Запускать сразу"
         default: "Триггер «Уведомление» · Запускать сразу"
         }
     }
@@ -367,7 +405,111 @@ private struct RunOptionsMock: View {
     }
 }
 
-/// The added automation in the Automation tab, with its switch turned on.
+/// The share sheet: the Shortcuts app in the row of apps.
+private struct ShareSheetMock: View {
+    let name: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Image(systemName: "leaf.fill").font(.title3).foregroundStyle(.white)
+                    .frame(width: 44, height: 44).background(Color.moraGreen, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                Text(name).font(.subheadline.weight(.semibold))
+                Spacer(minLength: 0)
+            }
+            Divider()
+            HStack(alignment: .top, spacing: 14) {
+                VStack(spacing: 5) {
+                    ShortcutsAppIcon(size: 50)
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.moraGreen, lineWidth: 3).padding(-4))
+                    Text(L("Быстрые команды")).font(.caption2.weight(.semibold)).lineLimit(2).multilineTextAlignment(.center)
+                }
+                .frame(width: 70)
+                ForEach(0..<3, id: \.self) { _ in
+                    VStack(spacing: 5) {
+                        RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.secondary.opacity(0.18)).frame(width: 50, height: 50)
+                        Capsule().fill(Color.secondary.opacity(0.18)).frame(width: 40, height: 6)
+                    }
+                    .frame(width: 56)
+                }
+            }
+        }
+        .padding(14)
+        .background(Color.moraCard, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+}
+
+/// The shared shortcut as Shortcuts presents it before adding.
+private struct AddShortcutMock: View {
+    let name: String
+
+    var body: some View {
+        VStack(spacing: 14) {
+            VStack(alignment: .leading) {
+                Image(systemName: "square.2.layers.3d.fill").foregroundStyle(.white)
+                Spacer(minLength: 18)
+                Text(name).font(.subheadline.weight(.semibold)).foregroundStyle(.white)
+            }
+            .padding(12).frame(width: 170, height: 96, alignment: .leading)
+            .background(Color(red: 0.93, green: 0.38, blue: 0.40), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            Label(L("Добавить быструю команду"), systemImage: "plus.circle.fill")
+                .font(.subheadline.weight(.semibold)).foregroundStyle(.white)
+                .frame(maxWidth: .infinity).frame(height: 44)
+                .background(Color.blue, in: Capsule())
+                .overlay(Capsule().stroke(Color.moraGreen, lineWidth: 3).padding(-4))
+        }
+    }
+}
+
+/// The added shortcut's editor: turned-off automation above the trigger; only Back is needed.
+private struct EditorMock: View {
+    let automation: CaptureAutomation
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "chevron.left").font(.headline).foregroundStyle(.primary)
+                    .frame(width: 38, height: 38).background(Color.secondary.opacity(0.18), in: Circle())
+                    .overlay(Circle().stroke(Color.moraGreen, lineWidth: 3).padding(-3))
+                Text(automation.templateName).font(.subheadline.weight(.semibold))
+                Spacer(minLength: 0)
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                Label(L("Автоматизация выключена"), systemImage: "clock.badge.xmark")
+                    .font(.caption).padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(Color.secondary.opacity(0.15), in: Capsule())
+                Text(L(TriggerMock.sentence(automation))).font(.subheadline.weight(.semibold))
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.secondary.opacity(0.5), style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])))
+            ForEach(automation.actions, id: \.self) { action in
+                HStack(spacing: 8) {
+                    Image(systemName: "leaf.fill").font(.caption).foregroundStyle(.white)
+                        .frame(width: 22, height: 22).background(Color.moraGreen, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    Text(action).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    Spacer(minLength: 0)
+                }
+                .padding(10)
+                .background(Color.moraCard, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+        }
+    }
+}
+
+/// The Shortcuts app icon, drawn.
+private struct ShortcutsAppIcon: View {
+    var size: CGFloat = 30
+    var body: some View {
+        Image(systemName: "square.2.layers.3d.fill").font(.system(size: size * 0.48)).foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(LinearGradient(colors: [Color(red: 0.95, green: 0.35, blue: 0.55), Color(red: 0.35, green: 0.30, blue: 0.85)],
+                                       startPoint: .topTrailing, endPoint: .bottomLeading),
+                        in: RoundedRectangle(cornerRadius: size * 0.24, style: .continuous))
+    }
+}
+
+/// The added automation in the Automation tab: turn its switch on.
 private struct EnableMock: View {
     let automation: CaptureAutomation
 
@@ -376,22 +518,102 @@ private struct EnableMock: View {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
                     Image(systemName: automation.icon).font(.caption).foregroundStyle(.white)
-                        .frame(width: 24, height: 24).background(Color.token(automation.color), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        .frame(width: 26, height: 22).background(Color.blue, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                     Image(systemName: "arrow.right").font(.caption).foregroundStyle(.secondary)
-                    Image(systemName: "leaf.fill").font(.caption).foregroundStyle(.white)
-                        .frame(width: 24, height: 24).background(Color.moraGreen, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    ShortcutsAppIcon(size: 24)
                 }
-                Text(automation.templateName).font(.subheadline.weight(.semibold))
-                Text(L("Триггер «\(automation.trigger)»")).font(.caption).foregroundStyle(.secondary)
+                Text(L(TriggerMock.sentence(automation))).font(.subheadline.weight(.semibold)).fixedSize(horizontal: false, vertical: true)
+                Text(automation.templateName).font(.caption).foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
-            VStack(spacing: 4) {
-                Capsule().fill(Color.green).frame(width: 50, height: 30)
-                    .overlay(alignment: .trailing) { Circle().fill(.white).padding(2) }
-                Image(systemName: "arrow.up").font(.caption.weight(.bold)).foregroundStyle(Color.moraGreen)
-            }
+            Capsule().fill(Color.green).frame(width: 50, height: 30)
+                .overlay(alignment: .trailing) { Circle().fill(.white).padding(2) }
+                .overlay(Capsule().stroke(Color.moraGreen, lineWidth: 3).padding(-4))
         }
         .padding(14)
         .background(Color.moraCard, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+}
+
+/// After the setup guide: the automation is set up, Mora waits for one purchase from it
+/// to confirm that it works. The guide can be shown again from here.
+struct AutomationWaitingView: View {
+    let automation: CaptureAutomation
+    @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var router: AppRouter
+    @State private var latest: AutomationEntry?
+    @State private var latestRun: WalletRun?
+
+    private var since: Date { (automation.setupFinishedAt ?? .now).addingTimeInterval(-60) }
+    private var confirmed: Bool { latest != nil || latestRun != nil }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    ZStack {
+                        Circle().fill(Color.orange.opacity(0.14)).frame(width: 96, height: 96)
+                        Image(systemName: confirmed ? "checkmark.seal.fill" : "hourglass").font(.system(size: 40))
+                            .foregroundStyle(confirmed ? Color.moraGreen : .orange)
+                    }
+                    .frame(maxWidth: .infinity).padding(.top, 12)
+                    Text(L(confirmed ? "Автоматизация работает" : "Ждём первую покупку"))
+                        .font(.title2.weight(.bold)).frame(maxWidth: .infinity).multilineTextAlignment(.center)
+                    Text(L(hint)).font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).frame(maxWidth: .infinity)
+                    if automation == .walletTransaction {
+                        WalletAutomationCheck(run: latestRun)
+                    } else {
+                        Card {
+                            if let latest {
+                                AutomationEntryRow(entry: latest)
+                            } else {
+                                HStack(spacing: 12) {
+                                    ProgressView()
+                                    Text(L("Mora покажет здесь первую покупку из этой автоматизации.")).font(.subheadline).foregroundStyle(.secondary)
+                                }
+                            }
+                        }
+                    }
+                    Card {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label(L("Покупки нет?"), systemImage: "questionmark.circle").font(.headline)
+                            Text(L("Проверьте, что переключатель автоматизации в «Быстрых командах» на вкладке «Автоматизация» включён. Если не помогло, пройдите настройку ещё раз.")).font(.subheadline).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .padding(20).frame(maxWidth: 560).frame(maxWidth: .infinity)
+            }
+            .safeAreaInset(edge: .bottom) {
+                VStack(spacing: 10) {
+                    Button { router.sheet = .automationGuide(automation) } label: {
+                        Label(L("Показать инструкцию снова"), systemImage: "list.number").frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered).controlSize(.large).tint(.moraGreen)
+                    Button { dismiss() } label: { Text(L("Готово")).fontWeight(.semibold).frame(maxWidth: .infinity) }
+                        .buttonStyle(.borderedProminent).controlSize(.large).tint(.moraGreen)
+                }
+                .padding(.horizontal, 20).padding(.vertical, 12).background(Color.moraBackground)
+            }
+            .background(Color.moraBackground)
+            .wrappingTitle(automation.title)
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button(L("Закрыть")) { dismiss() } } }
+            .task {
+                while !Task.isCancelled {
+                    latest = AutomationJournal.entries().first { $0.source == automation && $0.date >= since }
+                    if automation == .walletTransaction { latestRun = WalletRunLog.runs().first { $0.receivedAt >= since } }
+                    do { try await Task.sleep(for: .seconds(2)) } catch { return }
+                }
+            }
+        }
+    }
+
+    private var hint: String {
+        if confirmed { return "Первая покупка пришла — дальше Mora записывает покупки сама." }
+        return switch automation {
+        case .walletTransaction: "Вы настроили автоматизацию. Заплатите чем-нибудь Apple Pay: как только Mora получит хотя бы одну покупку, настройка подтвердится."
+        case .walletNotification: "Вы настроили автоматизацию. Как только Wallet покажет уведомление о покупке и Mora его получит, настройка подтвердится."
+        case .bankSMS: "Вы настроили автоматизацию. Как только придёт SMS банка о покупке и Mora его прочитает, настройка подтвердится."
+        case .bankNotification: "Вы настроили автоматизацию. Как только придёт уведомление банка о покупке и Mora его прочитает, настройка подтвердится."
+        }
     }
 }

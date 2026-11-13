@@ -44,6 +44,7 @@ enum AppSheet: Identifiable {
     case walletRun(WalletRun, UUID?)
     case walletGuide
     case automationGuide(CaptureAutomation)
+    case automationWaiting(CaptureAutomation)
 
     var id: String {
         switch self {
@@ -62,6 +63,7 @@ enum AppSheet: Identifiable {
         case .walletRun(let run, _): "wallet-run-\(run.id)"
         case .walletGuide: "wallet-guide"
         case .automationGuide(let automation): "automation-guide-\(automation.rawValue)"
+        case .automationWaiting(let automation): "automation-waiting-\(automation.rawValue)"
         }
     }
 }

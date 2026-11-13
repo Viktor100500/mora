@@ -85,6 +85,7 @@ enum CaptureAutomation: String, CaseIterable, Identifiable, Sendable {
 
     /// Name of the signed shortcut bundled in Resources. iOS 27 keeps the trigger inside
     /// a shared shortcut, so the file adds the whole automation. See cloud/shortcuts/READY-AUTOMATIONS.md.
+    /// "Mora Apple Pay" is built by build_wallet_automation.py; its signature expires on 8 Dec 2027.
     var templateName: String {
         switch self {
         case .walletTransaction: "Mora Apple Pay"
@@ -107,6 +108,20 @@ enum CaptureAutomation: String, CaseIterable, Identifiable, Sendable {
         case .notification: return .bankNotification
         case nil: return nil
         }
+    }
+
+    /// When the user finished its setup guide on this iPhone. Until the automation runs
+    /// after that, its card waits for the first purchase instead of offering setup.
+    var setupFinishedAt: Date? {
+        get { UserDefaults.standard.object(forKey: "mora.automation.setup.\(rawValue)") as? Date }
+        nonmutating set { UserDefaults.standard.set(newValue, forKey: "mora.automation.setup.\(rawValue)") }
+    }
+
+    /// Set up, but nothing has come from it since.
+    func awaitingFirstRun(runs: [WalletRun], alerts: [BankAlert]) -> Bool {
+        guard let finished = setupFinishedAt else { return false }
+        guard let last = lastRun(runs: runs, alerts: alerts) else { return true }
+        return last < finished.addingTimeInterval(-60)
     }
 
     /// When this automation last passed something to Mora.
