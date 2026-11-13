@@ -293,7 +293,7 @@ struct WalletAutomationCheck: View {
                     ProgressView()
                     VStack(alignment: .leading, spacing: 3) {
                         Text(L("Ждём первую оплату")).font(.headline)
-                        Text(L("Mora покажет здесь, что передал Wallet. Можно закрыть помощника: результат будет виден в «Автоматизация» → «Журнал».")).font(.caption).foregroundStyle(.secondary)
+                        Text(L("Mora покажет здесь, что передал Wallet. Можно закрыть помощника: результат будет виден в «Автоматизация / Быстрые команды» → «Журнал».")).font(.caption).foregroundStyle(.secondary)
                     }
                 }
             }
