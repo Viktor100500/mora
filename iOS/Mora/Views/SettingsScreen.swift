@@ -157,7 +157,7 @@ struct SettingsScreen: View {
 
     private var validRate: Bool {
         let code = rateCurrency.trimmingCharacters(in: .whitespaces).uppercased()
-        return (Money.parse(rateAmount) ?? 0) > 0 && Locale.commonISOCurrencyCodes.contains(code) && code != ledger.preferences.baseCurrency
+        return (Money.parse(rateAmount) ?? 0) > 0 && Locale.isoCurrencyCodeSet.contains(code) && code != ledger.preferences.baseCurrency
     }
     private func saveRate() {
         guard validRate, let value = Money.parse(rateAmount) else { return }

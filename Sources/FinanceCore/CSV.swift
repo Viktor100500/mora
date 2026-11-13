@@ -252,7 +252,7 @@ public enum CSVImporter: Sendable {
                 } else if let id = mapping.defaultAccountID, let existing = staged.account(id) { account = existing }
                 else { throw LedgerError.invalid("Не выбран счет") }
                 if preview.currency.isEmpty { preview.currency = account.currency }
-                guard Locale.commonISOCurrencyCodes.contains(preview.currency) else { throw LedgerError.invalid("Неизвестная валюта: \(preview.currency)") }
+                guard Locale.isoCurrencyCodeSet.contains(preview.currency) else { throw LedgerError.invalid("Неизвестная валюта: \(preview.currency)") }
                 guard account.currency == preview.currency else { throw LedgerError.invalid("Валюта строки отличается от валюты счета \(account.name)") }
                 preview.account = account.name; preview.amount = amount
                 guard !account.archived else { throw LedgerError.invalid("Верните счет из архива перед добавлением операций.") }

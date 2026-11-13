@@ -81,7 +81,7 @@ extension FinanceStore {
     }
     func balance(_ account: Account) -> Decimal {
         if reports.balances == nil {
-            reports.balances = Dictionary(uniqueKeysWithValues: ledger.accounts.map { ($0.id, ledger.balance($0)) })
+            reports.balances = ledger.balances()
         }
         return reports.balances?[account.id] ?? account.openingBalance
     }

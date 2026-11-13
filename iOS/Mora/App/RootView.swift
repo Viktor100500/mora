@@ -64,8 +64,10 @@ struct RootView: View {
             cloud.finishInBackground()
             Task { await WalletBackgroundDelivery.scheduleIfNeeded() }
         }
-        .task(id: scenePhase) {
-            guard scenePhase == .active else { return }
+        // Keyed on foreground/background only: a brief `.inactive` (Control Center, a
+        // notification banner, the app switcher) must not restart every sync and loop.
+        .task(id: scenePhase != .background) {
+            guard scenePhase != .background else { return }
             reviewQueue.reload()
             await store.reloadFromDisk()
             // Purchases saved while offline go out as soon as Mora is opened.

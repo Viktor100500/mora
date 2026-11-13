@@ -226,7 +226,9 @@ struct SourceBadge: View {
     var color: String = "gray"
 
     var body: some View {
-        Label(title, systemImage: icon)
+        // Not a Label: inside a List row a Label reserves the row's icon column,
+        // which left a wide gap between the icon and the text.
+        HStack(spacing: 4) { Image(systemName: icon); Text(title) }
             .font(.caption2.weight(.semibold))
             .lineLimit(1)
             .padding(.horizontal, 6).padding(.vertical, 2)

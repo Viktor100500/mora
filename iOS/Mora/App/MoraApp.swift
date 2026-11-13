@@ -11,6 +11,8 @@ struct MoraApp: App {
 
     init() {
         _store = StateObject(wrappedValue: FinanceStore())
+        // Decoding the translations and compiling their templates would otherwise land in the first frame.
+        Task.detached(priority: .userInitiated) { _ = L("") }
     }
 
     var body: some Scene {
@@ -105,4 +107,6 @@ struct TransactionFilterRequest: Equatable {
     var month: Date
     var categoryID: UUID?
     var accountID: UUID?
+    /// Expenses and income that have no category yet.
+    var uncategorized = false
 }

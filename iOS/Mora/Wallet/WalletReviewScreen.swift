@@ -75,15 +75,12 @@ struct ReviewRow: View {
         HStack(alignment: .top, spacing: 12) {
             IconTile(icon: "exclamationmark", color: "orange", size: 36)
             VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(item.merchant.isEmpty ? L("Без продавца") : item.merchant).font(.body.weight(.medium)).lineLimit(2)
-                    Spacer(minLength: 8)
-                    FinancialText(item.amount.isEmpty ? "—" : item.amount).font(.subheadline.weight(.semibold))
-                }
-                if item.source == nil && item.fromServer {
-                    SourceBadge(title: L("Общая база"), icon: "icloud", color: "gray")
-                } else {
-                    SourceBadge(item.source)
+                JournalHeadline(title: item.merchant.isEmpty ? L("Без продавца") : item.merchant, amount: item.amount.isEmpty ? "—" : item.amount) {
+                    if item.source == nil && item.fromServer {
+                        SourceBadge(title: L("Общая база"), icon: "icloud", color: "gray")
+                    } else {
+                        SourceBadge(item.source)
+                    }
                 }
                 Text(L(item.reason)).font(.caption).foregroundStyle(.orange).lineLimit(3)
                 Text([item.card, item.date.formatted(.dateTime.day().month(.abbreviated).hour().minute().locale(L10n.locale))]

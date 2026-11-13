@@ -22,6 +22,10 @@ final class MerchantCategorizer: ObservableObject {
     private var misses: [String: Miss] = [:]
     private var nextNetworkAttempt = Date.distantPast
     private var stateURL: URL?
+    /// The ledger revision already processed with nothing left to assign. The pass
+    /// normalizes every merchant in the ledger, so the 8-second loop repeats it only
+    /// after a change, or after 15 minutes for the catalogs' retry and miss windows.
+    private var settled: (revision: UInt64, online: Bool, date: Date)?
     init(preferences: UserDefaults = .standard,
          lookup: (@MainActor (String) async throws -> MerchantGroup?)? = nil) {
         self.preferences = preferences; self.lookup = lookup ?? { try await OpenMerchantCatalogClient.shared.group(for: $0) }
@@ -34,7 +38,7 @@ final class MerchantCategorizer: ObservableObject {
     private func configure(_ store: FinanceStore) async {
         let url = store.fileURL.deletingLastPathComponent().appendingPathComponent("merchant-category-history.json")
         guard stateURL != url else { return }
-        stateURL = url; completed = [:]; misses = [:]
+        stateURL = url; completed = [:]; misses = [:]; settled = nil
         let saved = await BackgroundWork.shared.perform { (try? Data(contentsOf: url)).flatMap { try? JSONDecoder().decode([String: String].self, from: $0) } }
         completed = saved ?? [:]
     }
@@ -75,6 +79,9 @@ final class MerchantCategorizer: ObservableObject {
             for waiter in waiters { waiter.resume() }
         }
         await configure(store)
+        let revision = store.revision, deferring = store.isDeferringUpdates
+        if !deferring, let settled, settled.revision == revision, settled.online == onlineEnabled,
+           Date().timeIntervalSince(settled.date) < 900 { return }
         let snapshot = store.latestLedger.withoutChangeHistory()
         let useCatalogs = onlineEnabled
         let candidates = await BackgroundWork.shared.perform {
@@ -133,6 +140,9 @@ final class MerchantCategorizer: ObservableObject {
             message = L("Продавцов без совпадения в справочниках: \(unknownMerchants.count). Выберите категорию вручную — Mora запомнит выбор.")
         } else { message = nil }
         if status != message { status = message }
+        if assignments.isEmpty, !deferring, !Task.isCancelled, !stopping, store.revision == revision {
+            settled = (revision, onlineEnabled, Date())
+        }
         guard !assignments.isEmpty, duringSync || !store.isDeferringUpdates, !Task.isCancelled, !stopping else { return }
         let proposals = assignments
         let assigned = await store.change { ledger -> [String: String] in

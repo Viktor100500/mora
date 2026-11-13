@@ -104,7 +104,8 @@ public extension Ledger {
     }
     func trend(ending month: Date, count: Int = 6, detail: TrendDetail = .months, selectedDays: Set<Int> = []) -> [MonthTotal] {
         if detail == .selectedDates {
-            return monthTrend(in: month, detail: .days).filter { selectedDays.contains(Calendar.current.component(.day, from: $0.date)) }
+            let calendar = Calendar.current
+            return monthTrend(in: month, detail: .days).filter { selectedDays.contains(calendar.component(.day, from: $0.date)) }
         }
         if detail != .months { return monthTrend(in: month, detail: detail) }
         return (0..<count).reversed().map { offset in

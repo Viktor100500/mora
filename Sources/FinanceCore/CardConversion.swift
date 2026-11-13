@@ -43,8 +43,8 @@ public struct CardConversion: Codable, Equatable, Sendable {
         guard originalAmount != 0, !originalAmount.isNaN, rate > 0, !rate.isNaN,
               !feePercent.isNaN, feePercent >= 0, feePercent <= 100,
               originalAmount < 0 || feePercent == 0,
-              Locale.commonISOCurrencyCodes.contains(originalCurrency),
-              Locale.commonISOCurrencyCodes.contains(accountCurrency), originalCurrency != accountCurrency else {
+              Locale.isoCurrencyCodeSet.contains(originalCurrency),
+              Locale.isoCurrencyCodeSet.contains(accountCurrency), originalCurrency != accountCurrency else {
             throw LedgerError.invalid("Некорректный пересчет валюты операции.")
         }
         let formatter = NumberFormatter()
@@ -102,7 +102,7 @@ public final class VisaRateClient {
 
     private func quote(from: String, to: String, date: Date) async throws -> VisaRateResult {
         try Task.checkCancellation()
-        guard Locale.commonISOCurrencyCodes.contains(from), Locale.commonISOCurrencyCodes.contains(to), from != to else {
+        guard Locale.isoCurrencyCodeSet.contains(from), Locale.isoCurrencyCodeSet.contains(to), from != to else {
             throw LedgerError.invalid("Выберите поддерживаемую валюту покупки и счет.")
         }
         let timestamp = now()
@@ -212,7 +212,7 @@ private actor VisaRateCache {
             for (key, rate) in legacy {
                 let parts = key.split(separator: "|").map(String.init)
                 guard parts.count == 4, let day = Int(parts[0]), let date = Dates.parse(parts[1]),
-                      Locale.commonISOCurrencyCodes.contains(parts[2]), Locale.commonISOCurrencyCodes.contains(parts[3]),
+                      Locale.isoCurrencyCodeSet.contains(parts[2]), Locale.isoCurrencyCodeSet.contains(parts[3]),
                       parts[2] != parts[3] else { continue }
                 let quote = VisaQuote(rate: rate, date: date, fetchedAt: Date(timeIntervalSince1970: Double(day) * 86_400))
                 guard quote.isValid else { continue }

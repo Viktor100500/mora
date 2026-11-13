@@ -141,7 +141,7 @@ public enum BankMessage {
             guard let digits = group("a") ?? group("b"), let marker = group("pre") ?? group("post"),
                   let whole = Range(match.range, in: text), let value = amountValue(digits), value > 0 else { return nil }
             let currency = symbols[marker] ?? words[marker.lowercased()]
-                ?? (Locale.commonISOCurrencyCodes.contains(marker) ? marker : nil)
+                ?? (Locale.isoCurrencyCodeSet.contains(marker) ? marker : nil)
             guard let currency else { return nil }
             return Amount(value: value, currency: currency, text: String(text[whole]), range: whole)
         }

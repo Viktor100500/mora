@@ -565,5 +565,6 @@
   "Настроена · ждём первую покупку, чтобы проверить": "Set up · waiting for the first purchase to confirm",
   "Ждём покупку": "Waiting for Purchase",
   "Работает": "Working",
-  "Настроим вручную: {0} коротких шага и проверка, около двух минут.": "We'll set it up manually: {0} short steps and a check, about two minutes."
+  "Настроим вручную: {0} коротких шага и проверка, около двух минут.": "We'll set it up manually: {0} short steps and a check, about two minutes.",
+  "Описание, заметки, теги": "Descriptions, notes, tags"
 }

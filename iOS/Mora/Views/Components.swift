@@ -26,34 +26,70 @@ struct TransactionRow: View {
         return parts.joined(separator: " · ")
     }
 
+    private var conversionText: String? {
+        transaction.conversion.map { conversion in
+            "\(DisplayMoney.string(abs(conversion.originalAmount), currency: conversion.originalCurrency)) · Visa \(Money.plain(conversion.rate))\(conversion.feePercent == 0 ? "" : " + " + Money.plain(conversion.feePercent) + "%")"
+        }
+    }
+    private var amount: some View {
+        FinancialText(DisplayMoney.signed(transaction, currency: account?.currency ?? "RUB"))
+            .font(.body.weight(.semibold))
+            .foregroundStyle(transaction.kind == .income ? Color.moraGreen : .primary)
+            .lineLimit(1).fixedSize()
+    }
+    private var time: some View {
+        Text(showsDate ? transaction.date.formatted(.dateTime.day().month(.abbreviated).hour().minute().locale(L10n.locale))
+                       : transaction.date.formatted(.dateTime.hour().minute().locale(L10n.locale)))
+            .font(.caption2).foregroundStyle(.secondary).lineLimit(1).fixedSize()
+    }
+    private var subtitleText: some View { Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+
     var body: some View {
         HStack(spacing: 12) {
             IconTile(icon: transaction.kind == .transfer ? "arrow.left.arrow.right" : category?.icon ?? "tag",
                      color: category?.color ?? (transaction.kind == .income ? "green" : "gray"), size: 40)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(transaction.merchant).font(.body.weight(.medium)).lineLimit(2)
-                Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                if let conversion = transaction.conversion {
-                    FinancialText("\(DisplayMoney.string(abs(conversion.originalAmount), currency: conversion.originalCurrency)) · Visa \(Money.plain(conversion.rate))\(conversion.feePercent == 0 ? "" : " + " + Money.plain(conversion.feePercent) + "%")")
-                        .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                }
+            // A description that fits on one line shares it with the amount. A longer one
+            // gets the whole row width, and the amount moves down to the category line,
+            // so neither the description nor a long amount is cut on small iPhones.
+            ViewThatFits(in: .horizontal) {
+                compact
+                expanded
             }
-            Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 3) {
-                FinancialText(DisplayMoney.signed(transaction, currency: account?.currency ?? "RUB"))
-                    .font(.body.weight(.semibold))
-                    .foregroundStyle(transaction.kind == .income ? Color.moraGreen : .primary)
-                    .lineLimit(1)
-                if showsDate {
-                    Text(transaction.date.formatted(.dateTime.day().month(.abbreviated).hour().minute().locale(L10n.locale))).font(.caption2).foregroundStyle(.secondary)
-                } else {
-                    Text(transaction.date.formatted(.dateTime.hour().minute().locale(L10n.locale)))
-                        .font(.caption2).foregroundStyle(.secondary)
-                }
-            }.fixedSize(horizontal: true, vertical: false)
         }
         .padding(.vertical, 2)
         .contentShape(Rectangle())
+    }
+
+    private var compact: some View {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(transaction.merchant).font(.body.weight(.medium)).lineLimit(1).fixedSize()
+                // Secondary lines take the width that is left and never decide the layout.
+                Text(" ").font(.caption).frame(maxWidth: .infinity).overlay(alignment: .leading) { subtitleText }
+                if let conversionText {
+                    Text(" ").font(.caption2).frame(maxWidth: .infinity)
+                        .overlay(alignment: .leading) { FinancialText(conversionText).font(.caption2).foregroundStyle(.secondary).lineLimit(1) }
+                }
+            }
+            VStack(alignment: .trailing, spacing: 3) { amount; time }
+        }
+    }
+
+    private var expanded: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(transaction.merchant).font(.body.weight(.medium)).lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                subtitleText
+                Spacer(minLength: 0)
+                amount
+            }
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                if let conversionText { FinancialText(conversionText).font(.caption2).foregroundStyle(.secondary).lineLimit(1) }
+                Spacer(minLength: 0)
+                time
+            }
+        }
     }
 }
 

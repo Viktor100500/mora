@@ -38,6 +38,11 @@ final class CloudSync: ObservableObject {
     private var operationWaiters: [CheckedContinuation<Void, Never>] = []
     private var failureCount = 0
     private var nextAttempt = Date.distantPast
+    /// Successful polls in a row that found nothing new.
+    private var idlePolls = 0
+    private var changedDuringSync = false
+    /// The ledger file and household version last found identical to the checkpoint.
+    private var verified: (stamp: LedgerStamp, version: Int64)?
     /// The whole server inbox; `pending` shows only the purchases that need the user.
     private var inbox: [CloudCapture] = []
     private var attemptedCaptures: Set<UUID> = []
@@ -112,7 +117,7 @@ final class CloudSync: ObservableObject {
     /// Polls while the scene is active; the caller cancels it in the background.
     func run() async {
         // Returning to the app retries at once instead of waiting out an old backoff.
-        nextAttempt = .distantPast
+        nextAttempt = .distantPast; idlePolls = 0
         while !Task.isCancelled {
             if let store, enabled && signedIn && !store.isDemo && Date() >= nextAttempt { await synchronize(inBackground: true) }
             do { try await Task.sleep(for: .seconds(8)) } catch { return }
@@ -121,7 +126,7 @@ final class CloudSync: ObservableObject {
     /// A local edit goes out right away instead of waiting for the next poll or a network backoff.
     func localChanged() {
         guard let store, enabled && signedIn && !store.isDemo else { return }
-        failureCount = 0; nextAttempt = .distantPast
+        failureCount = 0; nextAttempt = .distantPast; idlePolls = 0
         Task { await synchronize(inBackground: true) }
     }
     /// Leaving the app cancels the polling loop, so an edit saved just before
@@ -129,10 +134,16 @@ final class CloudSync: ObservableObject {
     func finishInBackground() {
         guard let store, enabled && signedIn && !store.isDemo else { return }
         let work = Task { await synchronize(inBackground: true, waitForCurrent: true) }
-        let id = UIApplication.shared.beginBackgroundTask(withName: "Mora cloud sync") { work.cancel() }
+        // The assertion is released in the expiration handler too: the sync may be inside
+        // file work that cannot be cancelled, and iOS ends an app that keeps it past the limit.
+        let assertion = BackgroundAssertion()
+        assertion.id = UIApplication.shared.beginBackgroundTask(withName: "Mora cloud sync") {
+            work.cancel()
+            Task { @MainActor in assertion.end() }
+        }
         Task {
             await work.value
-            if id != .invalid { UIApplication.shared.endBackgroundTask(id) }
+            assertion.end()
         }
     }
     private func load() async {
@@ -420,14 +431,20 @@ final class CloudSync: ObservableObject {
         guard enabled, householdID != nil else { return }
         await operation(inBackground: inBackground, waitForCurrent: waitForCurrent, reportSyncResult: notifyResult) {
             guard let store = self.store, let id = self.householdID else { return }
-            let originalIDs = Set(store.ledger.transactions.map(\.id))
+            // Copy-on-write: the set of ids is built only if the sync changed the ledger.
+            let original = store.ledger.transactions, originalRevision = store.revision
             self.synchronizing = true
             defer { self.synchronizing = false }
             do {
                 try await self.syncNow()
                 try await self.bookWalletPurchases()
                 try await self.loadWalletCards(id)
-                self.failureCount = 0; self.nextAttempt = Date().addingTimeInterval(8)
+                self.failureCount = 0
+                // With nothing arriving the poll slows down: 8 s for the first minute, then
+                // 16 s, then 32 s. A local edit, a refresh or reopening the app syncs at once.
+                self.idlePolls = store.revision == originalRevision && !self.changedDuringSync ? self.idlePolls + 1 : 0
+                self.changedDuringSync = false
+                self.nextAttempt = Date().addingTimeInterval(self.idlePolls < 8 ? 8 : self.idlePolls < 24 ? 15 : 30)
             } catch {
                 self.failureCount += 1
                 // Unbooked purchases wait for the retry without a banner that never ends.
@@ -437,6 +454,8 @@ final class CloudSync: ObservableObject {
                 self.nextAttempt = Date().addingTimeInterval(min(limit, 8 * pow(2, Double(min(self.failureCount, 5)))))
                 throw error
             }
+            guard store.revision != originalRevision else { return }
+            let originalIDs = Set(original.map(\.id))
             let added = store.ledger.transactions.filter { !originalIDs.contains($0.id) && $0.externalID?.hasPrefix("wallet:") == true }
             if !added.isEmpty {
                 store.showToast(L("Загружено из Apple Shortcuts: \(added.count)"), detail: added.prefix(3).map(\.merchant).joined(separator: " · "), undoable: true)
@@ -448,9 +467,18 @@ final class CloudSync: ObservableObject {
         let saved = try await checkpoint().envelope
         let base = saved.snapshot
         let status: Status = try await rpc("mora_get_status", HouseholdBody(p_household_id: id))
-        let initial = try await diskLedger()
-        if status.version == saved.version, try await BackgroundWork.shared.perform({ try CloudMerge.same(initial, base) }) {
-            if try await loadPending(id) { lastSync = Date() }
+        // Reading and comparing the whole ledger file every poll kept the CPU busy while
+        // nothing changed. The file's modification stamp tells when it has to be read again.
+        let url = store.fileURL
+        let stamp = await BackgroundWork.shared.perform { LedgerStamp(url) }
+        var unchanged = status.version == saved.version && stamp != nil && verified.map { $0.stamp == stamp && $0.version == saved.version } == true
+        if !unchanged && status.version == saved.version {
+            let initial = try await diskLedger()
+            unchanged = try await BackgroundWork.shared.perform { try CloudMerge.same(initial, base) }
+            verified = unchanged ? stamp.map { ($0, saved.version) } : nil
+        }
+        if unchanged {
+            if try await loadPending(id) { lastSync = Date(); changedDuringSync = true }
             if conflict { conflict = false }
             if lastSync == nil { lastSync = Date() }
             return
@@ -760,5 +788,25 @@ private enum CloudKeychain {
     }
     static func keychainError(_ status: OSStatus) -> LedgerError {
         .invalid("Не удалось сохранить или прочитать сессию в Связке ключей (\(status)). Повторите вход.")
+    }
+}
+
+/// Identity of the ledger file on disk; atomic writes replace the inode.
+private struct LedgerStamp: Equatable, Sendable {
+    let modified: Date, size: Int, inode: Int
+    init?(_ url: URL) {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let modified = attributes[.modificationDate] as? Date else { return nil }
+        self.modified = modified
+        size = (attributes[.size] as? NSNumber)?.intValue ?? 0
+        inode = (attributes[.systemFileNumber] as? NSNumber)?.intValue ?? 0
+    }
+}
+
+@MainActor private final class BackgroundAssertion {
+    var id = UIBackgroundTaskIdentifier.invalid
+    func end() {
+        guard id != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(id); id = .invalid
     }
 }

@@ -11,7 +11,7 @@ public struct SameCurrencyFee: Codable, Equatable, Sendable {
     }
     public func chargedAmount(currency: String) throws -> Decimal {
         guard originalAmount < 0, !originalAmount.isNaN, percent > 0, percent <= 100,
-              !percent.isNaN, Locale.commonISOCurrencyCodes.contains(currency) else {
+              !percent.isNaN, Locale.isoCurrencyCodeSet.contains(currency) else {
             throw LedgerError.invalid("Некорректная комиссия операции.")
         }
         let formatter = NumberFormatter(); formatter.numberStyle = .currency; formatter.currencyCode = currency
