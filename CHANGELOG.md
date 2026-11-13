@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.7.19 — 2026-11-13
+
+Mac 1.7.19 (build 98) · iPhone 1.0.46 (build 47)
+
+- **Compact iPhone footer.** Removes the 64-point spacer below storage status and raises only its caption by 12 points, restoring compact Overview and More screens.
+- **More bank formats.** Reads Raiffeisen push fields separated by bars and `Gde`, Russian amounts such as `450р`, MIR card endings and SBP messages. Adds setup instructions for reading payment screenshots through Shortcuts.
+- **Conservative SMS/push matching.** A pair must have the same explicit source, merchant, card ending, currency and amount within ten minutes, different wordings, and exactly one eligible match. Missing fields, different banks or merchants, ambiguous matches and repeated identical wordings remain separate. Wallet notification handling is preserved.
+
+
 ## 1.7.18 — 2026-11-13
 
 Mac 1.7.18 (build 97) · iPhone 1.0.45 (build 46)

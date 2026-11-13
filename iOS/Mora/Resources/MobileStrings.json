@@ -398,5 +398,16 @@
   "Включите переключатель у «Когда я прикладываю карту Wallet» (Mora Apple Pay).": "Turn on the switch next to “When I tap a Wallet card” (Mora Apple Pay).",
   "Если iOS спросит, выберите «Запускать сразу». Вернитесь в Mora.": "If iOS asks, choose Run Immediately. Come back to Mora.",
   "Открыть автоматизации": "Open Automations",
-  "Откройте триггер «Транзакция» в Mora Apple Pay и отметьте карты, которыми платите.": "Open the Transaction trigger in Mora Apple Pay and select the cards you pay with."
+  "Откройте триггер «Транзакция» в Mora Apple Pay и отметьте карты, которыми платите.": "Open the Transaction trigger in Mora Apple Pay and select the cards you pay with.",
+  "Скриншоты оплаты": "Payment Screenshots",
+  "В «Быстрых командах» создайте автоматизацию с триггером «Сообщение». На iOS 27 триггеры добавляются в новую команду как действия.": "In Shortcuts, create an automation with the Message trigger. On iOS 27, triggers are added to a new shortcut as actions.",
+  "Нужна iOS 27. В «Быстрых командах» создайте автоматизацию с триггером «Уведомление».": "Requires iOS 27. In Shortcuts, create an automation with the Notification trigger.",
+  "Нужна iOS 27. В «Быстрых командах» создайте автоматизацию с триггером «Скриншот».": "Requires iOS 27. In Shortcuts, create an automation with the Screenshot trigger.",
+  "Выберите «Запускать сразу».": "Choose “Run Immediately”.",
+  "Добавьте действие «Извлечь текст из изображения» для снятого скриншота.": "Add the “Extract Text from Image” action for the screenshot.",
+  "Добавьте действие Mora «Log Bank Message». В «Text» выберите извлечённый текст, в «From» впишите «Скриншот».": "Add the Mora action “Log Bank Message”. For “Text”, choose the extracted text; type “Screenshot” in “From”.",
+  "Автоматизация «Скриншот»": "“Screenshot” automation",
+  "Для оплат по QR-коду и в приложениях без SMS и уведомлений: сделайте скриншот экрана «Оплата прошла», и Mora прочитает сумму и получателя. Скриншоты без оплаты Mora пропускает и не сохраняет их текст.": "For QR code payments and apps without texts or notifications: take a screenshot of the payment confirmation, and Mora reads the amount and recipient. Mora skips screenshots without a payment and doesn't save their text.",
+  "Эта покупка уже пришла другим сообщением банка: не отправлено.": "This purchase already came in another bank message: not sent.",
+  "Уже пришло другим сообщением банка": "Already came in another bank message"
 }

@@ -43,6 +43,8 @@ struct BankAlert: Codable, Identifiable, Equatable, Sendable {
     /// Came from the Wallet notification action: it completes a Wallet purchase and is
     /// never booked by itself. `source` is the notification title, the card or its bank.
     var wallet: Bool?
+    /// Another bank message confirmed to describe the same purchase.
+    var sameAs: UUID?
 
     /// The card name sent to the shared database. Mora links it to an account
     /// the first time, like a Wallet card.
@@ -88,8 +90,18 @@ enum BankAlertLog {
             if let run = pairableRun(for: alert, in: walletRuns, pairedIn: directory) {
                 alert.state = .duplicate; alert.walletRunID = run.id
                 alert.lastError = "Эта покупка уже пришла из Wallet: сообщение не отправлено."
-            } else if value.automatic && !alert.income {
-                alert.state = sending ? .waiting : .logged
+            } else {
+                if value.automatic && !alert.income { alert.state = sending ? .waiting : .logged }
+                if var other = samePurchase(as: alert, in: directory) {
+                    if other.state == .review && other.attempts == 0 && alert.state == .waiting {
+                        // Save the winning purchase before suppressing the earlier review.
+                        try save(alert, in: directory)
+                        other.state = .duplicate; other.sameAs = alert.id; other.lastError = otherMessageNote
+                        try save(other, in: directory)
+                    } else {
+                        alert.state = .duplicate; alert.sameAs = other.id; alert.lastError = otherMessageNote
+                    }
+                }
             }
         }
         try save(alert, in: directory)
@@ -120,6 +132,41 @@ enum BankAlertLog {
         try save(alert, in: directory)
         prune(before: date.addingTimeInterval(-Double(keptDays) * 86_400), in: directory)
         return alert
+    }
+
+    // MARK: One purchase from several bank messages
+
+    static let otherMessageNote = "Эта покупка уже пришла другим сообщением банка: не отправлено."
+
+    /// Different SMS/push wordings can describe one purchase. Require every identity
+    /// field and exactly one candidate; missing data never authorizes suppressing a purchase.
+    static func samePurchase(as alert: BankAlert, in directory: URL) -> BankAlert? {
+        let source = BankMessage.normalized(alert.source).lowercased()
+        let merchant = MerchantName.normalized(alert.merchant)
+        guard alert.wallet != true, !alert.income, !source.isEmpty, !merchant.isEmpty,
+              alert.cardLast4.count == 4, alert.cardLast4.allSatisfy(\.isNumber),
+              Locale.commonISOCurrencyCodes.contains(alert.currency),
+              let amount = Money.parse(alert.amount), amount > 0 else { return nil }
+        let key = formatKey(alert.text)
+        guard !key.isEmpty else { return nil }
+        let all = alerts(in: directory)
+        let paired = Set(all.compactMap(\.sameAs)).union(all.filter { $0.sameAs != nil }.map(\.id))
+        let candidates = all.filter { other in
+            other.id != alert.id && !paired.contains(other.id) && other.wallet != true && !other.income
+                && ([.review, .waiting, .delivered].contains(other.state) || (other.state == .duplicate && other.walletRunID != nil))
+                && Money.parse(other.amount) == amount
+                && abs(other.receivedAt.timeIntervalSince(alert.receivedAt)) < pairWindow
+                && BankMessage.normalized(other.source).lowercased() == source
+                && other.cardLast4 == alert.cardLast4 && other.currency == alert.currency
+                && MerchantName.normalized(other.merchant) == merchant
+                && !formatKey(other.text).isEmpty && formatKey(other.text) != key
+        }
+        return candidates.count == 1 ? candidates.first : nil
+    }
+
+    /// Repeated messages with the same wording remain separate purchases.
+    static func formatKey(_ text: String) -> String {
+        String(text.split(separator: "\n").first ?? "").lowercased().filter(\.isLetter)
     }
 
     // MARK: Working together with the Wallet automation
@@ -253,6 +300,10 @@ actor BankAlertDelivery {
         self.directory = directory; self.wallet = wallet; self.transport = transport
     }
 
+    func record(text: String, source: String, sending: Bool) throws -> BankAlert {
+        try BankAlertLog.record(text: text, source: source, sending: sending, directory: directory)
+    }
+
     func deliverWaiting(with sender: WalletSender? = WalletSender.current()) async {
         guard let sender else { return }
         for var alert in BankAlertLog.alerts(in: directory).reversed() where alert.state == .waiting {
@@ -345,7 +396,7 @@ struct LogBankMessageIntent: AppIntent {
         let body = [title, text].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.joined(separator: "\n")
         guard !body.isEmpty else { return .result() }
         let sender = WalletSender.current()
-        if let alert = try? BankAlertLog.record(text: body, source: source ?? "", sending: sender != nil) {
+        if let alert = try? await BankAlertDelivery.shared.record(text: body, source: source ?? "", sending: sender != nil) {
             await BankAlertDelivery.shared.completeWallet(alert.id)
         }
         if let sender {
