@@ -1,5 +1,13 @@
 # Changelog
 
+## iPhone 1.0.52 — 2026-11-14
+
+iPhone 1.0.52 (build 53) · Mac unchanged (1.7.19, build 98)
+
+- **Version in the footer.** Overview and More show "Mora 1.0.52 (53)" under the storage status, so the installed build is always visible.
+- **Wider selection on small phones.** On narrow iPhones (mini, SE) the bar uses more of the screen width, and the resting selection is 8 points wider than a tab slot, so "Transactions" fits inside it.
+- **Tab bar layout diagnostics.** The app records how the tab screens' bottom safe area is set up in `Library/Caches/tabbar-diagnostics.txt`, so iOS 27 behaviour can be read from a development iPhone.
+
 ## iPhone 1.0.51 — 2026-11-14
 
 iPhone 1.0.51 (build 52) · Mac unchanged (1.7.19, build 98)

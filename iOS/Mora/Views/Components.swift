@@ -344,12 +344,24 @@ struct StorageFooter: View {
         return 0
     }
 
+
+    private static var version: String {
+        let info = Bundle.main.infoDictionary
+        let short = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        return "Mora \(short) (\(build))"
+    }
+
     var body: some View {
-        HStack(spacing: 5) {
-            Image(systemName: "lock.shield")
-            Text(store.isDemo ? L("Демонстрационный режим · изменения не сохраняются")
-                 : cloud.householdID == nil ? L("Данные хранятся на этом iPhone")
-                 : L("Локальная копия общей базы · \(cloud.enabled ? L("синхронизация включена") : L("синхронизация на паузе"))"))
+        VStack(spacing: 3) {
+            HStack(spacing: 5) {
+                Image(systemName: "lock.shield")
+                Text(store.isDemo ? L("Демонстрационный режим · изменения не сохраняются")
+                     : cloud.householdID == nil ? L("Данные хранятся на этом iPhone")
+                     : L("Локальная копия общей базы · \(cloud.enabled ? L("синхронизация включена") : L("синхронизация на паузе"))"))
+            }
+            // Always visible, so the installed build can be checked at a glance.
+            Text(verbatim: Self.version).monospacedDigit()
         }
         .font(.caption2).foregroundStyle(.tertiary).multilineTextAlignment(.center)
         .frame(maxWidth: .infinity).padding(.vertical, 8)
