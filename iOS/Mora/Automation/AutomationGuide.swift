@@ -60,7 +60,9 @@ struct AutomationGuide: View {
             .onChange(of: step) { _, value in if value == 0 { manual = !automation.oneTapAvailable } }
             .task(id: step) {
                 // The last step watches the journal for the first entry from this automation.
-                guard step == steps else { return }
+                // The manual Wallet Transaction guide is a separate view that marks its own end;
+                // here it leaves no pages, so step 1 would wrongly count as the last one.
+                guard step == steps, !(automation == .walletTransaction && manual) else { return }
                 automation.setupFinishedAt = startedAt
                 while !Task.isCancelled {
                     let since = startedAt.addingTimeInterval(-60)
