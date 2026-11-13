@@ -1,5 +1,12 @@
 # Changelog
 
+## iPhone 1.0.56 — 2026-11-14
+
+iPhone 1.0.56 (build 57) · Mac unchanged (1.7.19, build 98)
+
+- **Set Up Manually.** The ready automation's link is called "Set Up Manually" again. For Wallet Transaction it now opens step 1 of the manual guide right away instead of showing the intro a second time; Back on step 1 returns to the ready automation.
+
+
 ## iPhone 1.0.55 — 2026-11-14
 
 iPhone 1.0.55 (build 56) · Mac unchanged (1.7.19, build 98)

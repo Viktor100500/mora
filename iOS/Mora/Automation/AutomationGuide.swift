@@ -94,7 +94,7 @@ struct AutomationGuide: View {
             instructions(page.lines)
             if !manual && step == 1 {
                 Button { withAnimation { manual = true; step = 1 } } label: {
-                    Text(L("Собрать вручную")).font(.subheadline).frame(maxWidth: .infinity)
+                    Text(L("Настроить вручную")).font(.subheadline).frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.plain).foregroundStyle(Color.moraGreen)
             }
@@ -127,7 +127,7 @@ struct AutomationGuide: View {
             } else {
                 Card {
                     VStack(alignment: .leading, spacing: 12) {
-                        benefit("square.stack.3d.up", manual ? L("Соберём вручную: \(pages.count) коротких шага и проверка, около двух минут.")
+                        benefit("square.stack.3d.up", manual ? L("Настроим вручную: \(pages.count) коротких шага и проверка, около двух минут.")
                                                              : L("Готовая автоматизация уже в Mora: добавьте её и включите переключатель."))
                         benefit("lock.shield", L("Работает на заблокированном iPhone и без интернета: покупка уйдёт позже."))
                         benefit("square.on.square", L("Если та же покупка придёт и из другой автоматизации, Mora объединит их и покажет это в журнале."))
