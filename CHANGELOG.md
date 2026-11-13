@@ -1,5 +1,12 @@
 # Changelog
 
+## iPhone 1.0.62 — 2026-11-14
+
+iPhone 1.0.62 (build 63) · Mac unchanged (1.7.19, build 98)
+
+- **Last run only when Working.** The time next to an automation's button appears only with the green Working state. Set Up and Waiting for Purchase no longer show the age of an old journal entry, such as "2 days ago".
+
+
 ## iPhone 1.0.61 — 2026-11-14
 
 iPhone 1.0.61 (build 62) · Mac unchanged (1.7.19, build 98)
