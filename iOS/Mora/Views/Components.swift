@@ -338,9 +338,9 @@ struct StorageFooter: View {
     @EnvironmentObject private var store: FinanceStore
     @EnvironmentObject private var cloud: CloudSync
 
-    private var bottomClearance: CGFloat {
-        // Keep the last scrollable row above the floating iPhone bar.
-        if #available(iOS 26, *), UIDevice.current.userInterfaceIdiom == .phone { return 64 }
+    private var labelOffset: CGFloat {
+        // Move only the caption; extra padding changes the whole scroll layout.
+        if #available(iOS 26, *), UIDevice.current.userInterfaceIdiom == .phone { return -12 }
         return 0
     }
 
@@ -353,7 +353,7 @@ struct StorageFooter: View {
         }
         .font(.caption2).foregroundStyle(.tertiary).multilineTextAlignment(.center)
         .frame(maxWidth: .infinity).padding(.vertical, 8)
-        .padding(.bottom, bottomClearance)
+        .offset(y: labelOffset)
     }
 }
 
