@@ -1,5 +1,12 @@
 # Changelog
 
+## iPhone 1.0.49 — 2026-11-14
+
+iPhone 1.0.49 (build 50) · Mac unchanged (1.7.19, build 98)
+
+- **Screens end above the tab bar.** The floating bar now lives in the tab controller's own view, at the real bottom edge, and each tab reserves its height through UIKit's safe area. Overview, Transactions and every other screen, including pushed ones, scroll to their last row above the bar. 1.0.47's SwiftUI inset never reached the screens, and its bar sat 34 points higher than its reserved space.
+- **Native Liquid Glass lens, also with Reduce Motion.** Like Telegram, the bar drives UIKit's own tab lens directly: it lifts as refracting glass on touch, follows the finger, and settles on the chosen tab with UIKit's lift and move springs. Reduce Motion no longer turns it off. This replaces 1.0.47's hand-made lens, which jumped between touch events.
+
 ## iPhone 1.0.48 — 2026-11-13
 
 iPhone 1.0.48 (build 49) · Mac unchanged (1.7.19, build 98)
