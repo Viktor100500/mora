@@ -410,9 +410,7 @@
   "Для оплат по QR-коду и в приложениях без SMS и уведомлений: сделайте скриншот экрана «Оплата прошла», и Mora прочитает сумму и получателя. Скриншоты без оплаты Mora пропускает и не сохраняет их текст.": "For QR code payments and apps without texts or notifications: take a screenshot of the payment confirmation, and Mora reads the amount and recipient. Mora skips screenshots without a payment and doesn't save their text.",
   "Эта покупка уже пришла другим сообщением банка: не отправлено.": "This purchase already came in another bank message: not sent.",
   "Уже пришло другим сообщением банка": "Already came in another bank message",
-  "Собрать вручную": "Build it by hand",
   "Триггер «Уведомление» появился в iOS 27. Обновите iPhone, и эта автоматизация станет доступна.": "The Notification trigger arrived in iOS 27. Update your iPhone to use this automation.",
-  "Соберём вручную: {0} коротких шага и проверка, около двух минут.": "We'll build it by hand: {0} short steps and a check, about two minutes.",
   "Готовая автоматизация уже в Mora: добавьте её и включите переключатель.": "A ready-made automation is included in Mora: add it and turn on its switch.",
   "Работает на заблокированном iPhone и без интернета: покупка уйдёт позже.": "Works on a locked iPhone and offline: the purchase is sent later.",
   "Если та же покупка придёт и из другой автоматизации, Mora объединит их и покажет это в журнале.": "If the same purchase also comes from another automation, Mora merges them and shows this in the log.",
@@ -566,5 +564,6 @@
   "Вы настроили автоматизацию. Как только придёт уведомление банка о покупке и Mora его прочитает, настройка подтвердится.": "You've set up the automation. As soon as a bank notification about a purchase arrives and Mora reads it, the setup is confirmed.",
   "Настроена · ждём первую покупку, чтобы проверить": "Set up · waiting for the first purchase to confirm",
   "Ждём покупку": "Waiting for Purchase",
-  "Работает": "Working"
+  "Работает": "Working",
+  "Настроим вручную: {0} коротких шага и проверка, около двух минут.": "We'll set it up manually: {0} short steps and a check, about two minutes."
 }

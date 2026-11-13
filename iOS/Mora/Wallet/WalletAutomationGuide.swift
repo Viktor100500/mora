@@ -12,6 +12,13 @@ struct WalletAutomationGuide: View {
     @State private var latest: WalletRun?
     /// Back on the first step returns to the ready automation instead of this intro.
     var exitManual: (() -> Void)?
+
+    /// Opened from the ready automation's "Set Up Manually", the guide starts at step 1:
+    /// the intro was already shown there.
+    init(exitManual: (() -> Void)? = nil) {
+        self.exitManual = exitManual
+        _step = State(initialValue: exitManual == nil ? 0 : 1)
+    }
     private let manual = true
 
     /// Undocumented, checked on iOS 26 and 27: opens the Automation tab of Shortcuts.
