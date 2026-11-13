@@ -1,5 +1,14 @@
 # Changelog
 
+## iPhone 1.0.52 — 2026-11-14
+
+iPhone 1.0.52 (build 53) · Mac unchanged (1.7.19, build 98)
+
+- **Ready automation, step by step.** On iOS 27 setup now follows the real screens: Add to Shortcuts → choose Shortcuts in the share sheet → Add Shortcut → go back from the editor without changes ("Automation is turned off" is expected there) → turn on the switch in the Automation tab. Each step has its own drawing. The Wallet Transaction automation uses the same flow; cards no longer need to be chosen, its trigger already covers any card.
+- **Waiting for the first purchase.** After the setup guide, an automation's Set Up button becomes "Waiting for Purchase" until at least one purchase arrives from it. It opens a screen that confirms the setup live and offers "Show Instructions Again".
+- **Manual mode no longer sticks.** After "Build it by hand", going back to the start offers the ready automation again, for Wallet Transaction and the other automations.
+
+
 ## iPhone 1.0.51 — 2026-11-14
 
 iPhone 1.0.51 (build 52) · Mac unchanged (1.7.19, build 98)

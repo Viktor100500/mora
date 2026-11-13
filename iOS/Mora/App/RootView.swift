@@ -776,9 +776,9 @@ private struct SheetContent: View {
         case .csv(let table, let name): CSVImportView(table: table, filename: name)
         case .walletReview(let capture): TransactionEditor(walletCapture: capture, ledger: store.ledger).id(capture.id)
         case .walletRun(let run, let account): TransactionEditor(walletRun: (run, account), ledger: store.ledger).id(run.id)
-        case .walletGuide: WalletAutomationGuide()
-        case .automationGuide(let automation):
-            if automation == .walletTransaction { WalletAutomationGuide() } else { AutomationGuide(automation: automation) }
+        case .walletGuide: AutomationGuide(automation: .walletTransaction)
+        case .automationGuide(let automation): AutomationGuide(automation: automation)
+        case .automationWaiting(let automation): AutomationWaitingView(automation: automation)
         }
     }
 }
