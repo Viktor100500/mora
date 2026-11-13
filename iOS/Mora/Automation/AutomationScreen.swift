@@ -156,7 +156,9 @@ private struct AutomationRow: View {
                 }
                 .buttonStyle(.bordered).controlSize(.small).tint(tint)
                 .disabled(!automation.available)
-                if let lastRun, automation.available {
+                // Only a counted purchase has a time worth showing: next to Set Up or Waiting,
+                // an old journal entry would contradict the button.
+                if let lastRun, automation.available, state == .working {
                     Text(lastRun.formatted(.relative(presentation: .named).locale(L10n.locale)))
                         .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 }
