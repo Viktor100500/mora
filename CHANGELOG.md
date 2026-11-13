@@ -1,5 +1,12 @@
 # Changelog
 
+## iPhone 1.0.54 — 2026-11-14
+
+iPhone 1.0.54 (build 55) · Mac unchanged (1.7.19, build 98)
+
+- **Screens end above the tab bar on iOS 27.** Diagnostics from an iOS 27.2 iPhone showed TabView resetting the tabs' `additionalSafeAreaInsets` to 0, and no SwiftUI safe-area inset reaching the Lists and ScrollViews inside a tab's NavigationStack. Each tab now adds the missing room as bottom content margins, which reach every list and scroll view of the tab, pushed screens included, through the environment. iOS 26 keeps its UIKit inset and gets no extra margin.
+- **Selection stays inside the bar.** On the first and last tabs the wider selection no longer sticks out past the bar's rounded ends.
+
 ## iPhone 1.0.53 — 2026-11-14
 
 iPhone 1.0.53 (build 54) · Mac unchanged (1.7.19, build 98)
