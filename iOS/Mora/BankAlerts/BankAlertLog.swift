@@ -45,6 +45,13 @@ struct BankAlert: Codable, Identifiable, Equatable, Sendable {
     var wallet: Bool?
     /// Another bank message confirmed to describe the same purchase.
     var sameAs: UUID?
+    /// Which automation passed the message: an SMS or a bank app notification. Nil for
+    /// messages saved before Mora 1.0.48 and for Wallet notifications, see `wallet`.
+    var channel: Channel?
+    /// The message only brought the amount of a Wallet purchase that came without one.
+    var completedWallet: Bool?
+
+    enum Channel: String, Codable, Sendable { case sms, notification }
 
     /// The card name sent to the shared database. Mora links it to an account
     /// the first time, like a Wallet card.
@@ -76,16 +83,16 @@ enum BankAlertLog {
     }
 
     @discardableResult
-    static func record(text: String, source: String, sending: Bool, at date: Date = .now,
+    static func record(text: String, source: String, channel: BankAlert.Channel? = nil, sending: Bool, at date: Date = .now,
                        directory: URL = directory, templates: [BankMessageTemplate] = templates(),
                        walletRuns: [WalletRun] = WalletRunLog.runs()) throws -> BankAlert {
         let source = source.trimmingCharacters(in: .whitespacesAndNewlines)
         var alert: BankAlert
         switch BankMessage.parse(text, sender: source, templates: templates) {
         case .ignored(let reason):
-            alert = BankAlert(receivedAt: date, source: source, text: "", state: .ignored, ignoredReason: reason)
+            alert = BankAlert(receivedAt: date, source: source, text: "", state: .ignored, ignoredReason: reason, channel: channel)
         case .parsed(let value):
-            alert = BankAlert(receivedAt: date, source: source, text: BankMessage.normalized(text), state: .review)
+            alert = BankAlert(receivedAt: date, source: source, text: BankMessage.normalized(text), state: .review, channel: channel)
             alert.apply(value)
             if let run = pairableRun(for: alert, in: walletRuns, pairedIn: directory) {
                 alert.state = .duplicate; alert.walletRunID = run.id
@@ -238,6 +245,11 @@ enum BankAlertLog {
             .sorted { $0.receivedAt > $1.receivedAt }
     }
 
+    /// Removes the journal but keeps messages that still wait for sending or a check.
+    static func clear(in directory: URL = directory) {
+        for alert in alerts(in: directory) where !alert.needsUser && alert.state != .waiting { remove(alert.id, in: directory) }
+    }
+
     static func remove(_ id: UUID, in directory: URL = directory) {
         try? FileManager.default.removeItem(at: directory.appending(path: id.uuidString + ".json"))
     }
@@ -300,8 +312,8 @@ actor BankAlertDelivery {
         self.directory = directory; self.wallet = wallet; self.transport = transport
     }
 
-    func record(text: String, source: String, sending: Bool) throws -> BankAlert {
-        try BankAlertLog.record(text: text, source: source, sending: sending, directory: directory)
+    func record(text: String, source: String, channel: BankAlert.Channel? = nil, sending: Bool) throws -> BankAlert {
+        try BankAlertLog.record(text: text, source: source, channel: channel, sending: sending, directory: directory)
     }
 
     func deliverWaiting(with sender: WalletSender? = WalletSender.current()) async {
@@ -349,7 +361,7 @@ actor BankAlertDelivery {
               let run = await wallet.complete(amount: [alert.amount, alert.currency].filter { !$0.isEmpty }.joined(separator: " "),
                                               merchant: alert.merchant, card: alert.wallet == true ? alert.source : nil,
                                               reportedAt: alert.receivedAt, now: now) else { return }
-        alert.state = .duplicate; alert.walletRunID = run.id
+        alert.state = .duplicate; alert.walletRunID = run.id; alert.completedWallet = true
         alert.lastError = "Сумма добавлена к покупке из Wallet, которая пришла без суммы."
         try? BankAlertLog.save(alert, in: directory)
     }
@@ -375,9 +387,10 @@ actor BankAlertDelivery {
     }
 }
 
-/// The Shortcuts action for the "Message" automation (bank SMS) and, on iOS 27,
-/// the "Notification" automation (bank and card apps). Runs without opening Mora,
-/// also on a locked iPhone, and never fails the automation.
+/// The Shortcuts action for the "Message" automation (bank SMS). Automations made
+/// before Mora 1.0.48 also use it for bank app notifications and pass their Title;
+/// new ones use `LogBankNotificationIntent`. Runs without opening Mora, also on a
+/// locked iPhone, and never fails the automation.
 struct LogBankMessageIntent: AppIntent {
     static let title: LocalizedStringResource = "Log Bank Message"
     static let description = IntentDescription("Reads a purchase from a bank text message or app notification. One-time codes and other messages are dropped without saving their text. A new message format waits for review in Mora once; later messages in the same format are sent automatically.")
@@ -393,17 +406,47 @@ struct LogBankMessageIntent: AppIntent {
     }
 
     func perform() async throws -> some IntentResult {
+        let hasTitle = !(title ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        await BankAlertDelivery.logFromShortcut(title: title, text: text, source: source ?? "", channel: hasTitle ? .notification : .sms)
+        return .result()
+    }
+}
+
+/// The Shortcuts action for the iOS 27 "Notification" automation of a bank or card app.
+/// Separate from SMS so the journal knows where each purchase came from.
+struct LogBankNotificationIntent: AppIntent {
+    static let title: LocalizedStringResource = "Log Bank Notification"
+    static let description = IntentDescription("Reads a purchase from a notification of a bank or card app. Pass the notification's Title and Body and the app name. Notifications without a purchase are dropped without saving their text. A new format waits for review in Mora once.")
+    static let openAppWhenRun = false
+    static let authenticationPolicy = IntentAuthenticationPolicy.alwaysAllowed
+
+    @Parameter(title: "Title") var title: String?
+    @Parameter(title: "Body") var body: String?
+    @Parameter(title: "App") var app: String?
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("Log notification \(\.$title), \(\.$body) from \(\.$app)")
+    }
+
+    func perform() async throws -> some IntentResult {
+        await BankAlertDelivery.logFromShortcut(title: title, text: body, source: app ?? "", channel: .notification)
+        return .result()
+    }
+}
+
+extension BankAlertDelivery {
+    /// Shared by the SMS and notification actions: save, complete a Wallet purchase, send.
+    static func logFromShortcut(title: String?, text: String?, source: String, channel: BankAlert.Channel) async {
         let body = [title, text].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }.joined(separator: "\n")
-        guard !body.isEmpty else { return .result() }
+        guard !body.isEmpty else { return }
         let sender = WalletSender.current()
-        if let alert = try? await BankAlertDelivery.shared.record(text: body, source: source ?? "", sending: sender != nil) {
-            await BankAlertDelivery.shared.completeWallet(alert.id)
+        if let alert = try? await shared.record(text: body, source: source, channel: channel, sending: sender != nil) {
+            await shared.completeWallet(alert.id)
         }
         if let sender {
             await WalletDelivery.shared.deliverWaiting(with: sender)
-            await BankAlertDelivery.shared.deliverWaiting(with: sender)
+            await shared.deliverWaiting(with: sender)
         }
-        return .result()
     }
 }
 

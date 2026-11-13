@@ -293,7 +293,7 @@ struct WalletAutomationCheck: View {
                     ProgressView()
                     VStack(alignment: .leading, spacing: 3) {
                         Text(L("Ждём первую оплату")).font(.headline)
-                        Text(L("Mora покажет здесь, что передал Wallet. Можно закрыть помощника: проверка есть и в «Apple Pay на этом iPhone».")).font(.caption).foregroundStyle(.secondary)
+                        Text(L("Mora покажет здесь, что передал Wallet. Можно закрыть помощника: результат будет виден в «Автоматизация» → «Журнал».")).font(.caption).foregroundStyle(.secondary)
                     }
                 }
             }
@@ -315,7 +315,7 @@ struct WalletAutomationCheck: View {
 // MARK: Shortcuts screens drawn for the guide
 
 /// A rounded "phone screen" frame around a drawing of the Shortcuts interface.
-private struct GuideMock<Content: View>: View {
+struct GuideMock<Content: View>: View {
     @ViewBuilder var content: Content
     var body: some View {
         content
@@ -409,7 +409,7 @@ private struct PropertyListMock: View {
 }
 
 /// A Shortcuts action block: plain words and blue variable fields.
-private struct ActionMock: View {
+struct ActionMock: View {
     enum Part { case text(String), token(String) }
     let title: String
     let parts: [Part]
@@ -445,7 +445,7 @@ private struct ActionMock: View {
 }
 
 /// The Wallet app icon as the Shortcuts trigger list shows it: stacked card stripes.
-private struct WalletAppIcon: View {
+struct WalletAppIcon: View {
     var body: some View {
         RoundedRectangle(cornerRadius: 7, style: .continuous)
             .fill(Color(red: 0.93, green: 0.91, blue: 0.86))

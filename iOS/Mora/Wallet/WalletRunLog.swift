@@ -291,5 +291,7 @@ struct MoraAppShortcuts: AppShortcutsProvider {
                     shortTitle: "Log Wallet Notification", systemImageName: "bell.badge")
         AppShortcut(intent: LogBankMessageIntent(), phrases: ["Log bank message in \(.applicationName)"],
                     shortTitle: "Log Bank Message", systemImageName: "message")
+        AppShortcut(intent: LogBankNotificationIntent(), phrases: ["Log bank notification in \(.applicationName)"],
+                    shortTitle: "Log Bank Notification", systemImageName: "app.badge")
     }
 }
