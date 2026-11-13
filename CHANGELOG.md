@@ -1,5 +1,12 @@
 # Changelog
 
+## iPhone 1.0.66 — 2026-11-14
+
+iPhone 1.0.66 (build 67) · Mac unchanged (1.7.19, build 98)
+
+- **Ready Bank SMS automation.** The signed Bank SMS automation is bundled without any text filter and without senders. Set Up adds it in one tap; the guide then asks to choose the senders of all your banks. All four automations now have a ready iOS 27 version.
+
+
 ## iPhone 1.0.65 — 2026-11-14
 
 iPhone 1.0.65 (build 66) · Mac unchanged (1.7.19, build 98)
