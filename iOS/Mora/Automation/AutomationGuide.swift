@@ -168,9 +168,9 @@ struct AutomationGuide: View {
     private var oneTapPages: [Page] {
         let name = automation.templateName
         let edit: [String] = switch automation {
-        case .bankSMS: ["Проверьте символ валюты в триггере: он должен быть в SMS о ваших покупках. Остальное не меняйте.",
+        case .bankSMS: ["Нажмите на «Отправитель» в триггере и выберите номера и названия всех банков, от которых приходят SMS о покупках. Можно выбрать несколько — одной автоматизации хватит на все банки. Остальное не меняйте.",
                         "Нажмите «‹» в левом верхнем углу."]
-        case .bankNotification: ["Нажмите на приложение в триггере и выберите приложение своего банка. Остальное не меняйте.",
+        case .bankNotification: ["Нажмите на приложение в триггере и выберите приложения всех своих банков и карт. Можно выбрать несколько — одной автоматизации хватит на все. Остальное не меняйте.",
                                  "Нажмите «‹» в левом верхнем углу."]
         default: ["Здесь ничего менять не нужно.", "Нажмите «‹» в левом верхнем углу."]
         }
@@ -183,7 +183,9 @@ struct AutomationGuide: View {
                  lines: ["Нажмите синюю кнопку «Добавить быструю команду» внизу экрана."],
                  mock: AnyView(AddShortcutMock(name: name))),
             Page(title: "Вернитесь назад",
-                 subtitle: "Откроется готовая команда: триггер и действия Mora уже связаны. Надпись «Автоматизация выключена» над триггером — это нормально, её включают на следующем шаге.",
+                 subtitle: automation == .bankSMS || automation == .bankNotification
+                    ? "Откроется готовая команда: действие Mora уже связано с триггером. Осталось выбрать банки — пока они не выбраны, над триггером написано, что автоматизацию нельзя включить."
+                    : "Откроется готовая команда: триггер и действия Mora уже связаны. Надпись «Автоматизация выключена» над триггером — это нормально, её включают на следующем шаге.",
                  lines: edit, mock: AnyView(EditorMock(automation: automation))),
             Page(title: "Включите переключатель",
                  subtitle: "iOS добавляет чужие автоматизации выключенными, и включить их может только владелец iPhone. Это единственное, что нужно сделать руками.",
@@ -218,10 +220,10 @@ struct AutomationGuide: View {
                           "Так же заполните Subtitle и Body. Нажмите «Готово»."],
                   mock: AnyView(actionMock))]
         case .bankSMS:
-            [Page(title: "Создайте автоматизацию «Сообщение»", subtitle: "Для каждой валюты покупок нужна своя такая автоматизация.",
+            [Page(title: "Создайте автоматизацию «Сообщение»", subtitle: "Одной автоматизации хватит на все банки: отправителей можно выбрать несколько.",
                   lines: ["Откройте «Быстрые команды», вкладку «Автоматизация» и нажмите «+». На iOS 27 триггеры добавляются в новую команду как действия.",
                           "Выберите триггер «Сообщение».",
-                          "В «Сообщение содержит» введите символ валюты ваших покупок, например «$», «€» или «₽». Отправителя можно не выбирать."],
+                          "Нажмите на «Отправитель» и выберите номера и названия всех банков, от которых приходят SMS о покупках. Без отправителя автоматизацию нельзя включить."],
                   mock: AnyView(TriggerMock(automation: automation))),
              runImmediately,
              Page(title: "Действие Log Bank Message", subtitle: "Mora получит текст SMS и отправителя. Коды подтверждения она сразу пропускает и не сохраняет.",
@@ -230,16 +232,16 @@ struct AutomationGuide: View {
                           "В поле From так же выберите свойство «Отправитель». Нажмите «Готово»."],
                   mock: AnyView(actionMock))]
         case .bankNotification:
-            [Page(title: "Создайте автоматизацию «Уведомление»", subtitle: "Для каждого приложения банка нужна своя автоматизация.",
+            [Page(title: "Создайте автоматизацию «Уведомление»", subtitle: "Одной автоматизации хватит на все банки: приложений можно выбрать несколько.",
                   lines: ["Откройте «Быстрые команды», вкладку «Автоматизация» и нажмите «+».",
-                          "Найдите триггер «Уведомление» и выберите приложение банка или карты, например Chase или Bybit.",
+                          "Найдите триггер «Уведомление» и выберите приложения всех своих банков и карт, например Chase и Bybit.",
                           "Фильтры по тексту можно не задавать. Уведомления этого приложения должны быть включены в настройках iPhone."],
                   mock: AnyView(TriggerMock(automation: automation))),
              runImmediately,
              Page(title: "Действие Log Bank Notification", subtitle: "Это отдельное действие для уведомлений, не для SMS: так журнал знает, откуда пришла покупка.",
                   lines: ["Найдите в действиях «Mora» → «Log Bank Notification».",
                           "В поле Title выберите «Входные данные команды», нажмите на вставленную переменную и выберите свойство Title. Так же для Body.",
-                          "В поле App впишите название приложения банка, например Chase. Нажмите «Готово»."],
+                          "В поле App так же выберите свойство с названием приложения: так Mora узнает, какой банк прислал уведомление. Нажмите «Готово»."],
                   mock: AnyView(actionMock))]
         case .walletTransaction: []
         }
@@ -252,7 +254,7 @@ struct AutomationGuide: View {
         case .bankSMS:
             ActionMock(title: "Log Bank Message", parts: [.text("Log "), .token("Содержимое"), .text(" from "), .token("Отправитель")])
         case .bankNotification:
-            ActionMock(title: "Log Bank Notification", parts: [.text("Log notification "), .token("Title"), .text(", "), .token("Body"), .text(" from Chase")])
+            ActionMock(title: "Log Bank Notification", parts: [.text("Log notification "), .token("Title"), .text(", "), .token("Body"), .text(" from "), .token("App")])
         case .walletTransaction:
             VStack(spacing: 8) {
                 ActionMock(title: "Start Wallet Payment", parts: [.text("Start payment at "), .token("Merchant"), .text(" named "), .token("Name"), .text(" with "), .token("Card or Pass")])
@@ -372,14 +374,14 @@ private struct TriggerMock: View {
         switch automation {
         case .walletTransaction: "Когда я прикладываю пропуск или карту Wallet"
         case .walletNotification: "Когда я получаю уведомление от Wallet"
-        case .bankSMS: "Когда я получаю сообщение, содержащее «$»"
+        case .bankSMS: "Когда я получаю сообщение от банка"
         default: "Когда я получаю уведомление от приложения банка"
         }
     }
 
     private var detail: String {
         switch automation {
-        case .bankSMS: "Триггер «Сообщение» · Запускать сразу"
+        case .bankSMS: "Отправители: ваши банки · Запускать сразу"
         case .walletTransaction: "Триггер «Транзакция» · Запускать сразу"
         default: "Триггер «Уведомление» · Запускать сразу"
         }
@@ -477,7 +479,7 @@ private struct EditorMock: View {
                 Spacer(minLength: 0)
             }
             VStack(alignment: .leading, spacing: 8) {
-                Label(L("Автоматизация выключена"), systemImage: "clock.badge.xmark")
+                Label(L(automation == .bankSMS ? "Укажите «Отправителя», чтобы включить автоматизацию" : "Автоматизация выключена"), systemImage: "clock.badge.xmark")
                     .font(.caption).padding(.horizontal, 10).padding(.vertical, 6)
                     .background(Color.secondary.opacity(0.15), in: Capsule())
                 Text(L(TriggerMock.sentence(automation))).font(.subheadline.weight(.semibold))

@@ -566,5 +566,16 @@
   "Ждём покупку": "Waiting for Purchase",
   "Работает": "Working",
   "Настроим вручную: {0} коротких шага и проверка, около двух минут.": "We'll set it up manually: {0} short steps and a check, about two minutes.",
-  "Пока отправка не включена, автоматизации из «Ещё» → «Автоматизация / Быстрые команды» только сохраняют покупки в журнале на этом iPhone. Включите её и выберите счета для карт.": "Until sending is on, the automations in More → Automation / Shortcuts only save purchases in the log on this iPhone. Turn it on and choose accounts for your cards."
+  "Пока отправка не включена, автоматизации из «Ещё» → «Автоматизация / Быстрые команды» только сохраняют покупки в журнале на этом iPhone. Включите её и выберите счета для карт.": "Until sending is on, the automations in More → Automation / Shortcuts only save purchases in the log on this iPhone. Turn it on and choose accounts for your cards.",
+  "Нажмите на «Отправитель» в триггере и выберите номера и названия всех банков, от которых приходят SMS о покупках. Можно выбрать несколько — одной автоматизации хватит на все банки. Остальное не меняйте.": "Tap Sender in the trigger and choose the numbers and names of every bank that texts you about purchases. You can choose several: one automation covers all your banks. Leave everything else as is.",
+  "Нажмите на приложение в триггере и выберите приложения всех своих банков и карт. Можно выбрать несколько — одной автоматизации хватит на все. Остальное не меняйте.": "Tap the app in the trigger and choose the apps of all your banks and cards. You can choose several: one automation covers them all. Leave everything else as is.",
+  "Откроется готовая команда: действие Mora уже связано с триггером. Осталось выбрать банки — пока они не выбраны, над триггером написано, что автоматизацию нельзя включить.": "The ready-made shortcut opens with the Mora action already connected to its trigger. Only your banks are left to choose: until you do, the note above the trigger says the automation can't be turned on.",
+  "Одной автоматизации хватит на все банки: отправителей можно выбрать несколько.": "One automation covers all your banks: you can choose several senders.",
+  "Нажмите на «Отправитель» и выберите номера и названия всех банков, от которых приходят SMS о покупках. Без отправителя автоматизацию нельзя включить.": "Tap Sender and choose the numbers and names of every bank that texts you about purchases. Without a sender, the automation can't be turned on.",
+  "Одной автоматизации хватит на все банки: приложений можно выбрать несколько.": "One automation covers all your banks: you can choose several apps.",
+  "Найдите триггер «Уведомление» и выберите приложения всех своих банков и карт, например Chase и Bybit.": "Find the Notification trigger and choose the apps of all your banks and cards, such as Chase and Bybit.",
+  "В поле App так же выберите свойство с названием приложения: так Mora узнает, какой банк прислал уведомление. Нажмите «Готово».": "In the App field, choose the property with the app's name the same way, so Mora knows which bank sent the notification. Tap Done.",
+  "Когда я получаю сообщение от банка": "When I get a message from a bank",
+  "Отправители: ваши банки · Запускать сразу": "Senders: your banks · Run Immediately",
+  "Укажите «Отправителя», чтобы включить автоматизацию": "Configure “Sender” to enable this automation"
 }
