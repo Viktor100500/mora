@@ -124,10 +124,30 @@ struct RootView: View {
 /// Each tab hides the controller-owned bar. The floating bar reserves its height
 /// itself, in the tab controllers' safe area (see `GlassTabBar.applyContentInset`).
 private struct ManagedTabBarVisibility: ViewModifier {
+    /// The bottom safe area this tab actually receives from UIKit, before our own inset.
+    @State private var receivedBottom: CGFloat = 0
+
     func body(content: Content) -> some View {
         if #available(iOS 26, *), UIDevice.current.userInterfaceIdiom == .phone {
-            content.toolbar(.hidden, for: .tabBar)
+            content
+                .toolbar(.hidden, for: .tabBar)
+                // Whatever room UIKit's inset did not provide is reserved here. iOS 26 passes
+                // `additionalSafeAreaInsets` on and this stays 0; iOS 27's TabView drops it,
+                // and this spacer then keeps every screen's end above the bar.
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    Color.clear
+                        .frame(height: max(0, GlassTabBar.reservedHeight(homeInset: Self.homeInset) - receivedBottom))
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+                .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { receivedBottom = $0 }
         } else { content }
+    }
+
+    private static var homeInset: CGFloat {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let window = scenes.flatMap(\.windows).first { $0.isKeyWindow } ?? scenes.first?.windows.first
+        return window?.safeAreaInsets.bottom ?? 34
     }
 }
 
@@ -248,9 +268,13 @@ private final class GlassTabBar: UIView {
     /// The view reaches the bottom of the screen; the capsule floats above it.
     static let height = topRoom + capsuleHeight + maxBottomMargin
     static func bottomMargin(homeInset: CGFloat) -> CGFloat { homeInset > 0 ? maxBottomMargin : 10 }
+    /// The room content needs from the bottom of the screen: the capsule and a small gap.
+    static func reservedHeight(homeInset: CGFloat) -> CGFloat {
+        capsuleHeight + bottomMargin(homeInset: homeInset) + 8
+    }
     /// How far the capsule (plus a small gap) rises above the bottom safe area.
     static func contentInset(homeInset: CGFloat) -> CGFloat {
-        max(0, capsuleHeight + bottomMargin(homeInset: homeInset) - homeInset + 8)
+        max(0, reservedHeight(homeInset: homeInset) - homeInset)
     }
 
     /// `_UILiquidLensViewLargeVariantSpec`: minimum lifted time and the lift spring's response.

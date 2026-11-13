@@ -1,5 +1,11 @@
 # Changelog
 
+## iPhone 1.0.50 — 2026-11-14
+
+iPhone 1.0.50 (build 51) · Mac unchanged (1.7.19, build 98)
+
+- **Tab bar room on iOS 27.** iOS 27's TabView drops the inset that 1.0.49 set on each tab, so screens again scrolled under the bar on iPhone. Each tab now measures the bottom safe area it actually receives and reserves only what is still missing for the bar. iOS 26 keeps its single inset; nothing is counted twice.
+
 ## iPhone 1.0.49 — 2026-11-14
 
 iPhone 1.0.49 (build 50) · Mac unchanged (1.7.19, build 98)
