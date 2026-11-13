@@ -98,7 +98,10 @@ actor WalletDelivery {
         let waiting = WalletRunLog.runs(in: directory).filter {
             let passed = reportedAt.timeIntervalSince($0.receivedAt)
             let needsFields = $0.amount.isEmpty || $0.sentMerchant.isEmpty
-            let amountMatches = $0.amount.isEmpty || Money.parse($0.amount) == Money.parse(amount)
+            let originalCurrency = BankMessage.walletNotification(subtitle: "", body: $0.amount)?.currency
+            let reportedCurrency = BankMessage.walletNotification(subtitle: "", body: amount)?.currency
+            let currencyMatches = originalCurrency == nil || reportedCurrency == nil || originalCurrency == reportedCurrency
+            let amountMatches = $0.amount.isEmpty || (Money.parse($0.amount) == Money.parse(amount) && currencyMatches)
             return [.waiting, .awaitingAmount].contains($0.delivery) && needsFields && amountMatches && passed > -60 && passed < Self.completionHold
         }
         let named = waiting.filter { run in

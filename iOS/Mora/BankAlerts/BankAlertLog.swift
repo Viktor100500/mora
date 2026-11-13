@@ -131,6 +131,8 @@ enum BankAlertLog {
     static func isSamePurchase(_ alert: BankAlert, _ run: WalletRun) -> Bool {
         guard !alert.income, let amount = Money.parse(alert.amount), amount > 0,
               let paid = Money.parse(run.amount).map(abs) else { return false }
+        let walletCurrency = BankMessage.walletNotification(subtitle: "", body: run.amount)?.currency
+        if let walletCurrency, !alert.currency.isEmpty, alert.currency != walletCurrency { return false }
         let window = alert.wallet == true ? WalletDelivery.completionHold : pairWindow
         return paid == amount && abs(run.receivedAt.timeIntervalSince(alert.receivedAt)) < window
     }

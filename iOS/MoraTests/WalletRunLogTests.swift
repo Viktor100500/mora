@@ -276,6 +276,16 @@ final class WalletRunLogTests: XCTestCase {
         XCTAssertEqual(alert.walletRunID, first.id)
     }
 
+    func testSameNumberInAnotherCurrencyCannotCompleteOrHideAPurchase() async throws {
+        let run = try WalletRunLog.record(amount: "3 EUR", merchant: nil, card: "Visa", sending: true, at: start, in: directory)
+        let delivery = WalletDelivery(directory: directory)
+        let mismatched = await delivery.complete(amount: "3 USD", merchant: "MTA", card: "Visa", reportedAt: start.addingTimeInterval(60))
+        XCTAssertNil(mismatched)
+        var alert = BankAlert(receivedAt: start.addingTimeInterval(60), source: "Visa", text: "", state: .review)
+        alert.amount = "3"; alert.currency = "USD"; alert.wallet = true
+        XCTAssertFalse(BankAlertLog.isSamePurchase(alert, run))
+    }
+
     func testServerAnswersMapToRetryOrDecision() {
         XCTAssertEqual(WalletDelivery.outcome(status: 200, data: Data(#"{"state":"pending","reason":"x"}"#.utf8)), .delivered(state: "pending", reason: "x"))
         XCTAssertEqual(WalletDelivery.outcome(status: 401, data: Data()), .keyRejected)
