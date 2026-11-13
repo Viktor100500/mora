@@ -63,3 +63,8 @@ docs/localization-and-navigation.md
 docs/scrolling-regression.md
 # The shared Apple Pay automation: no key or personal data (cloud/shortcuts/build_wallet_automation.py).
 !iOS/Mora/Resources/Mora Apple Pay.shortcut
+# Ready iOS 27 automations signed by the Mora maintainer: no senders, apps, cards or
+# personal data (checked with cloud/shortcuts/check_automation_file.py).
+!iOS/Mora/Resources/Mora Wallet Notification.shortcut
+!iOS/Mora/Resources/Mora Bank SMS.shortcut
+!iOS/Mora/Resources/Mora Bank Notification.shortcut
