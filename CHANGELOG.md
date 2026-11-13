@@ -1,5 +1,12 @@
 # Changelog
 
+## iPhone 1.0.64 — 2026-11-14
+
+iPhone 1.0.64 (build 65) · Mac unchanged (1.7.19, build 98)
+
+- **All four ready automations.** Wallet Notification, Bank SMS and Bank Notification are now bundled as signed iOS 27 automations next to Wallet Transaction, so their Set Up adds them in one tap. Bank SMS and Bank Notification come without senders or apps chosen; the guide asks to choose all banks after adding. Signatures last until 7–9 Dec 2027.
+
+
 ## iPhone 1.0.63 — 2026-11-14
 
 iPhone 1.0.63 (build 64) · Mac unchanged (1.7.19, build 98)
