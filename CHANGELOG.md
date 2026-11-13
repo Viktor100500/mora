@@ -1,5 +1,13 @@
 # Changelog
 
+## iPhone 1.0.60 — 2026-11-14
+
+iPhone 1.0.60 (build 61) · Mac unchanged (1.7.19, build 98)
+
+- **Set Up Manually no longer counts as a finished setup.** Switching Wallet Transaction to the manual guide made the outer guide see its last step at once and mark the automation as set up, so its card showed Waiting for Purchase. Only reaching the check step of the guide in use counts now. The setup marks are reset once more; the journal is untouched.
+- **Bank SMS.** The third automation is called "Bank SMS" in English instead of "Bank Text".
+
+
 ## iPhone 1.0.59 — 2026-11-14
 
 iPhone 1.0.59 (build 60) · Mac unchanged (1.7.19, build 98)

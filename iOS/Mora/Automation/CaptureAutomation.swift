@@ -127,10 +127,11 @@ enum CaptureAutomation: String, CaseIterable, Identifiable, Sendable {
         return finished == nil ? .notSet : .waiting
     }
 
-    /// Mora 1.0.55 forgets once that the setup guides were completed, so they can be
-    /// tried again. The journals are never touched here.
+    /// Forgets once that the setup guides were completed, so they can be tried again:
+    /// first in 1.0.55, again in 1.0.60 after "Set Up Manually" marked Wallet Transaction
+    /// as set up by mistake. The journals are never touched here.
     static func resetOnceForFreshSetup() {
-        let key = "mora.automation.reset.1.0.55"
+        let key = "mora.automation.reset.1.0.60"
         guard !UserDefaults.standard.bool(forKey: key) else { return }
         for automation in allCases { automation.setupFinishedAt = nil }
         UserDefaults.standard.set(true, forKey: key)
