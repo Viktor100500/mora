@@ -255,7 +255,7 @@ struct AutomationGuide: View {
                     ProgressView()
                     VStack(alignment: .leading, spacing: 3) {
                         Text(L("Ждём первый запуск")).font(.headline)
-                        Text(L("Можно закрыть помощника: результат будет виден в «Автоматизация» → «Журнал».")).font(.caption).foregroundStyle(.secondary)
+                        Text(L("Можно закрыть помощника: результат будет виден в «Автоматизация / Быстрые команды» → «Журнал».")).font(.caption).foregroundStyle(.secondary)
                     }
                 }
             }

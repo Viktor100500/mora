@@ -35,7 +35,7 @@ struct MoreScreen: View {
                     }
                     NavigationLink { AutomationScreen() } label: {
                         HStack {
-                            Label(L("Автоматизация"), systemImage: "bolt.badge.automatic")
+                            Label(L("Автоматизация / Быстрые команды"), systemImage: "bolt.badge.automatic")
                             Spacer()
                             if reviewQueue.count(with: cloud) > 0 {
                                 Text("\(reviewQueue.count(with: cloud))").font(.caption.weight(.bold)).foregroundStyle(.white)
