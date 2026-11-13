@@ -139,11 +139,7 @@ private struct ManagedTabBarVisibility: ViewModifier {
                 // screens included.
                 .contentMargins(.bottom, missingRoom, for: .scrollContent)
                 .contentMargins(.bottom, missingRoom, for: .scrollIndicators)
-                .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: {
-                    receivedBottom = $0
-                    TabBarDiagnostics.noteReceived($0)
-                    TabBarDiagnostics.scheduleSnapshot()
-                }
+                .onGeometryChange(for: CGFloat.self) { $0.safeAreaInsets.bottom } action: { receivedBottom = $0 }
         } else { content }
     }
 
@@ -541,7 +537,6 @@ private final class GlassTabBar: UIView {
         if controller !== insetController { Self.setInset(0, in: insetController) }
         insetController = controller
         Self.setInset(window == nil ? 0 : Self.contentInset(homeInset: homeInset), in: controller)
-        TabBarDiagnostics.scheduleSnapshot()
     }
     private func keepOnTop() {
         if let superview, superview.subviews.last !== self { superview.bringSubviewToFront(self) }
@@ -766,72 +761,6 @@ private final class GlassTabBar: UIView {
             badgeLabel.layer.cornerRadius = 9
         }
         override func accessibilityActivate() -> Bool { activate?(); return true }
-    }
-}
-
-/// Snapshots of how the tab screens' bottom room is set up, written to
-/// Library/Caches/tabbar-diagnostics.txt so they can be copied off a development
-/// device. iOS 27 cannot be run in the simulator here.
-enum TabBarDiagnostics {
-    nonisolated(unsafe) private static var received: [CGFloat] = []
-    nonisolated(unsafe) private static var pending = false
-
-    /// Records a snapshot a moment after layout settles, at most once a second.
-    @MainActor static func scheduleSnapshot() {
-        guard !pending else { return }
-        pending = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
-            pending = false
-            let text = "--- \(Date())\n" + report() + "\n"
-            guard let url = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first?
-                .appendingPathComponent("tabbar-diagnostics.txt") else { return }
-            var existing = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
-            if existing.count > 60_000 { existing = String(existing.suffix(30_000)) }
-            try? (existing + text).write(to: url, atomically: true, encoding: .utf8)
-        }
-    }
-
-    static func noteReceived(_ value: CGFloat) {
-        received.append(value)
-        if received.count > 8 { received.removeFirst(received.count - 8) }
-    }
-
-    @MainActor static func report() -> String {
-        var lines = ["iOS \(UIDevice.current.systemVersion) · \(UIScreen.main.bounds.size)"]
-        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-        guard let window = scenes.flatMap(\.windows).first(where: \.isKeyWindow) else { return (lines + ["no key window"]).joined(separator: "\n") }
-        lines.append("window safe \(Int(window.safeAreaInsets.bottom)) · received \(received.map { String(Int($0)) }.joined(separator: ","))")
-        func name(_ object: AnyObject) -> String { String(String(describing: type(of: object)).prefix(34)) }
-        func visit(_ controller: UIViewController, _ depth: Int) {
-            guard depth < 5 else { return }
-            let view = controller.isViewLoaded ? controller.view : nil
-            lines.append(String(repeating: " ", count: depth) + "\(name(controller)) add \(Int(controller.additionalSafeAreaInsets.bottom)) safe \(view.map { String(Int($0.safeAreaInsets.bottom)) } ?? "-") h \(view.map { String(Int($0.frame.height)) } ?? "-")\(view?.window == nil ? " off" : "")")
-            controller.children.forEach { visit($0, depth + 1) }
-        }
-        if let root = window.rootViewController { visit(root, 0) }
-        var scrolls: [UIScrollView] = []
-        func collect(_ view: UIView) {
-            if let scroll = view as? UIScrollView, scroll.window != nil, !scroll.isHidden, scroll.bounds.height > 200 { scrolls.append(scroll) }
-            view.subviews.forEach(collect)
-        }
-        collect(window)
-        for scroll in scrolls.prefix(4) {
-            let frame = scroll.convert(scroll.bounds, to: window)
-            lines.append("\(name(scroll)) maxY \(Int(frame.maxY)) safe \(Int(scroll.safeAreaInsets.bottom)) adj \(Int(scroll.adjustedContentInset.bottom)) inset \(Int(scroll.contentInset.bottom)) beh \(scroll.contentInsetAdjustmentBehavior.rawValue)")
-        }
-        if let bar = window.findSubview(ofTypeNamed: "GlassTabBar") {
-            let frame = bar.convert(bar.bounds, to: window)
-            lines.append("bar \(Int(frame.minY))-\(Int(frame.maxY)) in \(bar.superview.map(name) ?? "-")")
-        }
-        return lines.joined(separator: "\n")
-    }
-}
-
-private extension UIView {
-    func findSubview(ofTypeNamed typeName: String) -> UIView? {
-        if String(describing: type(of: self)).contains(typeName) { return self }
-        for subview in subviews { if let found = subview.findSubview(ofTypeNamed: typeName) { return found } }
-        return nil
     }
 }
 

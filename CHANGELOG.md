@@ -1,5 +1,11 @@
 # Changelog
 
+## iPhone 1.0.58 — 2026-11-14
+
+iPhone 1.0.58 (build 59) · Mac unchanged (1.7.19, build 98)
+
+- **Tab bar diagnostics removed.** The iOS 27 inset fix is confirmed on the iPhone, so the app no longer records tab bar layout snapshots. The version stays in the footer.
+
 ## iPhone 1.0.57 — 2026-11-14
 
 iPhone 1.0.57 (build 58) · Mac unchanged (1.7.19, build 98)
