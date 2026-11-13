@@ -1,5 +1,13 @@
 # Changelog
 
+## iPhone 1.0.59 — 2026-11-14
+
+iPhone 1.0.59 (build 60) · Mac unchanged (1.7.19, build 98)
+
+- **Recording to the shared database moves to Shared Database.** Cards and accounts, this iPhone's key and the signature warning are now under "More" → "Shared Database", next to sync and members. Automation / Shortcuts keeps only the automations, purchases to review and the log.
+- **The journal is no longer cleared.** 1.0.55 cleared the automation journal together with the setup marks by mistake; the one-time reset now forgets only which setup guides were completed.
+
+
 ## iPhone 1.0.58 — 2026-11-14
 
 iPhone 1.0.58 (build 59) · Mac unchanged (1.7.19, build 98)

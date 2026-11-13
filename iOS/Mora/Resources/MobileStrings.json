@@ -565,5 +565,6 @@
   "Настроена · ждём первую покупку, чтобы проверить": "Set up · waiting for the first purchase to confirm",
   "Ждём покупку": "Waiting for Purchase",
   "Работает": "Working",
-  "Настроим вручную: {0} коротких шага и проверка, около двух минут.": "We'll set it up manually: {0} short steps and a check, about two minutes."
+  "Настроим вручную: {0} коротких шага и проверка, около двух минут.": "We'll set it up manually: {0} short steps and a check, about two minutes.",
+  "Пока отправка не включена, автоматизации из «Ещё» → «Автоматизация / Быстрые команды» только сохраняют покупки в журнале на этом iPhone. Включите её и выберите счета для карт.": "Until sending is on, the automations in More → Automation / Shortcuts only save purchases in the log on this iPhone. Turn it on and choose accounts for your cards."
 }

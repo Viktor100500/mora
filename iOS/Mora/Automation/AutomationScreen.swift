@@ -21,7 +21,6 @@ struct AutomationScreen: View {
     var body: some View {
         List {
             automationsSection
-            sendingSection
             reviewSection
             journalSection
             if !templates.isEmpty {
@@ -86,26 +85,6 @@ struct AutomationScreen: View {
             }
         } header: { Text(L("Быстрые команды")) } footer: {
             Text(L("Каждая автоматизация — отдельная команда со своим действием Mora. Включите те, что подходят вашим картам: если одна покупка придёт из нескольких, Mora объединит их и покажет это в журнале."))
-        }
-    }
-
-    // MARK: Where purchases go
-
-    private var sendingSection: some View {
-        Section {
-            NavigationLink { WalletSetupScreen() } label: {
-                LabeledContent {
-                    Text(WalletSender.current() == nil ? L("Выключено") : L("Включено"))
-                } label: { Label(L("Карты и счета"), systemImage: "creditcard") }
-            }
-            if AppSignature.expiresSoon(), let expiration = AppSignature.expiration {
-                Label(L("Подпись Mora действует до \(expiration.formatted(date: .abbreviated, time: .omitted))"), systemImage: "exclamationmark.triangle")
-                    .font(.footnote).foregroundStyle(.orange)
-            }
-        } header: { Text(L("Запись в общую базу")) } footer: {
-            Text(WalletSender.current() == nil
-                 ? L("Пока отправка не включена, автоматизации только сохраняют покупки в журнале на этом iPhone. Включите её и выберите счета для карт.")
-                 : L("Покупки уходят в общую базу ключом этого iPhone и записываются на счета карт. Без сети покупка ждёт на iPhone и уходит позже."))
         }
     }
 

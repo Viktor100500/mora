@@ -61,6 +61,26 @@ struct CloudScreen: View {
         } message: { Text(L("Локальная копия на iPhone сохранится. Сессия будет удалена из Связки ключей.")) }
     }
 
+    /// Where purchases of the automations go: this iPhone's key and the accounts of its cards.
+
+    private var sendingSection: some View {
+        Section {
+            NavigationLink { WalletSetupScreen() } label: {
+                LabeledContent {
+                    Text(WalletSender.current() == nil ? L("Выключено") : L("Включено"))
+                } label: { Label(L("Карты и счета"), systemImage: "creditcard") }
+            }
+            if AppSignature.expiresSoon(), let expiration = AppSignature.expiration {
+                Label(L("Подпись Mora действует до \(expiration.formatted(date: .abbreviated, time: .omitted))"), systemImage: "exclamationmark.triangle")
+                    .font(.footnote).foregroundStyle(.orange)
+            }
+        } header: { Text(L("Запись в общую базу")) } footer: {
+            Text(WalletSender.current() == nil
+                 ? L("Пока отправка не включена, автоматизации из «Ещё» → «Автоматизация / Быстрые команды» только сохраняют покупки в журнале на этом iPhone. Включите её и выберите счета для карт.")
+                 : L("Покупки уходят в общую базу ключом этого iPhone и записываются на счета карт. Без сети покупка ждёт на iPhone и уходит позже."))
+        }
+    }
+
     private var pairSection: some View {
         Section {
             Button { pairingMac = true } label: { Label(L("Подключиться к Mac"), systemImage: "laptopcomputer.and.iphone") }
@@ -125,6 +145,7 @@ struct CloudScreen: View {
                 Button(L("Оставить версию iPhone"), role: .destructive) { Task { await cloud.keepLocalVersion() } }
             } header: { Label(L("Конфликт синхронизации"), systemImage: "exclamationmark.triangle").foregroundStyle(.orange) }
         }
+        sendingSection
         Section {
             Button { Task { await cloud.invite() } } label: { Label(L("Пригласить участника"), systemImage: "person.badge.plus") }
             if let code = cloud.invitation {
