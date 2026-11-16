@@ -113,10 +113,11 @@ final class CloudSync: ObservableObject {
     func prepare(store: FinanceStore) async {
         self.store = store
         diagnostics?.record("prepare-start", taskCancelled: Task.isCancelled)
+        // Credentials can load independently while local reports are prepared.
+        async let configuration: Void = load()
         await store.load()
-        await load()
+        await configuration
         diagnostics?.record("prepare-loaded", taskCancelled: Task.isCancelled)
-        if enabled && signedIn && !store.isDemo { await synchronize(inBackground: true) }
         diagnostics?.record("prepare-end", taskCancelled: Task.isCancelled)
     }
     func run(store: FinanceStore) async {
@@ -418,10 +419,11 @@ final class CloudSync: ObservableObject {
         if stagedPending != nil { stagedSyncDate = Date() }
         else { lastSync = Date() }
     }
-    func synchronize(inBackground: Bool = false, notifyResult: Bool = false) async {
-        guard enabled, householdID != nil else { return }
+    func synchronize(inBackground: Bool = false, notifyResult: Bool = false, showWalletProgress: Bool = false) async {
+        guard enabled, signedIn, householdID != nil, store?.isDemo == false else { return }
         await operation(inBackground: inBackground, reportSyncResult: notifyResult) {
             guard let store = self.store, let id = self.householdID else { return }
+            if showWalletProgress { self.showSyncProgress() }
             self.diagnostics?.record("sync-start-revision-\(store.revision)", taskCancelled: Task.isCancelled)
             let originalIDs = Set(store.ledger.transactions.map(\.id))
             store.beginDeferredUpdates()

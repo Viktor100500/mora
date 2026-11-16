@@ -1,5 +1,11 @@
 # Changelog
 
+## Mac 1.7.21 — 2026-11-16
+
+Mac 1.7.21 (build 100) · iPhone unchanged
+
+- **Wallet starts with the interface.** Cloud credentials load alongside the local ledger. The first synchronization starts as the launch screen fades away, and “Loading purchases from Wallet…” appears immediately, before any server response. Later background polls remain quiet unless purchases are found.
+
 ## iPhone 1.0.67 · Mac 1.7.20 — 2026-11-13
 
 iPhone 1.0.67 (build 68) · Mac 1.7.20 (build 99)

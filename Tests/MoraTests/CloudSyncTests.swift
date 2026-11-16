@@ -233,6 +233,51 @@ final class CloudSyncTests: XCTestCase {
         if let directory { try FileManager.default.removeItem(at: directory) }
     }
 
+    func testStartupShowsWalletProgressBeforeFirstServerResponseAndClearsEmptyResult() async throws {
+        defer { try? cleanup() }
+        try await prepare()
+        let requested = expectation(description: "First startup request")
+        let response = DispatchSemaphore(value: 0)
+        var first = true
+        SyncStubProtocol.handler = { request in
+            if first {
+                first = false
+                requested.fulfill()
+                guard response.wait(timeout: .now() + 5) == .success else { throw URLError(.timedOut) }
+            }
+            return (200, Data((request.url!.lastPathComponent == "mora_get_status"
+                ? "{\"version\":1,\"pending_count\":0}" : "[]").utf8))
+        }
+        let syncing = Task { await cloud.synchronize(inBackground: true, showWalletProgress: true) }
+        await fulfillment(of: [requested], timeout: 2)
+        XCTAssertEqual(store.activeNotice?.isInProgress, true)
+        XCTAssertEqual(store.activeNotice?.message, "Загружаем покупки из Wallet…")
+        XCTAssertTrue(store.ledger.transactions.isEmpty)
+        response.signal()
+        await syncing.value
+        XCTAssertNil(cloud.error)
+        XCTAssertNil(store.activeNotice)
+        XCTAssertFalse(store.notifications.events.contains { $0.isInProgress })
+
+        var notices: [AppNotification] = []
+        let observation = store.$activeNotice.compactMap { $0 }.sink { notices.append($0) }
+        await cloud.synchronize(inBackground: true)
+        XCTAssertTrue(notices.isEmpty, "Ordinary empty polls stay quiet")
+        withExtendedLifetime(observation) {}
+    }
+
+    func testPausedStartupDoesNotShowWalletProgressOrContactServer() async throws {
+        defer { try? cleanup() }
+        try await prepare()
+        await cloud.pause(true)
+        SyncStubProtocol.handler = { _ in
+            XCTFail("Paused cloud sync must not contact the server")
+            throw URLError(.badURL)
+        }
+        await cloud.synchronize(inBackground: true, showWalletProgress: true)
+        XCTAssertNil(store.activeNotice)
+    }
+
     func testAutomaticForeignWalletBookingRetriesWithoutPartialWritesOrDuplicates() async throws {
         defer { try? cleanup() }
         var ledger = Ledger.empty
