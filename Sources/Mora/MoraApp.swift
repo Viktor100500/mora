@@ -39,13 +39,6 @@ struct MoraApp: App {
                     NSApplication.shared.activate(ignoringOtherApps: true)
                     if let file = await readCSV(at: url, store: store) { sheet = .csv(file.0, file.1) }
                 } }
-                .task {
-                    cloud.preparePresentation = { [categorizer] store in await categorizer.process(store: store, duringSync: true) }
-                    await cloud.prepare(store: store)
-                    async let sync: Void = cloud.run(store: store)
-                    async let categories: Void = categorizer.run(store: store)
-                    _ = await (sync, categories)
-                }
         }
         .defaultSize(width: 1320, height: 900)
         .windowStyle(.hiddenTitleBar)
@@ -204,7 +197,8 @@ struct ContentView: View {
         .smoothUpdates(value: month)
         .onDisappear { monthPreparation?.cancel() }
         .task {
-            await store.load()
+            cloud.preparePresentation = { [categorizer] store in await categorizer.process(store: store, duringSync: true) }
+            await cloud.prepare(store: store)
             guard !Task.isCancelled else { return }
             withAnimation(.easeInOut(duration: reduceMotion ? 0.15 : 0.6)) {
                 showingLaunchScreen = false
@@ -213,6 +207,12 @@ struct ContentView: View {
                     sheet = .welcome
                 }
             }
+            // Start with the interface reveal, before the first server response.
+            // The launch overlay covers the notice during its fade-out.
+            await cloud.synchronize(inBackground: true, showWalletProgress: true)
+            async let sync: Void = cloud.run(store: store)
+            async let categories: Void = categorizer.run(store: store)
+            _ = await (sync, categories)
         }
         .onReceive(dataRefresh) { _ in Task { @MainActor in  await store.reloadFromDisk()  } }
         .onReceive(store.notifications.$navigation) { request in
@@ -234,7 +234,7 @@ struct ContentView: View {
             }
         }
         .onChange(of: language) { _, _ in Task { await store.reloadFromDisk() } }
-        .onChange(of: store.revision) { cloud.localChanged() }
+        .onChange(of: store.revision) { if !showingLaunchScreen { cloud.localChanged() } }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { Task { await store.refreshExchangeRates() } }
         }
