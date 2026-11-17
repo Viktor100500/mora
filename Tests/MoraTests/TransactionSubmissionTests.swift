@@ -70,13 +70,15 @@ final class TransactionSubmissionTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: directory) }
         let value = FinanceCore.Transaction(date: Date(), merchant: "Retain me", amount: -10, accountID: store.ledger.accounts[0].id, note: "Original note")
         var attempts = 0
+        var savedIDs: [UUID] = []
         XCTAssertTrue(store.enqueueTransaction(value, prepare: { value in
             attempts += 1
             if attempts == 1 { throw URLError(.notConnectedToInternet) }
             return value
-        }))
+        }, didSave: { savedIDs.append($0.id) }))
         await store.finishPendingWrites()
         XCTAssertTrue(store.ledger.transactions.isEmpty)
+        XCTAssertTrue(savedIDs.isEmpty)
         XCTAssertNil(store.error, "Background failure belongs in standard notifications")
         XCTAssertEqual(store.activeNotice?.kind, .error)
         let action = try XCTUnwrap(store.activeNotice?.actions.first)
@@ -86,6 +88,7 @@ final class TransactionSubmissionTests: XCTestCase {
         await store.finishPendingWrites()
         XCTAssertEqual(store.ledger.transactions.first?.note, "Original note")
         XCTAssertEqual(store.ledger.transactions.first?.id, value.id)
+        XCTAssertEqual(savedIDs, [value.id])
         XCTAssertEqual(attempts, 2)
         XCTAssertFalse(store.canPerformNotificationAction(action))
         XCTAssertEqual(store.activeNotice?.kind, .success)

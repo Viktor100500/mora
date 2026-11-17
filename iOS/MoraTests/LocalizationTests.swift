@@ -8,8 +8,8 @@ final class LocalizationTests: XCTestCase {
     private var sources: URL {
         URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Mora")
     }
-    /// Names shown in their own language on purpose.
-    private let untranslated: Set<String> = ["Русский"]
+    /// The language name and a stored prefix used to recognize older Wallet log entries.
+    private let untranslated: Set<String> = ["Русский", "Сумма добавлена"]
 
     override func setUp() { L10n.override = .english }
     override func tearDown() { L10n.override = nil }
@@ -19,6 +19,7 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(L("Ещё"), "More")
         XCTAssertEqual(L("Данные хранятся на этом iPhone"), "Data is stored on this iPhone")
         XCTAssertEqual(L("Дублировано операций: 3"), "Duplicated transactions: 3")
+        XCTAssertEqual(L("Определяем категорию…"), "Finding a category…")
     }
 
     func testEveryRussianLiteralIsTranslated() throws {

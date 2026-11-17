@@ -1,5 +1,31 @@
 import Foundation
 
+@MainActor
+public enum TransactionCurrencyPreference {
+    public static func currency(for accountID: UUID?, in ledger: Ledger, defaults: UserDefaults = .standard) -> String {
+        guard let accountID, let account = ledger.account(accountID) else { return "" }
+        if let saved = defaults.string(forKey: key(for: accountID)), Locale.isoCurrencyCodeSet.contains(saved) {
+            return saved
+        }
+        // Before the first new save, use the last eligible entry in ledger insertion order.
+        let previous = ledger.transactions.reversed().first {
+            $0.accountID == accountID && $0.kind != .transfer && $0.externalID == nil &&
+                $0.importBatchID == nil && $0.recurrenceID == nil
+        }
+        if let previous, let original = previous.conversion?.originalCurrency, Locale.isoCurrencyCodeSet.contains(original) {
+            return original
+        }
+        return account.currency
+    }
+
+    public static func remember(_ currency: String, for accountID: UUID, defaults: UserDefaults = .standard) {
+        guard Locale.isoCurrencyCodeSet.contains(currency) else { return }
+        defaults.set(currency, forKey: key(for: accountID))
+    }
+
+    private static func key(for accountID: UUID) -> String { "mora.transactionCurrency.\(accountID.uuidString)" }
+}
+
 public enum TransactionDateEditing {
     /// Set the local hour and minute without changing the event's calendar day.
     /// Merely opening the picker must not discard seconds from imported events.

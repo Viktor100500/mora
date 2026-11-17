@@ -299,12 +299,14 @@ struct TransactionListHeader<Actions: View>: View {
 struct TransactionEditor: View {
     @EnvironmentObject var store: FinanceStore
     @EnvironmentObject private var cloud: CloudSync
+    @EnvironmentObject private var categorizer: MerchantCategorizer
     @Environment(\.dismiss) var dismiss
     var transaction: Transaction?
     private let walletCapture: CloudCapture?
     private let amountSuggestion: WalletReviewDraft.AmountSuggestion?
     private let newWalletCard: String?
     private let rateClient: VisaRateClient
+    private let isNewManual: Bool
     @State private var merchant: String
     @State private var amount: String
     @State private var kind: TransactionKind
@@ -342,6 +344,8 @@ struct TransactionEditor: View {
         self.transaction = transaction
         self.rateClient = rateClient
         let transaction = transaction ?? template.map { $0.similarTransaction() }
+        let isNewManual = transaction == nil && walletCapture == nil
+        self.isNewManual = isNewManual
         self.walletCapture = walletCapture
         let draft = walletCapture.map { WalletReviewDraft(capture: $0, ledger: ledger ?? .empty, locale: L10n.locale) }
         amountSuggestion = draft?.amount.isEmpty == true ? draft?.suggestion : nil
@@ -349,10 +353,12 @@ struct TransactionEditor: View {
         let dateReference = transaction?.date ?? draft?.date ?? Date()
         _merchant = State(initialValue: transaction?.merchant ?? draft?.merchant ?? ""); _amount = State(initialValue: transaction.map { Money.plain(abs($0.conversion?.originalAmount ?? $0.sameCurrencyFee?.originalAmount ?? $0.amount)) } ?? draft?.prefillAmount ?? "")
         _kind = State(initialValue: transaction?.kind ?? .expense); _date = State(initialValue: dateReference)
-        _accountID = State(initialValue: transaction?.accountID ?? (walletCapture == nil ? ledger?.suggestedTransactionAccountID : draft?.accountID)); _categoryID = State(initialValue: transaction?.categoryID)
+        let initialAccountID = transaction?.accountID ?? (walletCapture == nil ? ledger?.suggestedTransactionAccountID : draft?.accountID)
+        _accountID = State(initialValue: initialAccountID); _categoryID = State(initialValue: transaction?.categoryID)
         _destinationID = State(initialValue: transaction?.destinationAccountID); _destinationAmount = State(initialValue: transaction?.destinationAmount.map(Money.plain) ?? "")
         _note = State(initialValue: transaction?.note ?? draft?.note ?? ""); _tags = State(initialValue: transaction?.tags.joined(separator: ", ") ?? draft?.tags.joined(separator: ", ") ?? "")
-        let initialCurrency = transaction?.conversion?.originalCurrency ?? draft?.prefillCurrency ?? ""
+        let initialCurrency = isNewManual ? TransactionCurrencyPreference.currency(for: initialAccountID, in: ledger ?? .empty)
+            : transaction?.conversion?.originalCurrency ?? draft?.prefillCurrency ?? ""
         _currency = State(initialValue: initialCurrency == WalletReviewDraft.unknownCurrency ? "" : initialCurrency)
     }
     private var account: Account? { accountID.flatMap { store.ledger.account($0) } }
@@ -379,6 +385,14 @@ struct TransactionEditor: View {
     private var purchaseCurrency: String { currency.isEmpty ? (account?.currency ?? "") : currency }
     private var currencySelection: Binding<String> {
         Binding(get: { purchaseCurrency }, set: { currency = $0 == account?.currency ? "" : $0 })
+    }
+    private var accountSelection: Binding<UUID?> {
+        Binding(get: { accountID }, set: { id in
+            guard id != accountID else { return }
+            accountID = id
+            if destinationID == id { destinationID = nil }
+            if isNewManual { currency = TransactionCurrencyPreference.currency(for: id, in: store.ledger) }
+        })
     }
     private var needsConversion: Bool { kind != .transfer && account != nil && purchaseCurrency != account?.currency }
     private var quoteKey: String { "\(purchaseCurrency)|\(account?.currency ?? "")|\(Dates.string(date))|\(kind.rawValue)|\(accountID?.uuidString ?? "")|\(Money.plain(account?.bankFeePercent ?? 0))" }
@@ -425,7 +439,7 @@ struct TransactionEditor: View {
                 }
                 Form {
                     LabeledContent(kind == .transfer && !standaloneTransfer ? L("Со счета") : L("Счет")) {
-                        Picker(L("Счет"), selection: $accountID) { Text(L("Выберите счет")).tag(Optional<UUID>.none); ForEach(store.ledger.accounts.filter { !$0.archived || $0.id == transaction?.accountID }) { Text($0.name + " · " + $0.currency).tag(Optional($0.id)) } }
+                        Picker(L("Счет"), selection: accountSelection) { Text(L("Выберите счет")).tag(Optional<UUID>.none); ForEach(store.ledger.accounts.filter { !$0.archived || $0.id == transaction?.accountID }) { Text($0.name + " · " + $0.currency).tag(Optional($0.id)) } }
                             .labelsHidden().modifier(TransactionFieldValidation(invalid: showsError(.account)))
                     }.foregroundStyle(showsError(.account) ? Color.red : Color.primary)
                     validationMessage(.account)
@@ -502,7 +516,6 @@ struct TransactionEditor: View {
             availableTags = tags
         }
         .onChange(of: kind) { _, new in if store.ledger.category(categoryID)?.kind != new { categoryID = nil } }
-        .onChange(of: accountID) { _, id in if destinationID == id { destinationID = nil } }
     }
     private func transferAmountField(_ title: String, text: Binding<String>, currency: String?, field: RequiredField) -> some View {
         HStack(spacing: 8) {
@@ -641,6 +654,14 @@ struct TransactionEditor: View {
                 }
             }
         } else { review = nil }
+        let didSave: (@MainActor (Transaction) -> Void)?
+        if isNewManual && value.kind != .transfer {
+            let categorizer = categorizer
+            didSave = { [weak store] value in
+                TransactionCurrencyPreference.remember(purchaseCurrency, for: value.accountID)
+                if let store { categorizer.request(for: value, store: store) }
+            }
+        } else { didSave = nil }
         saving = store.enqueueTransaction(value, original: transaction, prepare: { value in
             guard let account = conversionAccount else { return value }
             var prepared = value
@@ -649,7 +670,7 @@ struct TransactionEditor: View {
             prepared.amount = try quote.convertedAmount(); prepared.conversion = quote
             prepared.note = quote.annotating(prepared.note)
             return prepared
-        }, review: review)
+        }, review: review, didSave: didSave)
         if saving { dismiss() }
     }
 

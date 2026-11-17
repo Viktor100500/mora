@@ -1,5 +1,12 @@
 # Changelog
 
+## iPhone 1.0.68 · Mac 1.7.22 — 2026-11-17
+
+iPhone 1.0.68 (build 69) · Mac 1.7.22 (build 101)
+
+- **Currency follows the account.** A new manual operation starts with the last saved purchase currency for that account. Switching accounts loads the other account’s currency. Saving in the account’s own currency sets it as the next default.
+- **Automatic category progress.** A newly saved operation shows “Finding a category…” with a small spinner while Mora looks up the merchant. The row then shows the assigned category or “Uncategorized”.
+
 ## Mac 1.7.21 — 2026-11-16
 
 Mac 1.7.21 (build 100) · iPhone unchanged

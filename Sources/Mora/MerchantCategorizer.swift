@@ -14,6 +14,7 @@ final class MerchantCategorizer: ObservableObject {
     private var stopping = false
     private var finishWaiters: [CheckedContinuation<Void, Never>] = []
     @Published private(set) var status: String?
+    @Published private(set) var pendingTransactionIDs: Set<UUID> = []
     private let preferences: UserDefaults
     private let lookup: @MainActor (String) async throws -> MerchantGroup?
     private var completed: [String: String] = [:]
@@ -66,6 +67,13 @@ final class MerchantCategorizer: ObservableObject {
         stopping = true
         while working { await withCheckedContinuation { finishWaiters.append($0) } }
     }
+    func request(for transaction: Transaction, store: FinanceStore) {
+        guard !store.isDemo, !stopping, transaction.kind != .transfer, transaction.categoryID == nil,
+              !pendingTransactionIDs.contains(transaction.id),
+              store.latestLedger.transactions.contains(where: { $0.id == transaction.id && $0.categoryID == nil }) else { return }
+        pendingTransactionIDs.insert(transaction.id)
+        Task { await process(store: store) }
+    }
     func process(store: FinanceStore, duringSync: Bool = false) async {
         if duringSync {
             while working { await withCheckedContinuation { finishWaiters.append($0) } }
@@ -73,19 +81,27 @@ final class MerchantCategorizer: ObservableObject {
         guard !working, !store.isDemo, !stopping, !Task.isCancelled,
               duringSync || !store.isDeferringUpdates else { return }
         working = true
+        let requested = pendingTransactionIDs
         defer {
+            if !requested.isEmpty { pendingTransactionIDs.subtract(requested) }
             working = false
             let waiters = finishWaiters; finishWaiters.removeAll()
             for waiter in waiters { waiter.resume() }
+            if !pendingTransactionIDs.isEmpty, !stopping, !Task.isCancelled, !store.isDeferringUpdates {
+                Task { await process(store: store) }
+            }
         }
         await configure(store)
         let revision = store.revision, deferring = store.isDeferringUpdates
-        if !deferring, let settled, settled.revision == revision, settled.online == onlineEnabled,
+        if requested.isEmpty, !deferring, let settled, settled.revision == revision, settled.online == onlineEnabled,
            Date().timeIntervalSince(settled.date) < 900 { return }
         let snapshot = store.latestLedger.withoutChangeHistory()
         let useCatalogs = onlineEnabled
+        let onlyRequested = !duringSync && !requested.isEmpty
         let candidates = await BackgroundWork.shared.perform {
-            snapshot.transactions.filter { $0.categoryID == nil && $0.kind != .transfer }.sorted { $0.date > $1.date }.map {
+            snapshot.transactions.filter {
+                $0.categoryID == nil && $0.kind != .transfer && (!onlyRequested || requested.contains($0.id))
+            }.sorted { $0.date > $1.date }.map {
                 let known = snapshot.suggestedCategory(merchant: $0.merchant, kind: $0.kind)
                 let group = known == nil && useCatalogs && $0.kind == .expense ?
                     (MerchantCatalog.bundled.group(for: $0.merchant) ?? MerchantPlaces.bundled.group(for: $0.merchant)) : nil
@@ -140,7 +156,7 @@ final class MerchantCategorizer: ObservableObject {
             message = L("Продавцов без совпадения в справочниках: \(unknownMerchants.count). Выберите категорию вручную — Mora запомнит выбор.")
         } else { message = nil }
         if status != message { status = message }
-        if assignments.isEmpty, !deferring, !Task.isCancelled, !stopping, store.revision == revision {
+        if assignments.isEmpty, !onlyRequested, !deferring, !Task.isCancelled, !stopping, store.revision == revision {
             settled = (revision, onlineEnabled, Date())
         }
         guard !assignments.isEmpty, duringSync || !store.isDeferringUpdates, !Task.isCancelled, !stopping else { return }
@@ -162,6 +178,15 @@ final class MerchantCategorizer: ObservableObject {
         if let assigned, !assigned.isEmpty {
             completed.merge(assigned) { _, new in new }
             await persist()
+        }
+    }
+}
+
+struct TransactionCategoryProgress: View {
+    var body: some View {
+        HStack(spacing: 4) {
+            ProgressView().controlSize(.mini).accessibilityHidden(true)
+            Text(L("Определяем категорию…")).lineLimit(1)
         }
     }
 }

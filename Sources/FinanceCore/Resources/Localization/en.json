@@ -963,6 +963,7 @@
   "Автоматические категории": "Automatic categories",
   "Для знакомого продавца используется категория из истории": "Known merchants use the category from your history",
   "Определять категории новых продавцов": "Categorize new merchants",
+  "Определяем категорию…": "Finding a category…",
   "Бесплатные открытые каталоги обновляются в фоне. Операции, суммы и названия покупок никуда не отправляются. Неоднозначные совпадения остаются без категории.": "Free public catalogs update in the background. Transactions, amounts and purchase names are never sent. Ambiguous matches remain uncategorized.",
   "Проверяем категории…": "Checking categories…",
   "Каталоги продавцов временно недоступны. Покупки сохраняются без категории.": "Merchant catalogs are temporarily unavailable. Purchases are saved without a category.",

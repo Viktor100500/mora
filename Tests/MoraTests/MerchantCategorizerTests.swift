@@ -16,6 +16,26 @@ final class MerchantCategorizerTests: XCTestCase {
         let store = FinanceStore(directory: directory)
         await store.load(); return (store, preferences, directory)
     }
+
+    func testRequestedLookupShowsProgressUntilUnmatchedMerchantFinishes() async throws {
+        let (store, preferences, directory) = try await fixture()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let transaction = try XCTUnwrap(store.ledger.transactions.first)
+        var lookups: [String] = []
+        let worker = MerchantCategorizer(preferences: preferences) { merchant in
+            lookups.append(merchant)
+            return nil
+        }
+
+        worker.request(for: transaction, store: store)
+        XCTAssertEqual(worker.pendingTransactionIDs, [transaction.id])
+        await worker.process(store: store)
+
+        XCTAssertEqual(lookups, [transaction.merchant])
+        XCTAssertTrue(worker.pendingTransactionIDs.isEmpty)
+        XCTAssertNil(store.ledger.transactions.first?.categoryID)
+    }
+
     func testRepeatedUnknownMerchantPollsDoNotPublishOrRepeatLookup() async throws {
         let (store, preferences, directory) = try await fixture(); defer { try? FileManager.default.removeItem(at: directory) }
         var calls = 0, updates = 0

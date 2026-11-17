@@ -5,6 +5,7 @@ import FinanceCore
 struct TransactionEditor: View {
     @EnvironmentObject private var store: FinanceStore
     @EnvironmentObject private var cloud: CloudSync
+    @EnvironmentObject private var categorizer: MerchantCategorizer
     @Environment(\.dismiss) private var dismiss
     let transaction: Transaction?
     private let walletCapture: CloudCapture?
@@ -12,6 +13,7 @@ struct TransactionEditor: View {
     private let walletRun: WalletRun?
     private let amountSuggestion: WalletReviewDraft.AmountSuggestion?
     private let newWalletCard: String?
+    private let isNewManual: Bool
     @State private var merchant: String
     @State private var amount: String
     @State private var kind: TransactionKind
@@ -47,6 +49,8 @@ struct TransactionEditor: View {
         self.walletCapture = walletCapture
         self.walletRun = walletRun?.run
         let source = transaction ?? template.map { $0.similarTransaction() }
+        let isNewManual = source == nil && walletCapture == nil && walletRun == nil
+        self.isNewManual = isNewManual
         let local = walletRun.map { CloudCapture(id: $0.run.id, merchant: $0.run.sentMerchant, amount: $0.run.amount,
             account_id: $0.accountID ?? ledger.suggestedTransactionAccountID ?? UUID(), date: $0.run.receivedAt, card: $0.run.card) }
         let draft = (walletCapture ?? local).map { WalletReviewDraft(capture: $0, ledger: ledger, locale: L10n.locale) }
@@ -57,13 +61,15 @@ struct TransactionEditor: View {
         _amount = State(initialValue: source.map { Money.plain(abs($0.conversion?.originalAmount ?? $0.sameCurrencyFee?.originalAmount ?? $0.amount)) } ?? draft?.prefillAmount ?? "")
         _kind = State(initialValue: source?.kind ?? .expense)
         _date = State(initialValue: dateReference)
-        _accountID = State(initialValue: source?.accountID ?? (draft == nil ? ledger.suggestedTransactionAccountID : draft?.accountID))
+        let initialAccountID = source?.accountID ?? (draft == nil ? ledger.suggestedTransactionAccountID : draft?.accountID)
+        _accountID = State(initialValue: initialAccountID)
         _categoryID = State(initialValue: source?.categoryID)
         _destinationID = State(initialValue: source?.destinationAccountID)
         _destinationAmount = State(initialValue: source?.destinationAmount.map(Money.plain) ?? "")
         _note = State(initialValue: source?.note ?? draft?.note ?? "")
         _tags = State(initialValue: source?.tags.joined(separator: ", ") ?? draft?.tags.joined(separator: ", ") ?? "")
-        let initialCurrency = source?.conversion?.originalCurrency ?? draft?.prefillCurrency ?? ""
+        let initialCurrency = isNewManual ? TransactionCurrencyPreference.currency(for: initialAccountID, in: ledger)
+            : source?.conversion?.originalCurrency ?? draft?.prefillCurrency ?? ""
         _currency = State(initialValue: initialCurrency == WalletReviewDraft.unknownCurrency ? "" : initialCurrency)
     }
 
@@ -83,6 +89,14 @@ struct TransactionEditor: View {
     private var quoteKey: String { "\(purchaseCurrency)|\(account?.currency ?? "")|\(Dates.string(date))|\(kind.rawValue)|\(accountID?.uuidString ?? "")|\(Money.plain(account?.bankFeePercent ?? 0))" }
     private var currencySelection: Binding<String> {
         Binding(get: { purchaseCurrency }, set: { currency = $0 == account?.currency ? "" : $0 })
+    }
+    private var accountSelection: Binding<UUID?> {
+        Binding(get: { accountID }, set: { id in
+            guard id != accountID else { return }
+            accountID = id
+            if destinationID == id { destinationID = nil }
+            if isNewManual { currency = TransactionCurrencyPreference.currency(for: id, in: ledger) }
+        })
     }
     nonisolated private static func suggestedCategory(merchant: String, kind: TransactionKind, in ledger: Ledger) -> UUID? {
         merchant.trimmingCharacters(in: .whitespaces).isEmpty ? nil : ledger.suggestedCategory(merchant: merchant, kind: kind)
@@ -124,7 +138,7 @@ struct TransactionEditor: View {
                     validation(.amount)
                 }
                 Section {
-                    Picker(kind == .transfer && !standaloneTransfer ? L("Со счета") : L("Счет"), selection: $accountID) {
+                    Picker(kind == .transfer && !standaloneTransfer ? L("Со счета") : L("Счет"), selection: accountSelection) {
                         Text(L("Выберите счет")).tag(UUID?.none)
                         ForEach(ledger.accounts.filter { !$0.archived || $0.id == transaction?.accountID }) { Text($0.name + " · " + $0.currency).tag(UUID?.some($0.id)) }
                     }
@@ -230,7 +244,6 @@ struct TransactionEditor: View {
                 await refreshConversion()
             }
             .onChange(of: kind) { _, new in if ledger.category(categoryID)?.kind != new { categoryID = nil } }
-            .onChange(of: accountID) { _, id in if destinationID == id { destinationID = nil } }
             .onAppear { if transaction == nil && walletCapture == nil && amount.isEmpty { focus = .amount } }
             .task(id: SuggestionKey(merchant: merchant, kind: kind, revision: store.revision)) {
                 let key = SuggestionKey(merchant: merchant, kind: kind, revision: store.revision), snapshot = ledger.withoutChangeHistory()
@@ -456,11 +469,17 @@ struct TransactionEditor: View {
                 if needsConversion && conversionError == nil { conversionError = L("Курс Visa еще не получен. Повторите сохранение.") }
                 return
             }
+            let usedCurrency = purchaseCurrency
             let saved: Bool
             if let capture = walletCapture { saved = await cloud.review(capture, transaction: value) }
             else { saved = await store.saveTransaction(value, original: transaction) }
-            if saved, let run = walletRun { await WalletDelivery.shared.markProcessed(run.id) }
-            if saved { dismiss() }
+            guard saved else { return }
+            if isNewManual && value.kind != .transfer {
+                TransactionCurrencyPreference.remember(usedCurrency, for: value.accountID)
+                categorizer.request(for: value, store: store)
+            }
+            if let run = walletRun { await WalletDelivery.shared.markProcessed(run.id) }
+            dismiss()
         }
     }
 }
