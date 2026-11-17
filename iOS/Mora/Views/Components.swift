@@ -3,6 +3,7 @@ import Charts
 import FinanceCore
 
 struct TransactionRow: View {
+    @EnvironmentObject private var categorizer: MerchantCategorizer
     let transaction: Transaction
     private let category: Category?
     private let account: Account?
@@ -42,7 +43,15 @@ struct TransactionRow: View {
                        : transaction.date.formatted(.dateTime.hour().minute().locale(L10n.locale)))
             .font(.caption2).foregroundStyle(.secondary).lineLimit(1).fixedSize()
     }
-    private var subtitleText: some View { Text(subtitle).font(.caption).foregroundStyle(.secondary).lineLimit(1) }
+    private var subtitleText: some View {
+        Group {
+            if transaction.categoryID == nil && categorizer.pendingTransactionIDs.contains(transaction.id) {
+                TransactionCategoryProgress()
+            } else {
+                Text(subtitle).lineLimit(1)
+            }
+        }.font(.caption).foregroundStyle(.secondary)
+    }
 
     var body: some View {
         HStack(spacing: 12) {

@@ -188,6 +188,7 @@ struct CategoryChart: View {
 }
 
 struct TransactionRow: View {
+    @EnvironmentObject private var categorizer: MerchantCategorizer
     var transaction: Transaction
     private let category: Category?
     private let account: Account?
@@ -207,7 +208,19 @@ struct TransactionRow: View {
             IconTile(icon: transaction.kind == .transfer ? "arrow.left.arrow.right" : category?.icon ?? "tag", color: category?.color ?? (transaction.kind == .income ? "green" : "gray"), size: 36)
             VStack(alignment: .leading, spacing: 4) {
                 Text(transaction.merchant).contentTransition(.opacity).font(.system(size: 13, weight: .medium)).lineLimit(merchantLines).fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
-                HStack(spacing: 5) { Text(transaction.kind == .transfer ? L("Перевод") : category?.name ?? L("Без категории")).contentTransition(.opacity); Text("·"); Text(account?.name ?? ""); if let removed = transaction.removedTransferAccountName { Text(L("· удаленный счет: \(removed)")) } else if transaction.kind == .transfer { Text("→ \(destinationName)") } }.font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
+                Group {
+                    if transaction.categoryID == nil && categorizer.pendingTransactionIDs.contains(transaction.id) {
+                        TransactionCategoryProgress()
+                    } else {
+                        HStack(spacing: 5) {
+                            Text(transaction.kind == .transfer ? L("Перевод") : category?.name ?? L("Без категории")).contentTransition(.opacity)
+                            Text("·")
+                            Text(account?.name ?? "")
+                            if let removed = transaction.removedTransferAccountName { Text(L("· удаленный счет: \(removed)")) }
+                            else if transaction.kind == .transfer { Text("→ \(destinationName)") }
+                        }
+                    }
+                }.font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
                 if let conversion = transaction.conversion {
                     FinancialText("\(DisplayMoney.string(abs(conversion.originalAmount), currency: conversion.originalCurrency)) · Visa \(Money.plain(conversion.rate))\(conversion.feePercent == 0 ? "" : " + " + Money.plain(conversion.feePercent) + "%")").font(.system(size: 10)).foregroundStyle(.secondary)
                 }

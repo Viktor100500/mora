@@ -2,6 +2,30 @@ import XCTest
 @testable import FinanceCore
 
 final class TransactionDraftTests: XCTestCase {
+    @MainActor func testCurrencyPrefersLastManualSaveForEachAccount() async throws {
+        let suite = "MoraTransactionCurrency-\(UUID())"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let card = Account(name: "Card", currency: "EUR")
+        let cash = Account(name: "Cash", currency: "CHF")
+        var ledger = Ledger.empty
+        ledger.accounts = [card, cash]
+        var purchase = Transaction(date: .now, merchant: "Purchase", amount: -9, accountID: card.id)
+        purchase.conversion = CardConversion(originalAmount: -10, originalCurrency: "USD", accountCurrency: "EUR", rate: 0.9, date: purchase.date)
+        let imported = Transaction(date: .now, merchant: "Imported", amount: -3, accountID: card.id, importBatchID: UUID())
+        let transfer = Transaction(date: .now, merchant: "Transfer", amount: -4, accountID: card.id, kind: .transfer)
+        ledger.transactions = [purchase, imported, transfer]
+
+        XCTAssertEqual(TransactionCurrencyPreference.currency(for: card.id, in: ledger, defaults: defaults), "USD")
+        XCTAssertEqual(TransactionCurrencyPreference.currency(for: cash.id, in: ledger, defaults: defaults), "CHF")
+        TransactionCurrencyPreference.remember("EUR", for: card.id, defaults: defaults)
+        TransactionCurrencyPreference.remember("GBP", for: cash.id, defaults: defaults)
+
+        let reopened = try XCTUnwrap(UserDefaults(suiteName: suite))
+        XCTAssertEqual(TransactionCurrencyPreference.currency(for: card.id, in: ledger, defaults: reopened), "EUR")
+        XCTAssertEqual(TransactionCurrencyPreference.currency(for: cash.id, in: ledger, defaults: reopened), "GBP")
+    }
+
     private var utc: Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!

@@ -48,6 +48,7 @@ final class FinanceStore: ObservableObject {
         let original: Transaction?
         let prepare: @MainActor (Transaction) async throws -> Transaction
         let review: (@MainActor (Transaction) async throws -> Void)?
+        let didSave: (@MainActor (Transaction) -> Void)?
     }
     private var savingTransactions: Set<UUID> = []
     private var failedTransactionSaves: [UUID: PendingTransactionSave] = [:]
@@ -320,8 +321,9 @@ final class FinanceStore: ObservableObject {
     @discardableResult
     func enqueueTransaction(_ value: Transaction, original: Transaction? = nil,
                             prepare: @escaping @MainActor (Transaction) async throws -> Transaction = { $0 },
-                            review: (@MainActor (Transaction) async throws -> Void)? = nil) -> Bool {
-        startTransactionSave(PendingTransactionSave(value: value, original: original, prepare: prepare, review: review))
+                            review: (@MainActor (Transaction) async throws -> Void)? = nil,
+                            didSave: (@MainActor (Transaction) -> Void)? = nil) -> Bool {
+        startTransactionSave(PendingTransactionSave(value: value, original: original, prepare: prepare, review: review, didSave: didSave))
     }
 
     func retryTransactionSave(_ id: UUID) {
@@ -341,6 +343,7 @@ final class FinanceStore: ObservableObject {
                 let prepared = try await submission.prepare(submission.value)
                 if let review = submission.review { try await review(prepared) }
                 else { try await persistTransaction(prepared, replacing: submission.original?.id, original: submission.original) }
+                submission.didSave?(prepared)
                 finishProgressNotice(progress, message: L("Операция сохранена"), detail: prepared.merchant,
                                      actions: submission.review == nil ? undoNotificationActions : [])
             } catch {
