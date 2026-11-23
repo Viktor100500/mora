@@ -117,7 +117,16 @@ public struct WalletReviewDraft: Sendable {
             accountID: accountID, categoryID: ledger.suggestedCategory(merchant: draft.merchant, kind: .expense),
             note: draft.note, tags: draft.tags)
         if draft.currency != account.currency {
-            let conversion = try await fetch(-amount, draft.currency, account.currency, capture.date).applyingFee(of: account)
+            let quote: CardConversion
+            do { quote = try await fetch(-amount, draft.currency, account.currency, capture.date) }
+            catch is CancellationError { throw CancellationError() }
+            catch {
+                try Task.checkCancellation()
+                guard let saved = CardConversion.savedVisaConversion(amount: -amount, from: draft.currency,
+                    to: account.currency, date: capture.date, transactions: ledger.transactions) else { throw error }
+                quote = saved
+            }
+            let conversion = quote.applyingFee(of: account)
             value.amount = try conversion.convertedAmount()
             value.conversion = conversion
         }

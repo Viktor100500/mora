@@ -43,6 +43,7 @@ struct BankAlert: Codable, Identifiable, Equatable, Sendable {
     /// Came from the Wallet notification action. `source` is the card or its bank.
     var wallet: Bool?
     /// Another bank message confirmed to describe the same purchase.
+    var duplicateTransactionID: UUID?
     var sameAs: UUID?
     /// Which automation passed the message: an SMS or a bank app notification. Nil for
     /// messages saved before Mora 1.0.48 and for Wallet notifications, see `wallet`.
@@ -345,6 +346,16 @@ actor BankAlertDelivery {
         try BankAlertLog.record(text: text, source: source, channel: channel, sending: sending, directory: directory)
     }
 
+    static func reconcileDuplicates(_ duplicates: [CloudCaptureDuplicate], in directory: URL = BankAlertLog.directory) {
+        let matches = Dictionary(duplicates.map { ($0.event_id, $0.transaction_id) }, uniquingKeysWith: { first, _ in first })
+        for var alert in BankAlertLog.alerts(in: directory) {
+            guard let transactionID = matches[alert.id], alert.duplicateTransactionID != transactionID || alert.state != .duplicate else { continue }
+            alert.state = .duplicate; alert.serverState = "duplicate"
+            alert.duplicateTransactionID = transactionID; alert.lastError = nil
+            try? BankAlertLog.save(alert, in: directory)
+        }
+    }
+
     var hasWaiting: Bool { BankAlertLog.alerts(in: directory).contains { $0.state == .waiting || $0.awaitsWalletReviewUpload } }
 
     func deliverWaiting(with sender: WalletSender? = WalletSender.current()) async {
@@ -371,7 +382,7 @@ actor BankAlertDelivery {
             // A late Wallet Transaction action can attach itself while the request is in flight.
             if let current = BankAlertLog.alerts(in: directory).first(where: { $0.id == alert.id }) { alert = current }
             switch outcome {
-            case .delivered(let state, _): alert.state = .delivered; alert.serverState = state; alert.lastError = nil
+            case .delivered(let state, _): alert.state = state == "duplicate" ? .duplicate : .delivered; alert.serverState = state; alert.lastError = nil
             case .retry(let message): alert.lastError = message
             case .keyRejected: alert.lastError = "Ключ телефона не принят: включите Apple Pay на iPhone заново."
             case .refused(let message): alert.state = .failed; alert.lastError = message

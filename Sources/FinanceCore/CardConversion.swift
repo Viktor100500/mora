@@ -23,6 +23,10 @@ public struct CardConversion: Codable, Equatable, Sendable {
         cachedRateDate.map { "Visa: использован сохранённый курс от \(Dates.string($0))." }
     }
     public func annotating(_ note: String) -> String {
+        if provider == "Manual" {
+            let source = "Курс вручную: 1 \(originalCurrency) = \(Money.plain(rate)) \(accountCurrency)."
+            return note.contains(source) ? note : [note, source].filter { !$0.isEmpty }.joined(separator: "\n")
+        }
         guard let cachedRateNote, !note.contains(cachedRateNote) else { return note }
         return [note, cachedRateNote].filter { !$0.isEmpty }.joined(separator: "\n")
     }
@@ -31,6 +35,21 @@ public struct CardConversion: Codable, Equatable, Sendable {
                 provider: String = "Visa", bankFeePercent: Decimal? = nil) {
         self.originalAmount = originalAmount; self.originalCurrency = originalCurrency; self.accountCurrency = accountCurrency
         self.rate = rate; self.date = date; self.provider = provider; self.bankFeePercent = bankFeePercent
+    }
+
+    /// Recover a genuine saved Visa quote on a device whose own cache is empty.
+    /// Manual quotes never become automatic Visa estimates.
+    public static func savedVisaConversion(amount: Decimal, from: String, to: String, date: Date,
+                                           transactions: [Transaction]) -> CardConversion? {
+        let saved = transactions.compactMap(\.conversion).filter {
+            $0.provider == "Visa" && $0.originalCurrency == from && $0.accountCurrency == to
+                && $0.rate > 0 && !$0.rate.isNaN && $0.rateDate <= date
+        }.max { $0.rateDate < $1.rateDate }
+        guard let saved else { return nil }
+        var value = CardConversion(originalAmount: amount, originalCurrency: from, accountCurrency: to,
+                                   rate: saved.rate, date: Calendar.current.startOfDay(for: date))
+        value.cachedRateDate = saved.rateDate
+        return value
     }
 
     public func applyingFee(of account: Account) -> CardConversion {
@@ -87,8 +106,18 @@ public final class VisaRateClient {
         self.now = now; self.timeout = timeout; self.fetchRate = fetchRate
     }
 
-    public func conversion(amount: Decimal, from: String, to: String, date: Date) async throws -> CardConversion {
-        let result = try await quote(from: from, to: to, date: date)
+    public func conversion(amount: Decimal, from: String, to: String, date: Date,
+                           history: [Transaction] = []) async throws -> CardConversion {
+        let result: VisaRateResult
+        do { result = try await quote(from: from, to: to, date: date) }
+        catch is CancellationError { throw CancellationError() }
+        catch {
+            try Task.checkCancellation()
+            guard let saved = CardConversion.savedVisaConversion(amount: amount, from: from, to: to, date: date,
+                                                                 transactions: history) else { throw error }
+            _ = try saved.convertedAmount()
+            return saved
+        }
         var value = CardConversion(originalAmount: amount, originalCurrency: from, accountCurrency: to,
                                    rate: result.quote.rate, date: Calendar.current.startOfDay(for: date))
         value.cachedRateDate = result.isFallback ? result.quote.date : nil
@@ -244,23 +273,46 @@ private actor VisaRateCache {
 }
 
 @MainActor
-private final class VisaCalculator: NSObject, WKNavigationDelegate {
+final class VisaCalculator: NSObject, WKNavigationDelegate {
+    static func decodeRate(_ data: Data, from: String, to: String, date: String) throws -> Decimal {
+        struct Response: Decodable {
+            struct Original: Decodable { let fromCurrency: String; let toCurrency: String }
+            let originalValues: Original
+            let conversionInputDate: String
+            let status: String
+            let rate: Decimal
+            private enum CodingKeys: String, CodingKey { case originalValues, conversionInputDate, status, fxRateWithAdditionalFee }
+            init(from decoder: Decoder) throws {
+                let c = try decoder.container(keyedBy: CodingKeys.self)
+                originalValues = try c.decode(Original.self, forKey: .originalValues)
+                conversionInputDate = try c.decode(String.self, forKey: .conversionInputDate)
+                status = try c.decode(String.self, forKey: .status)
+                if let text = try? c.decode(String.self, forKey: .fxRateWithAdditionalFee),
+                   text.range(of: #"^[0-9]+(\.[0-9]+)?$"#, options: .regularExpression) != nil,
+                   let value = Decimal(string: text, locale: Locale(identifier: "en_US_POSIX")) { rate = value }
+                else { rate = try c.decode(Decimal.self, forKey: .fxRateWithAdditionalFee) }
+            }
+        }
+        guard data.count <= 64000, let response = try? JSONDecoder().decode(Response.self, from: data),
+              response.status == "success", response.originalValues.fromCurrency == from,
+              response.originalValues.toCurrency == to, response.conversionInputDate == date,
+              response.rate > 0, !response.rate.isNaN else {
+            throw LedgerError.invalid("Visa вернула некорректный курс. Операция не сохранена.")
+        }
+        return response.rate
+    }
     private var webView: WKWebView!
     private var navigationError: Error?
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) { navigationError = error }
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) { navigationError = error }
 
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { navigationError = URLError(.networkConnectionLost) }
+
     private enum ScriptValue: Sendable, Equatable { case text(String), flag(Bool) }
     private func evaluate(_ script: String) async throws -> ScriptValue? {
-        let wrapped = """
-        (() => { const roots=[]; function scan(root) { roots.push(root); for(const el of root.querySelectorAll('*')) { if(el.shadowRoot) scan(el.shadowRoot); } } scan(document);
-        const get=id=>roots.map(root=>root.querySelector('[id="'+id+'"]')).find(Boolean);
-        const all=selector=>roots.flatMap(root=>Array.from(root.querySelectorAll(selector)));
-        return (\(script)); })()
-        """
         return try await withCheckedThrowingContinuation { continuation in
-            webView.evaluateJavaScript(wrapped) { value, error in
+            webView.evaluateJavaScript(script) { value, error in
                 if let error { continuation.resume(throwing: error) }
                 else if let text = value as? String { continuation.resume(returning: .text(text)) }
                 else if let flag = value as? Bool { continuation.resume(returning: .flag(flag)) }
@@ -277,27 +329,6 @@ private final class VisaCalculator: NSObject, WKNavigationDelegate {
         }
         throw LedgerError.invalid("Visa не вернула курс. Проверьте интернет-соединение и повторите получение курса. Операция не сохранена.")
     }
-    private func fill(_ id: String, _ value: String) async throws {
-        let values = try JSONSerialization.data(withJSONObject: [id, value])
-        let json = String(decoding: values, as: UTF8.self)
-        _ = try await evaluate("""
-        (() => { const [id,value] = \(json); const el=get(id);
-        if(!el) throw Error('Missing calculator input');
-        el.focus();
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,value);
-        el.dispatchEvent(new InputEvent('input',{bubbles:true,composed:true,data:value,inputType:'insertText'}));
-        el.dispatchEvent(new Event('change',{bubbles:true,composed:true}));
-        el.dispatchEvent(new KeyboardEvent('keyup',{key:value.slice(-1),bubbles:true,composed:true})); return true; })()
-        """)
-    }
-    private func currency(_ field: String, _ code: String) async throws {
-        try await fill("autosuggestinput_" + field, code)
-        _ = try await waitFor("""
-        (() => { const list=get('listbox-\(field)');
-        const option=list && all('[id^="listbox-item-"]').find(el=>el.textContent.trim().startsWith('\(code)'));
-        if(!option) return false; option.click(); return true; })()
-        """)
-    }
     func fetch(from: String, to: String, date: Date) async throws -> Decimal {
         #if canImport(AppKit)
         _ = NSApplication.shared
@@ -311,31 +342,39 @@ private final class VisaCalculator: NSObject, WKNavigationDelegate {
         // calculator in the key window, invisible and without touches.
         webView.isUserInteractionEnabled = false
         webView.alpha = 0.01
-        webView.frame.origin = CGPoint(x: -2000, y: 0)
+        webView.isAccessibilityElement = false
+        webView.accessibilityElementsHidden = true
         let window = UIApplication.shared.connectedScenes.compactMap { ($0 as? UIWindowScene)?.keyWindow }.first
         window?.insertSubview(webView, at: 0)
         defer { webView.removeFromSuperview() }
         #endif
         defer { webView.stopLoading(); webView.navigationDelegate = nil }
         webView.load(URLRequest(url: VisaRateClient.calculatorURL, timeoutInterval: 20))
-        _ = try await waitFor("Boolean(get('input_amount_paid'))")
-        _ = try await evaluate("all('button').find(el=>el.textContent.trim()==='Reject all')?.click()")
-        try await fill("input_amount_paid", "1")
-        try await currency("from", from); try await currency("to", to)
-        _ = try await evaluate("all('button').find(el=>(el.getAttribute('aria-label')||'').toLowerCase().includes('edit date'))?.click()")
-        _ = try await waitFor("Boolean(get('dateinput_date'))")
+        _ = try await waitFor("location.hostname === 'www.visa.co.uk' && document.readyState === 'complete'")
         let parts = Dates.string(date).split(separator: "-")
-        try await fill("dateinput_date", "\(parts[1])/\(parts[2])/\(parts[0])")
-        try await fill("input_bank_rate", "0")
-        _ = try await evaluate("all('button').find(el=>el.textContent.trim()==='Calculate Conversion')?.click()")
-        let result = try await waitFor("""
-        (() => { const h=all('h2').find(el=>el.textContent.trim().startsWith('1 \(from) ='));
-        if(!h) return false; const text=h.textContent.trim();
-        const match=text.match(/^1 \(from)\\s*=\\s*([0-9.,]+)\\s*\(to)$/); return match ? match[1] : false; })()
-        """)
-        guard case .text(let text) = result, let rate = Decimal(string: text.replacingOccurrences(of: ",", with: ""), locale: Locale(identifier: "en_US_POSIX")), rate > 0, !rate.isNaN else {
-            throw LedgerError.invalid("Visa вернула некорректный курс. Операция не сохранена.")
+        let exchangeDate = "\(parts[1])/\(parts[2])/\(parts[0])"
+        // This is the same public endpoint and direction used by Visa's calculator.
+        // Keep the request in its first-party WebKit context; raw HTTP clients can
+        // receive 403 while the calculator works. No merchant or purchase amount is sent.
+        let text: String = try await withCheckedThrowingContinuation { continuation in
+            webView.callAsyncJavaScript("""
+                const params = new URLSearchParams({amount:'1', fee:'0', utcConvertedDate:date,
+                    exchangedate:date, fromCurr:to, toCurr:from});
+                const response = await fetch('/cmsapi/fx/rates?' + params, {credentials:'same-origin'});
+                if (!response.ok) throw Error('Visa HTTP ' + response.status);
+                const body = await response.text();
+                if (body.length > 64000) throw Error('Invalid Visa response');
+                return body;
+                """, arguments: ["from": from, "to": to, "date": exchangeDate], in: nil, in: .page) { result in
+                    switch result {
+                    case .success(let value):
+                        if let text = value as? String { continuation.resume(returning: text) }
+                        else { continuation.resume(throwing: CloudAPIError.invalidResponse) }
+                    case .failure(let error): continuation.resume(throwing: error)
+                    }
+                }
         }
+        let rate = try Self.decodeRate(Data(text.utf8), from: from, to: to, date: exchangeDate)
         return rate
     }
 }

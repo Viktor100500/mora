@@ -674,6 +674,52 @@ try {
     assert.equal((await send()).state,'recorded');
     assert.equal((await rpc(owner,'mora_get_household',[h])).snapshot.transactions.length,before+1);
   });
+  // Reapply the latest review definition after the legacy-upgrade fee test above.
+  await admin.query(await fs.readFile(path.join(here,'../supabase/migrations/20261123203336_manual_conversion_rate.sql'),'utf8'));
+  await check('notification duplicates match original converted price across card labels and both arrival orders',async()=>{
+    const phone=await rpc(owner,'mora_create_phone_token',[h,eurAccount,'Duplicate test']);
+    const when='2026-10-12T12:00:00Z';
+    const add=(merchant,amount,at=when)=>rpc(anon,'mora_capture_payment',[phone.token,uuid(),amount,'USD',merchant,at,'Visa Debit']);
+    const notify=(merchant,amount,at='2026-10-12T12:00:08Z')=>rpc(anon,'mora_capture_wallet_review',[phone.token,uuid(),amount,'USD',merchant,at,'Bank issuer']);
+    const first=await add('Example Deli & Market','$12.48');
+    // Both different card labels route to the same account, as in the reported purchase.
+    let cards=await rpc(owner,'mora_list_wallet_cards',[h]);
+    for(const c of cards.filter(c=>c.token_id===phone.id)) await rpc(owner,'mora_link_wallet_card',[h,c.id,eurAccount]);
+    const tx={id:uuid(),date:when,merchant:'Example Deli & Market',amount:-11.23,accountID:eurAccount,kind:'expense',note:'',tags:[],
+      conversion:{originalAmount:-12.48,originalCurrency:'USD',accountCurrency:'EUR',rate:0.9,date:when,provider:'Visa'}};
+    await rpc(owner,'mora_review_capture',[h,first.id,tx]);
+    const result=await notify('Example Deli & Market','12.48');
+    assert.equal(result.state,'duplicate'); assert.equal(result.duplicate,true);
+    assert(!(await rpc(member,'mora_list_pending',[h])).some(c=>c.id===result.id));
+    const matches=await rpc(owner,'mora_list_capture_duplicates',[h]);
+    assert.equal(matches.find(c=>c.id===result.id).transaction_id,first.id);
+    const before=await rpc(owner,'mora_get_household',[h]);
+    await rpc(member,'mora_review_capture',[h,result.id,{...tx,amount:-100}]);
+    assert.deepEqual((await rpc(owner,'mora_get_household',[h])).snapshot,before.snapshot,'a stale editor cannot create a second purchase');
+    const early=await notify('Reverse order','14.00');
+    assert.equal(early.state,'pending');
+    const late=await add('Reverse order','14.00');
+    await rpc(owner,'mora_review_capture',[h,late.id,{...tx,merchant:'Reverse order',amount:-12.6,
+      conversion:{...tx.conversion,originalAmount:-14}}]);
+    assert((await rpc(member,'mora_list_capture_duplicates',[h])).some(c=>c.id===early.id && c.transaction_id===late.id));
+    for(const [merchant,amount,at] of [['Example Deli & Market','12.49',when],['Another shop','12.48',when],
+      ['Example Deli & Market','12.48','2026-10-12T12:08:00Z'],['Example Deli & Market','',when]]) {
+      assert.equal((await notify(merchant,amount,at)).state,'pending');
+    }
+    await denied(()=>rpc(outsider,'mora_list_capture_duplicates',[h]));
+    await denied(()=>rpc(anon,'mora_list_capture_duplicates',[h]));
+    await denied(()=>rpc(owner,'mora_wallet_duplicate_transaction',[null,{}]));
+  });
+  await check('manual review rates preserve provenance and validate converted amounts',async()=>{
+    const phone=await rpc(owner,'mora_create_phone_token',[h,eurAccount,'Manual rate test']);
+    const received=await rpc(anon,'mora_capture_wallet_review',[phone.token,uuid(),'10','USD','Manual FX',date,'']);
+    const tx={id:uuid(),date,merchant:'Manual FX',amount:-9,accountID:eurAccount,kind:'expense',note:'',tags:[],
+      conversion:{originalAmount:-10,originalCurrency:'USD',accountCurrency:'EUR',rate:0.9,date,provider:'Manual'}};
+    await assert.rejects(()=>rpc(owner,'mora_review_capture',[h,received.id,{...tx,amount:-10}]));
+    await assert.rejects(()=>rpc(owner,'mora_review_capture',[h,received.id,{...tx,conversion:{...tx.conversion,rate:0}}]));
+    const booked=await rpc(owner,'mora_review_capture',[h,received.id,tx]);
+    assert.equal(booked.snapshot.transactions.find(t=>t.id.toLowerCase()===received.id).conversion.provider,'Manual');
+  });
   assert(saved.includes('-123456789012.123456'));
   await fs.mkdir(path.join(here,'fixtures'),{recursive:true});
   await fs.writeFile(path.join(here,'fixtures/backend-ledger.json'),saved+'\n');

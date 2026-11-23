@@ -27,6 +27,24 @@ final class AppNotificationsTests: XCTestCase {
         return try decoder.decode(CloudCapture.self, from: JSONSerialization.data(withJSONObject: object))
     }
 
+    func testCloudDuplicateResolvesReviewAndKeepsJournalWithoutReviewActions() async throws {
+        let history = AppNotifications()
+        let household = UUID(), purchase = try capture()
+        history.reconcileWallet([purchase], householdID: household)
+        let json: [String: Any] = ["id": purchase.id.uuidString, "event_id": UUID().uuidString,
+            "transaction_id": UUID().uuidString, "merchant": purchase.merchant, "date": "2026-10-18T12:00:00Z"]
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        let duplicate = try decoder.decode(CloudCaptureDuplicate.self, from: JSONSerialization.data(withJSONObject: json))
+        history.reconcileDuplicates([duplicate], householdID: household)
+        history.reconcileWallet([], householdID: household)
+        XCTAssertEqual(history.events.count, 1)
+        XCTAssertEqual(history.events[0].kind, .information)
+        XCTAssertTrue(history.events[0].isResolved)
+        XCTAssertTrue(history.events[0].actions.isEmpty)
+        XCTAssertTrue(history.pendingWalletCaptures(householdID: household).isEmpty)
+        XCTAssertEqual(history.events[0].message, L("Дубль: покупка уже есть в общей базе"))
+    }
+
     func testWalletNotificationsNavigateToSettingsForEveryRequest() throws {
         let history = AppNotifications()
         for destination in [NotificationNavigation.Destination.inbox, .capture(UUID())] {

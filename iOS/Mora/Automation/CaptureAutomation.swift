@@ -212,6 +212,9 @@ enum AutomationJournal {
     }
 
     static func duplicateNote(for alert: BankAlert, alerts: [BankAlert]) -> String? {
+        if alert.duplicateTransactionID != nil || alert.serverState == "duplicate" {
+            return L("Дубль: покупка уже есть в общей базе")
+        }
         if alert.walletRunID != nil {
             if alert.completedWallet == true || alert.lastError?.hasPrefix("Сумма добавлена") == true {
                 return L("Объединено: сумма добавлена к покупке из «Транзакция Wallet»")

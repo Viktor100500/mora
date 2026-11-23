@@ -18,6 +18,7 @@ final class CloudSync: ObservableObject {
     @Published private(set) var householdID: UUID?
     @Published private(set) var households: [CloudHousehold] = []
     @Published private(set) var pending: [CloudCapture] = []
+    @Published private(set) var captureDuplicates: [CloudCaptureDuplicate] = []
     /// Complete Wallet purchases are being booked; they are not shown for review meanwhile.
     @Published private(set) var processingWallet = false
     @Published private(set) var walletCards: [CloudWalletCard] = []
@@ -303,7 +304,14 @@ final class CloudSync: ObservableObject {
     }
     @discardableResult
     private func loadPending(_ id: UUID) async throws -> Bool {
-        let captures: [CloudCapture] = try await rpc("mora_list_pending", HouseholdBody(p_household_id: id))
+        var captures: [CloudCapture] = try await rpc("mora_list_pending", HouseholdBody(p_household_id: id))
+        do {
+            let duplicates: [CloudCaptureDuplicate] = try await rpc("mora_list_capture_duplicates", HouseholdBody(p_household_id: id))
+            let duplicateIDs = Set(duplicates.map(\.id))
+            captures.removeAll { duplicateIDs.contains($0.id) }
+            BankAlertDelivery.reconcileDuplicates(duplicates)
+            if captureDuplicates != duplicates { captureDuplicates = duplicates }
+        } catch CloudAPIError.response(let code, _) where code == 404 { }
         let knownCards = Set(walletCards.map(\.id))
         if captures.contains(where: { $0.card_id.map { !knownCards.contains($0) } ?? false }) { try await loadWalletCards(id) }
         let changed = inbox != captures

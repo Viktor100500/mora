@@ -519,7 +519,7 @@
   "Курсы еще не загружены. При подключении к интернету загрузка начнется автоматически.": "Rates have not been downloaded yet. Download starts automatically when online.",
   "Изменить": "Change",
   "Код, например USD": "Code, e.g. USD",
-  "Курс": "Rate",
+  "Курс": "Exchange rate",
   "Сохранить курс": "Save rate",
   "Курсы применяются ко всем операциям, включая историю. Для налогового учета и исторических курсов эта версия не предназначена.": "Rates apply to all transactions, including past ones. This version does not support tax accounting or historical rates.",
   "В демо используются условные курсы, не рыночные котировки.": "Demo data uses example rates, not market rates.",
@@ -1186,5 +1186,13 @@
   "История уведомлений": "Notification history",
   "Все события сохраняются на этом Mac.": "All events are kept on this Mac.",
   "Открыть историю": "Open history",
-  "Показать ещё 100": "Show 100 more"
+  "Показать ещё 100": "Show 100 more",
+  "Дубль: покупка уже есть в общей базе": "Duplicate: this purchase is already in the shared database",
+  "Курс вручную": "Manual exchange rate",
+  "Введите курс без банковской комиссии. Комиссия счёта добавится отдельно.": "Enter the rate before the bank fee. The account fee is added separately.",
+  "Введите положительный курс.": "Enter a positive exchange rate.",
+  "Получить курс Visa": "Get Visa rate",
+  "Ввести курс вручную": "Enter rate manually",
+  "{0} · 1 {1} = {2} {3} · {4}": "{0} · 1 {1} = {2} {3} · {4}",
+  "Курс вручную: 1 {0} = {1} {2}.": "Manual exchange rate: 1 {0} = {1} {2}."
 }

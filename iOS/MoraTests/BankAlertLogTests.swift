@@ -21,6 +21,26 @@ final class BankAlertLogTests: XCTestCase {
 
     override func tearDown() { try? FileManager.default.removeItem(at: directory) }
 
+    func testCloudDuplicateUpdatesOriginalJournalAndStopsReview() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var alert = BankAlert(receivedAt: Date(), source: "Issuer", text: "Original notification", state: .delivered)
+        alert.wallet = true
+        try BankAlertLog.save(alert, in: directory)
+        let transaction = UUID()
+        let object: [String: Any] = ["id": UUID().uuidString, "event_id": alert.id.uuidString,
+            "transaction_id": transaction.uuidString, "merchant": "Chapel", "date": "2026-11-23T18:52:57Z"]
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        let duplicate = try decoder.decode(CloudCaptureDuplicate.self, from: JSONSerialization.data(withJSONObject: object))
+        BankAlertDelivery.reconcileDuplicates([duplicate], in: directory)
+        let saved = try XCTUnwrap(BankAlertLog.alerts(in: directory).first)
+        XCTAssertEqual(saved.state, .duplicate)
+        XCTAssertEqual(saved.duplicateTransactionID, transaction)
+        XCTAssertEqual(saved.text, alert.text)
+        XCTAssertFalse(saved.needsUser)
+        XCTAssertEqual(AutomationJournal.duplicateNote(for: saved, alerts: [saved]), L("Дубль: покупка уже есть в общей базе"))
+    }
+
     func testCodesAreLoggedWithoutTheirText() throws {
         let alert = try BankAlertLog.record(text: "Your verification code is 552901. Do not share it.", source: "Chase",
                                             sending: true, at: start, directory: directory, templates: [], walletRuns: [])

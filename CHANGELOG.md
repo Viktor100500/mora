@@ -1,5 +1,15 @@
 # Changelog
 
+## iPhone 1.0.72 · Mac 1.7.28 — 2026-11-23
+
+iPhone 1.0.72 (build 73) · Mac 1.7.28 (build 107)
+
+- Wallet notifications are reconciled against existing expenses in the shared database using the account, merchant, original currency and amount, and a two-minute time window. Different Wallet card labels no longer leave a duplicate in review; ambiguous matches stay for review. Both arrival orders and existing pending notifications are handled without changing balances.
+- Duplicate notifications remain in the iPhone automation journal and Mac notification history with an explicit duplicate status, synchronized across devices.
+- Visa conversion requests use the calculator's public JSON endpoint inside its WebKit context, replacing hidden form automation. Responses validate the currency pair, date and positive rate.
+- A failed Visa request can reuse a saved Visa quote from transaction history even when this device's cache is empty. The quote date remains visible and bank fees are applied once.
+- The iPhone conversion form offers manual rate entry after a failed request or to replace a cached quote. Manual rates keep their source in the transaction and support the same cloud review, fees and rounding.
+
 ## Mac 1.7.27 — 2026-11-23
 
 Mac 1.7.27 (build 106)

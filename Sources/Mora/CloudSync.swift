@@ -332,7 +332,13 @@ final class CloudSync: ObservableObject {
     }
     @discardableResult
     private func loadPending(_ id: UUID) async throws -> Bool {
-        let captures: [CloudCapture] = try await rpc("mora_list_pending", HouseholdBody(p_household_id: id))
+        var captures: [CloudCapture] = try await rpc("mora_list_pending", HouseholdBody(p_household_id: id))
+        do {
+            let duplicates: [CloudCaptureDuplicate] = try await rpc("mora_list_capture_duplicates", HouseholdBody(p_household_id: id))
+            let duplicateIDs = Set(duplicates.map(\.id))
+            captures.removeAll { duplicateIDs.contains($0.id) }
+            store?.notifications.reconcileDuplicates(duplicates, householdID: id)
+        } catch CloudAPIError.response(let code, _) where code == 404 { }
         let knownCards = Set(walletCards.map(\.id))
         if captures.contains(where: { $0.card_id.map { !knownCards.contains($0) } ?? false }) { try await loadWalletCards(id) }
         if let previous = stagedPending {

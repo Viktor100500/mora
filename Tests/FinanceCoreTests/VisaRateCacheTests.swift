@@ -5,6 +5,43 @@ import XCTest
 final class VisaRateCacheTests: XCTestCase {
     private let date = Dates.parse("2026-10-25")!
 
+    func testSavedLedgerQuoteFillsAnEmptyDeviceCacheWithoutReusingManualRates() async throws {
+        let old = date.addingTimeInterval(-86_400)
+        var saved = Transaction(date: old, merchant: "Saved", amount: -9, accountID: UUID())
+        saved.conversion = CardConversion(originalAmount: -10, originalCurrency: "USD", accountCurrency: "EUR", rate: Decimal(string: "0.9")!, date: old)
+        var manual = saved
+        manual.conversion?.provider = "Manual"; manual.conversion?.rate = 50
+        manual.conversion?.date = date
+        let client = VisaRateClient(cacheURL: nil) { _, _, _ in throw URLError(.notConnectedToInternet) }
+        let quote = try await client.conversion(amount: -20, from: "USD", to: "EUR", date: date, history: [saved, manual])
+        XCTAssertEqual(quote.rate, Decimal(string: "0.9"))
+        XCTAssertEqual(quote.cachedRateDate, old)
+        XCTAssertEqual(try quote.applyingFee(of: Account(name: "EUR", currency: "EUR", conversionFeePercent: 1)).convertedAmount(), Decimal(string: "-18.18"))
+        XCTAssertNil(CardConversion.savedVisaConversion(amount: -10, from: "EUR", to: "USD", date: date, transactions: [saved]))
+        XCTAssertNil(CardConversion.savedVisaConversion(amount: -10, from: "USD", to: "EUR", date: old.addingTimeInterval(-1), transactions: [saved]))
+    }
+
+    func testVisaCalculatorResponseRejectsMissingZeroAndMalformedRates() throws {
+        func body(_ rate: Any) throws -> Data {
+            try JSONSerialization.data(withJSONObject: ["status":"success", "conversionInputDate":"11/23/2026",
+                "originalValues":["fromCurrency":"USD", "toCurrency":"EUR"], "fxRateWithAdditionalFee":rate])
+        }
+        for rate in ["0.5" as Any, 0.5] {
+            XCTAssertEqual(try VisaCalculator.decodeRate(body(rate), from: "USD", to: "EUR", date: "11/23/2026"), Decimal(string: "0.5"))
+        }
+        for rate in ["0" as Any, "NaN", "-1", "1,23", "unavailable", 0] {
+            XCTAssertThrowsError(try VisaCalculator.decodeRate(body(rate), from: "USD", to: "EUR", date: "11/23/2026"))
+        }
+        XCTAssertThrowsError(try VisaCalculator.decodeRate(body("0.9"), from: "EUR", to: "USD", date: "11/23/2026"))
+        XCTAssertThrowsError(try VisaCalculator.decodeRate(body("0.9"), from: "USD", to: "EUR", date: "11/22/2026"))
+        XCTAssertThrowsError(try VisaCalculator.decodeRate(Data("<html>Unavailable</html>".utf8), from: "USD", to: "EUR", date: "11/23/2026"))
+        var manual = CardConversion(originalAmount: -10, originalCurrency: "USD", accountCurrency: "EUR", rate: Decimal(string: "0.9")!, date: date, provider: "Manual")
+        manual.bankFeePercent = 1
+        XCTAssertEqual(try manual.convertedAmount(), Decimal(string: "-9.09"))
+        XCTAssertTrue(manual.annotating("").contains("Курс вручную"))
+        XCTAssertEqual(manual.annotating(manual.annotating("")), manual.annotating(""))
+    }
+
     func testDiskCacheSurvivesRestartAndSeparatesPairDateAndUTCDay() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("VisaCache-\(UUID())")
         defer { try? FileManager.default.removeItem(at: directory) }

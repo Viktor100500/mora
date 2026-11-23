@@ -583,5 +583,14 @@
   "Когда я получаю сообщение от банка": "When I get a message from a bank",
   "Отправители: ваши банки · Запускать сразу": "Senders: your banks · Run Immediately",
   "Укажите «Отправителя», чтобы включить автоматизацию": "Configure “Sender” to enable this automation",
-  "Описание, заметки, теги": "Descriptions, notes, tags"
+  "Описание, заметки, теги": "Descriptions, notes, tags",
+  "Дубль: покупка уже есть в общей базе": "Duplicate: this purchase is already in the shared database",
+  "Курс вручную": "Manual exchange rate",
+  "Курс": "Exchange rate",
+  "Введите курс без банковской комиссии. Комиссия счёта добавится отдельно.": "Enter the rate before the bank fee. The account fee is added separately.",
+  "Введите положительный курс.": "Enter a positive exchange rate.",
+  "Получить курс Visa": "Get Visa rate",
+  "Ввести курс вручную": "Enter rate manually",
+  "{0} · 1 {1} = {2} {3} · {4}": "{0} · 1 {1} = {2} {3} · {4}",
+  "Курс вручную: 1 {0} = {1} {2}.": "Manual exchange rate: 1 {0} = {1} {2}."
 }

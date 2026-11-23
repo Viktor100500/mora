@@ -103,6 +103,15 @@ public struct CloudCapture: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
+/// A resolved capture retained for cross-device duplicate journals.
+public struct CloudCaptureDuplicate: Codable, Equatable, Sendable {
+    public let id: UUID
+    public let event_id: UUID
+    public let transaction_id: UUID
+    public let merchant: String
+    public let date: Date
+}
+
 public struct WalletCardAssignment: Codable, Identifiable, Sendable {
     public var id: UUID
     public var card: String

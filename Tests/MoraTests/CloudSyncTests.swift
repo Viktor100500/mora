@@ -30,7 +30,9 @@ private final class SyncStubProtocol: URLProtocol {
     override func startLoading() {
         let request = request
         do {
-            let (status, data) = try Self.handlers.withLockUnchecked { try $0!(request) }
+            // Existing sync scenarios have no duplicate captures.
+            let (status, data) = request.url!.lastPathComponent == "mora_list_capture_duplicates"
+                ? (200, Data("[]".utf8)) : try Self.handlers.withLockUnchecked { try $0!(request) }
             client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: status,
                 httpVersion: "HTTP/1.1", headerFields: ["Content-Type": "application/json"])!, cacheStoragePolicy: .notAllowed)
             client?.urlProtocol(self, didLoad: data)

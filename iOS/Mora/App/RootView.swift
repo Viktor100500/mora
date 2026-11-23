@@ -57,6 +57,8 @@ struct RootView: View {
             #endif
             await cloud.prepare(store: store)
         }
+        .onChange(of: cloud.captureDuplicates) { _, _ in reviewQueue.reload() }
+        .onChange(of: cloud.pending) { _, _ in reviewQueue.reload() }
         .onChange(of: store.revision) { cloud.localChanged() }
         .onChange(of: router.sheet == nil) { _, closed in if closed { reviewQueue.reload() } }
         .onChange(of: scenePhase) { _, phase in

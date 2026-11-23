@@ -545,7 +545,7 @@ struct TransactionEditor: View {
                Dates.string(saved.date) == Dates.string(date) { quote = saved }
             else {
                 quote = try await rateClient.conversion(amount: signed, from: purchaseCurrency,
-                    to: account.currency, date: date).applyingFee(of: account)
+                    to: account.currency, date: date, history: store.ledger.transactions).applyingFee(of: account)
             }
             try Task.checkCancellation()
             guard key == quoteKey else { return }
@@ -591,7 +591,7 @@ struct TransactionEditor: View {
         return VStack(alignment: .leading, spacing: 5) {
             FinancialText("\(kind == .income ? L("Будет зачислено") : L("Будет списано")): \(converted.map { DisplayMoney.string(abs($0), currency: quote?.accountCurrency ?? "") } ?? "—")")
                 .font(.callout.weight(.semibold))
-            FinancialText(L("Visa · 1 \(quote?.originalCurrency ?? purchaseCurrency) = \(quote.map { Money.plain($0.rate) } ?? "—") \(quote?.accountCurrency ?? account?.currency ?? "") · \(Dates.string(quote?.rateDate ?? date))"))
+            FinancialText(L("\(quote?.provider == "Manual" ? L("Курс вручную") : "Visa") · 1 \(quote?.originalCurrency ?? purchaseCurrency) = \(quote.map { Money.plain($0.rate) } ?? "—") \(quote?.accountCurrency ?? account?.currency ?? "") · \(Dates.string(quote?.rateDate ?? date))"))
                 .font(.caption).foregroundStyle(.secondary)
             if let warning = quote?.cachedRateNote { Text(L(warning)).font(.caption).foregroundStyle(.orange) }
             Text((quote?.feePercent ?? 0) == 0 ? L("Без банковской комиссии") : L("Банковская комиссия: \(Money.plain(quote?.feePercent ?? 0))% · включена в сумму"))

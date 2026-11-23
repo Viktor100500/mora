@@ -326,6 +326,7 @@ struct JournalHeadline<Badge: View>: View {
         case .waiting: ("Сохранено на iPhone, уйдёт при появлении интернета", "clock", "orange")
         case .delivered: (alert.serverState == "recorded" ? "Расход записан" : "Доставлено, ждёт проверки в Mora", "checkmark", "green")
         case .failed: ("Сервер не принял покупку", "xmark", "orange")
+        case .duplicate where alert.serverState == "duplicate": ("Дубль: покупка уже есть в общей базе", "square.on.square", "gray")
         case .duplicate: alert.completedWallet == true ? ("Дополнило покупку Wallet", "square.on.square", "gray") : ("Дубль: не отправлено", "square.on.square", "gray")
         case .skipped: ("Не учитывается", "minus", "gray")
         }

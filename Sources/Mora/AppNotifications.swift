@@ -204,6 +204,23 @@ final class AppNotifications: ObservableObject {
             .compactMap(\.walletCapture)
     }
 
+    func reconcileDuplicates(_ duplicates: [CloudCaptureDuplicate], householdID: UUID) {
+        var next = events
+        for duplicate in duplicates {
+            let message = L("Дубль: покупка уже есть в общей базе")
+            if let index = next.firstIndex(where: { $0.sourceID == duplicate.id && $0.householdID == householdID }) {
+                next[index].message = message; next[index].kind = .information
+                next[index].isResolved = true; next[index].isRead = true; next[index].actions = []
+                next[index].walletCapture = nil
+            } else {
+                next.insert(AppNotification(date: duplicate.date, message: message, detail: duplicate.merchant,
+                    kind: .information, isRead: true, sourceID: duplicate.id, householdID: householdID, isResolved: true), at: 0)
+            }
+        }
+        guard next != events else { return }
+        events = next.sorted { $0.date > $1.date }; persist()
+    }
+
     func reconcileWallet(_ captures: [CloudCapture], householdID: UUID) {
         let ids = Set(captures.map(\.id))
         var next = events

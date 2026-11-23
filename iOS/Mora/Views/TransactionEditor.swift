@@ -29,6 +29,8 @@ struct TransactionEditor: View {
     @State private var conversion: CardConversion?
     @State private var conversionKey = ""
     @State private var conversionError: String?
+    @State private var manualRate = ""
+    @State private var manualRateKey = ""
     @State private var saving = false
     @State private var attemptedSave = false
     @State private var confirmDelete = false
@@ -338,6 +340,7 @@ struct TransactionEditor: View {
     // MARK: Conversion
 
     @MainActor private func refreshConversion() async {
+        manualRateKey = ""; manualRate = ""
         conversion = nil; conversionError = nil; conversionKey = quoteKey
         guard needsConversion, let account else { return }
         let key = quoteKey
@@ -350,7 +353,7 @@ struct TransactionEditor: View {
                Dates.string(saved.date) == Dates.string(date) { quote = saved }
             else {
                 quote = try await VisaRateClient.shared.conversion(amount: signed, from: purchaseCurrency,
-                    to: account.currency, date: date).applyingFee(of: account)
+                    to: account.currency, date: date, history: ledger.transactions).applyingFee(of: account)
             }
             try Task.checkCancellation()
             guard key == quoteKey else { return }
@@ -362,6 +365,13 @@ struct TransactionEditor: View {
         }
     }
     private var currentConversion: CardConversion? {
+        if manualRateKey == quoteKey, let account, let rate = AmountInput.parse(manualRate), rate > 0,
+           let value = AmountInput.parse(amount), value > 0 {
+            return CardConversion(originalAmount: kind == .income ? value : -value, originalCurrency: purchaseCurrency,
+                accountCurrency: account.currency, rate: rate, date: Calendar.current.startOfDay(for: date),
+                provider: "Manual").applyingFee(of: account)
+        }
+        guard manualRateKey != quoteKey else { return nil }
         guard conversionKey == quoteKey, var quote = conversion, let value = AmountInput.parse(amount), value > 0 else { return nil }
         let signed = kind == .income ? value : -value
         if quote.originalAmount != signed, let account {
@@ -377,12 +387,32 @@ struct TransactionEditor: View {
 
     @ViewBuilder private var conversionPreview: some View {
         let quote = currentConversion
-        if let quote, let converted = try? quote.convertedAmount() {
+        if manualRateKey == quoteKey {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L("Курс вручную")).font(.subheadline.weight(.semibold))
+                HStack {
+                    Text("1 \(purchaseCurrency) =")
+                    TextField(L("Курс"), text: $manualRate).keyboardType(.decimalPad)
+                        .accessibilityLabel(L("Курс вручную"))
+                    Text(account?.currency ?? "")
+                }
+                Text(L("Введите курс без банковской комиссии. Комиссия счёта добавится отдельно."))
+                    .font(.caption).foregroundStyle(.secondary)
+                if let quote, let converted = try? quote.convertedAmount() {
+                    FinancialText("\(kind == .income ? L("Будет зачислено") : L("Будет списано")): \(DisplayMoney.string(abs(converted), currency: quote.accountCurrency))")
+                        .font(.subheadline.weight(.semibold))
+                } else if !manualRate.isEmpty {
+                    Text(L("Введите положительный курс.")).font(.caption).foregroundStyle(.red)
+                }
+                Button(L("Получить курс Visa")) { Task { await refreshConversion() } }.font(.subheadline)
+            }
+        } else if let quote, let converted = try? quote.convertedAmount() {
             VStack(alignment: .leading, spacing: 4) {
                 FinancialText("\(kind == .income ? L("Будет зачислено") : L("Будет списано")): \(DisplayMoney.string(abs(converted), currency: quote.accountCurrency))")
                     .font(.subheadline.weight(.semibold))
-                FinancialText(L("Visa · 1 \(quote.originalCurrency) = \(Money.plain(quote.rate)) \(quote.accountCurrency) · \(Dates.string(quote.rateDate))"))
+                FinancialText(L("\(quote.provider == "Manual" ? L("Курс вручную") : "Visa") · 1 \(quote.originalCurrency) = \(Money.plain(quote.rate)) \(quote.accountCurrency) · \(Dates.string(quote.rateDate))"))
                     .font(.caption).foregroundStyle(.secondary)
+                Button(L("Ввести курс вручную"), action: beginManualRate).font(.subheadline)
                 if let warning = quote.cachedRateNote { Text(L(warning)).font(.caption).foregroundStyle(.orange) }
                 Text(quote.feePercent == 0 ? L("Без банковской комиссии") : L("Банковская комиссия: \(Money.plain(quote.feePercent))% · включена в сумму"))
                     .font(.caption).foregroundStyle(.secondary)
@@ -392,6 +422,7 @@ struct TransactionEditor: View {
         } else if let conversionError, conversionKey == quoteKey {
             VStack(alignment: .leading, spacing: 8) {
                 Text(L(conversionError)).font(.caption).foregroundStyle(.red)
+                Button(L("Ввести курс вручную"), action: beginManualRate).font(.subheadline)
                 Button(L("Повторить получение курса")) { Task { await refreshConversion() } }.font(.subheadline)
             }
         } else if (AmountInput.parse(amount) ?? 0) > 0 {
@@ -399,6 +430,11 @@ struct TransactionEditor: View {
         } else {
             Text(L("Введите сумму покупки в валюте \(purchaseCurrency).")).font(.caption).foregroundStyle(.secondary)
         }
+    }
+
+    private func beginManualRate() {
+        manualRate = currentConversion.map { Money.plain($0.rate) } ?? ""
+        manualRateKey = quoteKey
     }
 
     // MARK: Balance
@@ -464,7 +500,7 @@ struct TransactionEditor: View {
         saving = true
         Task { @MainActor in
             defer { saving = false }
-            if needsConversion && currentConversion == nil { await refreshConversion() }
+            if needsConversion && currentConversion == nil && manualRateKey != quoteKey { await refreshConversion() }
             guard let value = makeDraft() else {
                 if needsConversion && conversionError == nil { conversionError = L("Курс Visa еще не получен. Повторите сохранение.") }
                 return
