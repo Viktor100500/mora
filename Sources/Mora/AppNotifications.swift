@@ -75,9 +75,16 @@ struct NotificationNavigation: Identifiable {
     let destination: Destination
 }
 
+struct NotificationListEntry: Identifiable, Equatable, Sendable {
+    let event: AppNotification
+    let dateLabel: String
+    var id: UUID { event.id }
+}
+
 /// Computer-local history. It never enters ledger snapshots, exports or cloud sync.
 @MainActor
 final class AppNotifications: ObservableObject {
+    static let recentLimit = 100
     @Published private(set) var events: [AppNotification] = []
     @Published private(set) var navigation: NotificationNavigation?
     private(set) var storageError: String?
@@ -85,6 +92,7 @@ final class AppNotifications: ObservableObject {
     private var canPersist = true
 
     private let storage: NotificationStorage
+    private let presentation = BackgroundWork()
     private var loaded = false
     private var loading: Task<Void, Never>?
     private var pendingSave: Task<Void, Never>?
@@ -98,7 +106,7 @@ final class AppNotifications: ObservableObject {
         let task = Task { @MainActor in
             do {
                 let history = try await storage.load()
-                let visibleHistory = history.filter { !Self.isCopyNoise($0.message) && !$0.isInProgress }
+                let visibleHistory = history
                 if events.isEmpty {
                     if !visibleHistory.isEmpty { events = visibleHistory }
                 } else {
@@ -112,7 +120,27 @@ final class AppNotifications: ObservableObject {
     }
     func flush() async { await pendingSave?.value }
 
-    var unreadCount: Int { events.filter { !$0.isRead }.count }
+    var recentEvents: [AppNotification] { Array(events.prefix(Self.recentLimit)) }
+    var unreadCount: Int { events.prefix(Self.recentLimit).filter { !$0.isRead }.count }
+
+    func preparePage(offset: Int = 0, limit: Int = recentLimit,
+                     from history: [AppNotification]? = nil) async -> [NotificationListEntry] {
+        let snapshot = Array((history ?? events).dropFirst(max(0, offset)).prefix(max(0, limit)))
+        let locale = L10n.locale
+        return await presentation.perform {
+            snapshot.map { NotificationListEntry(event: $0,
+                dateLabel: $0.date.formatted(.dateTime.day().month(.abbreviated).hour().minute().locale(locale))) }
+        }
+    }
+
+    func markRecentRead() {
+        let count = min(Self.recentLimit, events.count)
+        guard events.prefix(count).contains(where: { !$0.isRead }) else { return }
+        var next = events
+        for index in 0..<count { next[index].isRead = true }
+        events = next
+        persist()
+    }
 
     func connectionLost() {
         guard events.first(where: { $0.connectionState != nil })?.connectionState != .lost else { return }
@@ -156,7 +184,7 @@ final class AppNotifications: ObservableObject {
         persist()
     }
 
-    private static func isCopyNoise(_ message: String) -> Bool {
+    nonisolated fileprivate static func isCopyNoise(_ message: String) -> Bool {
         ["Адрес почты скопирован", "Почта скопирована", "Email address copied", "Email copied",
          "Промпт скопирован", "Prompt copied"].contains(message)
     }
@@ -229,7 +257,7 @@ final class AppNotifications: ObservableObject {
             await load()
             guard !Task.isCancelled else { return }
             guard canPersist else { return }
-            let snapshot = events.filter { !$0.isInProgress }
+            let snapshot = events
             do {
                 try await storage.save(snapshot, revision: version)
                 if revision == version { storageError = nil }
@@ -248,12 +276,13 @@ private actor NotificationStorage {
         guard let fileURL, FileManager.default.fileExists(atPath: fileURL.path) else { return [] }
         let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode([AppNotification].self, from: Data(contentsOf: fileURL))
+            .filter { !AppNotifications.isCopyNoise($0.message) && !$0.isInProgress }
     }
     func save(_ events: [AppNotification], revision next: UInt64) throws {
         guard next > revision, let fileURL else { return }
         let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
         try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try encoder.encode(events).write(to: fileURL, options: .atomic)
+        try encoder.encode(events.filter { !$0.isInProgress }).write(to: fileURL, options: .atomic)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
         revision = next
     }

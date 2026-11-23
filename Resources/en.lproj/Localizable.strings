@@ -643,3 +643,9 @@
 "Проверьте покупку из уведомления Wallet" = "Review the purchase from the Wallet notification";
 "Wallet не передал продавца" = "Wallet did not pass the merchant";
 "Покупки ждут проверки" = "Purchases need review";
+"Последние 100 событий" = "Latest 100 events";
+"Полная история в настройках" = "Full history in Settings";
+"История уведомлений" = "Notification history";
+"Все события сохраняются на этом Mac." = "All events are kept on this Mac.";
+"Открыть историю" = "Open history";
+"Показать ещё 100" = "Show 100 more";
