@@ -48,6 +48,8 @@ struct AppNotification: Codable, Equatable, Identifiable, Sendable {
     var isResolved = false
     var progress: Bool? = nil
     var connectionState: ConnectionState? = nil
+    /// Keep unresolved reviews available when this Mac starts without a connection.
+    var walletCapture: CloudCapture? = nil
     var isInProgress: Bool { progress == true }
 }
 
@@ -169,6 +171,11 @@ final class AppNotifications: ObservableObject {
         navigation = NotificationNavigation(destination: destination)
     }
 
+    func pendingWalletCaptures(householdID: UUID) -> [CloudCapture] {
+        events.filter { $0.householdID == householdID && $0.kind == .review && !$0.isResolved }
+            .compactMap(\.walletCapture)
+    }
+
     func reconcileWallet(_ captures: [CloudCapture], householdID: UUID) {
         let ids = Set(captures.map(\.id))
         var next = events
@@ -194,16 +201,17 @@ final class AppNotifications: ObservableObject {
                           L(capture.reason ?? "Проверьте покупку")].joined(separator: "\n")
             let message = capture.awaitsCardLink ? L("Новая карта в Wallet: выберите счет") : L("Покупка из Wallet ожидает обработки")
             if let index = next.firstIndex(where: { $0.sourceID == capture.id && $0.householdID == householdID }) {
-                if next[index].message != message || next[index].detail != detail || next[index].isResolved {
+                if next[index].message != message || next[index].detail != detail || next[index].isResolved || next[index].walletCapture != capture {
                     next[index].message = message
                     next[index].detail = detail
                     next[index].isResolved = false
                     next[index].isRead = false
+                    next[index].walletCapture = capture
                 }
             } else {
                 let event = AppNotification(message: message, detail: detail,
                                             kind: .review, actions: [.review(capture.id)], sourceID: capture.id,
-                                            householdID: householdID)
+                                            householdID: householdID, walletCapture: capture)
                 next.insert(event, at: 0)
             }
         }

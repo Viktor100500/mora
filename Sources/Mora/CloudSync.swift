@@ -41,6 +41,7 @@ final class CloudSync: ObservableObject {
     private weak var store: FinanceStore?
     private let walletRate: @MainActor @Sendable (Decimal, String, String, Date) async throws -> CardConversion
     private let transport: URLSession
+    private let sessionReader: @Sendable (String) throws -> Data?
     private let sessionWriter: @Sendable (Data, String) throws -> Void
     private var operationInProgress = false
     private var operationContactedCloud = false
@@ -55,10 +56,12 @@ final class CloudSync: ObservableObject {
          walletRate: @escaping @MainActor @Sendable (Decimal, String, String, Date) async throws -> CardConversion = {
              try await VisaRateClient.shared.conversion(amount: $0, from: $1, to: $2, date: $3)
          },
+         sessionReader: @escaping @Sendable (String) throws -> Data? = { try CloudKeychain.read(account: $0) },
          sessionWriter: @escaping @Sendable (Data, String) throws -> Void = { try CloudKeychain.write($0, account: $1) }) {
         self.store = store
         self.transport = transport
         self.walletRate = walletRate
+        self.sessionReader = sessionReader
         self.sessionWriter = sessionWriter
     }
     private struct Settings: Codable, Sendable {
@@ -117,6 +120,12 @@ final class CloudSync: ObservableObject {
         async let configuration: Void = load()
         await store.load()
         await configuration
+        if enabled, let householdID {
+            inbox = store.notifications.pendingWalletCaptures(householdID: householdID)
+            // These purchases already needed review, including earlier failed bookings.
+            attemptedCaptures.formUnion(inbox.map(\.id))
+            pending = reviewable(inbox)
+        }
         diagnostics?.record("prepare-loaded", taskCancelled: Task.isCancelled)
         diagnostics?.record("prepare-end", taskCancelled: Task.isCancelled)
     }
@@ -137,12 +146,13 @@ final class CloudSync: ObservableObject {
     private func load() async {
         guard let configURL else { return }
         let account = keychainAccount
+        let reader = sessionReader
         do {
             let loaded: (Settings, CloudSession?)? = try await BackgroundWork.credentials.perform {
                 guard FileManager.default.fileExists(atPath: configURL.path) else { return nil }
                 let stored = try JSONDecoder().decode(Settings.self, from: Data(contentsOf: configURL))
                 _ = try CloudConfiguration(projectURL: stored.configuration.projectURL, publicKey: stored.configuration.publicKey)
-                let session = try CloudKeychain.read(account: account).map { try JSONDecoder().decode(CloudSession.self, from: $0) }
+                let session = try reader(account).map { try JSONDecoder().decode(CloudSession.self, from: $0) }
                 if let session, session.user.id != stored.userID { throw LedgerError.invalid("Облачная сессия относится к другому пользователю. Войдите повторно.") }
                 return (stored, session)
             }
@@ -479,7 +489,11 @@ final class CloudSync: ObservableObject {
             self.walletProgressID = nil
             if let failure {
                 if let progressID {
-                    if Self.isCancellation(failure) || Self.isConnectionError(failure) { store.finishProgressNotice(progressID) }
+                    if showWalletProgress && Self.isConnectionError(failure) && !captures.isEmpty {
+                        store.finishProgressNotice(progressID, message: L("Покупки ждут проверки"),
+                            detail: L("Покупок на проверке: \(captures.count)"), kind: .warning,
+                            actions: [.inbox], dismissAfter: .seconds(3))
+                    } else if Self.isCancellation(failure) || Self.isConnectionError(failure) { store.finishProgressNotice(progressID) }
                     else {
                         store.finishProgressNotice(progressID, message: L("Не удалось загрузить покупки из Wallet"),
                             detail: failure.localizedDescription, kind: .error, actions: [.inbox])
@@ -494,9 +508,10 @@ final class CloudSync: ObservableObject {
                 if !self.importedBatchIDs.isEmpty { actions.append(.imports) }
                 if !captures.isEmpty { actions.append(.inbox) }
                 store.finishProgressNotice(progressID,
-                    message: added > 0 ? L("Загружено из Apple Shortcuts: \(added)") : nil,
+                    message: !captures.isEmpty ? L("Покупки ждут проверки") : added > 0 ? L("Загружено из Apple Shortcuts: \(added)") : nil,
                     detail: captures.isEmpty ? nil : L("Покупок на проверке: \(captures.count)"),
-                    kind: captures.isEmpty ? .success : .warning, actions: actions)
+                    kind: captures.isEmpty ? .success : .warning, actions: actions,
+                    dismissAfter: captures.isEmpty ? .seconds(7) : .seconds(3))
             }
             self.diagnostics?.record("sync-end-revision-\(store.revision)", taskCancelled: Task.isCancelled)
         }

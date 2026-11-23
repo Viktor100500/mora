@@ -642,3 +642,4 @@
 "Карта: %@" = "Card: %@";
 "Проверьте покупку из уведомления Wallet" = "Review the purchase from the Wallet notification";
 "Wallet не передал продавца" = "Wallet did not pass the merchant";
+"Покупки ждут проверки" = "Purchases need review";
