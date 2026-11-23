@@ -1,5 +1,12 @@
 # Changelog
 
+## iPhone 1.0.71 — 2026-11-23
+
+iPhone 1.0.71 (build 72) · Mac unchanged
+
+- All tab-bar icons and labels now share one proportional size based on the available width and the widest localized title. Longer titles no longer shrink independently from their neighbours.
+- The layout accounts for the raised Liquid Glass selection, including proportional lens growth on narrow screens. Sizes update together after width or language changes; roomy layouts retain the original size.
+
 ## Mac 1.7.26 — 2026-11-22
 
 Mac 1.7.26 (build 105)

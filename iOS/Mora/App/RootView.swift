@@ -266,7 +266,7 @@ private struct SystemTabBar: UIViewRepresentable {
 /// UITabBar stops lifting its lens when Reduce Motion is on; a lens we lift and move
 /// ourselves keeps its full glass animation. Without the lens class, a plain pill slides.
 @available(iOS 26, *)
-private final class GlassTabBar: UIView {
+final class GlassTabBar: UIView {
     static let capsuleHeight: CGFloat = 62
     static let topRoom: CGFloat = 14
     /// Narrow phones (mini, SE) get more width per tab, as UIKit's own bar does.
@@ -288,6 +288,7 @@ private final class GlassTabBar: UIView {
     private static let hangTime: Double = 0.22
     private static let liftResponse: Double = 0.25
     private static let moveDuration: Double = 0.4
+    private static let liftedContentScale: CGFloat = 1.15
 
     var onSelect: ((Int) -> Void)?
 
@@ -317,6 +318,7 @@ private final class GlassTabBar: UIView {
     private var items: [ItemView] = []
     private var selectedItems: [ItemView] = []
     private var selectedIndex = 0
+    private var needsContentSizing = true
     private var trackedTouch: UITouch?
     private var dragStartLensX: CGFloat = 0
     private var dragStartTouchX: CGFloat = 0
@@ -418,7 +420,7 @@ private final class GlassTabBar: UIView {
         typealias Function = @convention(c) (AnyObject, Selector, Bool) -> Void
         unsafeBitCast(method, to: Function.self)(target, selector, value)
     }
-    private func setLensLifted(_ lifted: Bool) {
+    func setLensLifted(_ lifted: Bool) {
         guard let lens else { return }
         isLensLifted = lifted
         if lifted { liftTimestamp = CACurrentMediaTime() }
@@ -431,7 +433,7 @@ private final class GlassTabBar: UIView {
                        options: [.allowUserInteraction, .beginFromCurrentState]) {
             self.setLensBounds(self.lensSize(lifted: lifted))
             self.restingSelection.alpha = lifted ? 0 : 1
-            let scale: CGFloat = lifted ? 1.15 : 1
+            let scale: CGFloat = lifted ? Self.liftedContentScale : 1
             self.selectedItems.forEach { $0.transform = CGAffineTransform(scaleX: scale, y: scale) }
         }
     }
@@ -448,13 +450,34 @@ private final class GlassTabBar: UIView {
     private static let lensOverhang: CGFloat = 2
     private var itemWidth: CGFloat { max(1, (capsuleSize.width - Self.innerPadding * 2) / CGFloat(max(items.count, 1))) }
 
+    /// Fit the widest localized title or symbol once for the entire bar. Reserve
+    /// room for the lens's magnification as well as its rounded edges, so even a
+    /// lifted item keeps a gap from its neighbours. Individual labels never shrink.
+    private var contentScale: CGFloat {
+        let liftedWidth = lensSize(lifted: true).width
+        let available = max(1, min(itemWidth - 12, itemWidth * 2 - liftedWidth - 4))
+        func fits(_ scale: CGFloat) -> Bool { items.allSatisfy { $0.contentWidth(at: scale) <= available } }
+        if fits(1) { return 1 }
+        // San Francisco's optical sizing changes glyph widths with the point size;
+        // multiplying the width measured at 10 pt would not fit the actual font.
+        var lower: CGFloat = 0
+        var upper: CGFloat = 1
+        for _ in 0..<16 {
+            let candidate = (lower + upper) / 2
+            if fits(candidate) { lower = candidate } else { upper = candidate }
+        }
+        return lower
+    }
+
     /// The visual slot of an item, in the capsule's coordinates.
     private func slot(_ index: Int) -> CGRect {
         let visual = isRTL ? items.count - 1 - index : index
         return CGRect(x: Self.innerPadding + CGFloat(visual) * itemWidth, y: 0, width: itemWidth, height: capsuleSize.height)
     }
     private func lensSize(lifted: Bool) -> CGSize {
-        lifted ? CGSize(width: itemWidth + 16, height: capsuleSize.height + 8)
+        // Narrow slots need proportional growth too: a fixed 16-point expansion
+        // would reach neighbouring titles even after fitting the content.
+        lifted ? CGSize(width: min(itemWidth + 16, itemWidth * Self.liftedContentScale), height: capsuleSize.height + 8)
                : CGSize(width: itemWidth + Self.lensOverhang * 2, height: capsuleSize.height - 8)
     }
     /// Where the resting lens sits for a tab: centred on it, but never closer than
@@ -498,7 +521,8 @@ private final class GlassTabBar: UIView {
         let side = Self.sideMargin(width: bounds.width)
         let frame = CGRect(x: side, y: bounds.height - bottom - Self.capsuleHeight,
                            width: max(0, bounds.width - side * 2), height: Self.capsuleHeight)
-        if glassContainer.frame != frame {
+        let frameChanged = glassContainer.frame != frame
+        if frameChanged {
             UIView.performWithoutAnimation {
                 glassContainer.frame = frame
                 let local = CGRect(origin: .zero, size: frame.size)
@@ -509,10 +533,17 @@ private final class GlassTabBar: UIView {
                     items[index].frame = slot(index)
                     selectedItems[index].transform = .identity
                     selectedItems[index].frame = slot(index)
+                    let lift: CGFloat = isLensLifted ? Self.liftedContentScale : 1
+                    selectedItems[index].transform = CGAffineTransform(scaleX: lift, y: lift)
                 }
-                setLensBounds(lensSize(lifted: false))
+                setLensBounds(lensSize(lifted: isLensLifted))
                 setLensCenterX(restX(selectedIndex))
             }
+        }
+        if frameChanged || needsContentSizing {
+            let scale = contentScale
+            (items + selectedItems).forEach { $0.setContentScale(scale) }
+            needsContentSizing = false
         }
         applyContentInset()
     }
@@ -572,10 +603,13 @@ private final class GlassTabBar: UIView {
     // MARK: State
 
     func setTitles(_ titles: [String]) {
+        var changed = false
         for (index, title) in titles.enumerated() where items.indices.contains(index) && items[index].title != title {
             items[index].title = title
             selectedItems[index].title = title
+            changed = true
         }
+        if changed { needsContentSizing = true; setNeedsLayout() }
     }
     func setBadge(_ badge: String?, accessibilityValue: String?) {
         items.last?.badge = badge
@@ -708,7 +742,16 @@ private final class GlassTabBar: UIView {
         private let label = UILabel()
         private let badgeLabel = UILabel()
         private let tinted: Bool
+        private let unscaledSymbol: UIImage?
+        private var contentScale: CGFloat = 1
+        private static let titleFont = UIFont.systemFont(ofSize: 10, weight: .semibold)
         var activate: (() -> Void)?
+
+        func contentWidth(at scale: CGFloat) -> CGFloat {
+            let configuration = UIImage.SymbolConfiguration(pointSize: 19 * scale, weight: .medium)
+            return max(unscaledSymbol?.withConfiguration(configuration).size.width ?? 0,
+                       (title ?? "").size(withAttributes: [.font: Self.titleFont.withSize(10 * scale)]).width)
+        }
 
         var title: String? {
             get { label.text }
@@ -726,16 +769,17 @@ private final class GlassTabBar: UIView {
 
         init(symbol: String, tinted: Bool) {
             self.tinted = tinted
+            let configuration = UIImage.SymbolConfiguration(pointSize: 19, weight: .medium)
+            unscaledSymbol = UIImage(systemName: symbol + ".fill", withConfiguration: configuration)
+                ?? UIImage(systemName: symbol, withConfiguration: configuration)
             super.init(frame: .zero)
             isUserInteractionEnabled = false
             isAccessibilityElement = true
-            icon.image = UIImage(systemName: symbol + ".fill") ?? UIImage(systemName: symbol)
-            icon.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: 19, weight: .medium)
+            icon.image = unscaledSymbol
             icon.contentMode = .center
-            label.font = .systemFont(ofSize: 10, weight: .semibold)
+            label.font = Self.titleFont
             label.textAlignment = .center
-            label.adjustsFontSizeToFitWidth = true
-            label.minimumScaleFactor = 0.75
+            label.adjustsFontSizeToFitWidth = false
             badgeLabel.font = .systemFont(ofSize: 12, weight: .semibold)
             badgeLabel.textColor = .white
             badgeLabel.textAlignment = .center
@@ -747,6 +791,15 @@ private final class GlassTabBar: UIView {
         }
         required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
+        func setContentScale(_ scale: CGFloat) {
+            guard abs(contentScale - scale) > 0.0001 else { return }
+            contentScale = scale
+            icon.image = unscaledSymbol?.withConfiguration(UIImage.SymbolConfiguration(pointSize: 19 * scale, weight: .medium))
+            label.font = Self.titleFont.withSize(10 * scale)
+            badgeLabel.font = .systemFont(ofSize: 12 * scale, weight: .semibold)
+            setNeedsLayout()
+        }
+
         override func tintColorDidChange() { super.tintColorDidChange(); updateColors() }
         private func updateColors() {
             let color: UIColor = tinted || isHighlightedTab ? tintColor : .label
@@ -755,12 +808,13 @@ private final class GlassTabBar: UIView {
         }
         override func layoutSubviews() {
             super.layoutSubviews()
-            icon.frame = CGRect(x: 0, y: bounds.midY - 22, width: bounds.width, height: 28)
+            let scale = contentScale
+            icon.frame = CGRect(x: 0, y: bounds.midY - 22 * scale, width: bounds.width, height: 28 * scale)
             // Narrower than the tab, so the text stays inside the lens's rounded ends.
-            label.frame = CGRect(x: 6, y: bounds.midY + 8, width: max(0, bounds.width - 12), height: 13)
-            let width = max(18, badgeLabel.sizeThatFits(CGSize(width: 60, height: 18)).width + 10)
-            badgeLabel.frame = CGRect(x: bounds.midX + 4, y: bounds.midY - 26, width: width, height: 18)
-            badgeLabel.layer.cornerRadius = 9
+            label.frame = CGRect(x: 6, y: bounds.midY + 8 * scale, width: max(0, bounds.width - 12), height: 13 * scale)
+            let width = max(18 * scale, badgeLabel.sizeThatFits(CGSize(width: 60, height: 18 * scale)).width + 10 * scale)
+            badgeLabel.frame = CGRect(x: bounds.midX + 4 * scale, y: bounds.midY - 26 * scale, width: width, height: 18 * scale)
+            badgeLabel.layer.cornerRadius = 9 * scale
         }
         override func accessibilityActivate() -> Bool { activate?(); return true }
     }
