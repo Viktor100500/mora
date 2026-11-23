@@ -1,5 +1,12 @@
 # Changelog
 
+## Mac 1.7.24 — 2026-11-22
+
+Mac 1.7.24 (build 103)
+
+- After startup cloud loading finishes, a yellow reminder appears for three seconds whenever purchases still need review, including previously seen purchases.
+- Unresolved reviews remain available after restarting offline. The reminder links to the shared review inbox, and the notification bell keeps its review actions.
+
 ## iPhone 1.0.69 · Mac 1.7.23 — 2026-11-22
 
 iPhone 1.0.69 (build 70) · Mac 1.7.23 (build 102)

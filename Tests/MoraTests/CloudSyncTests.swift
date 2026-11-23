@@ -266,6 +266,76 @@ final class CloudSyncTests: XCTestCase {
         withExtendedLifetime(observation) {}
     }
 
+    func testStartupRemindsAboutSeenReviewsForThreeSecondsAndOrdinaryPollsStayQuiet() async throws {
+        defer { try? cleanup() }
+        try await prepare()
+        let capture = CloudCapture(id: UUID(), merchant: "Test cafe", amount: "", account_id: UUID(), date: Date())
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+        var remaining = [capture]
+        SyncStubProtocol.handler = { request in
+            switch request.url!.lastPathComponent {
+            case "mora_get_status": return (200, Data("{\"version\":1,\"pending_count\":\(remaining.count)}".utf8))
+            case "mora_list_pending": return (200, try encoder.encode(remaining))
+            default: return (200, Data("[]".utf8))
+            }
+        }
+        await cloud.refreshLists()
+        store.notifications.markAllRead()
+        await cloud.synchronize(inBackground: true, showWalletProgress: true)
+        let reminder = try XCTUnwrap(store.activeNotice)
+        XCTAssertEqual(reminder.message, "Покупки ждут проверки")
+        XCTAssertEqual(reminder.detail, "Покупок на проверке: 1")
+        XCTAssertEqual(reminder.kind, .warning)
+        XCTAssertEqual(reminder.actions, [.inbox])
+        XCTAssertFalse(reminder.isInProgress)
+        try await Task.sleep(for: .milliseconds(2_600))
+        XCTAssertEqual(store.activeNotice?.id, reminder.id)
+        try await Task.sleep(for: .milliseconds(600))
+        XCTAssertNil(store.activeNotice)
+        XCTAssertTrue(store.notifications.events.contains { $0.actions == [.review(capture.id)] })
+        await cloud.synchronize(inBackground: true)
+        XCTAssertNil(store.activeNotice, "Known reviews must not produce reminders every eight-second poll")
+        await cloud.synchronize(inBackground: true, showWalletProgress: true)
+        XCTAssertEqual(store.activeNotice?.message, "Покупки ждут проверки", "Each startup reminds again even for read reviews")
+        remaining = []
+        await cloud.synchronize(inBackground: true, showWalletProgress: true)
+        XCTAssertNil(store.activeNotice)
+        XCTAssertTrue(cloud.pending.isEmpty)
+        XCTAssertTrue(store.notifications.pendingWalletCaptures(householdID: householdID).isEmpty)
+    }
+
+    func testOfflineRestartRestoresReadReviewsAndShowsTheStartupReminder() async throws {
+        defer { try? cleanup() }
+        try await prepare()
+        let capture = CloudCapture(id: UUID(), merchant: "Test cafe", amount: "", account_id: UUID(), date: Date())
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+        SyncStubProtocol.handler = { request in
+            (200, try request.url!.lastPathComponent == "mora_list_pending" ? encoder.encode([capture]) : Data("[]".utf8))
+        }
+        await cloud.refreshLists()
+        store.notifications.markAllRead()
+        await store.notifications.flush()
+        let settings = try JSONSerialization.jsonObject(with: Data(contentsOf: directory.appendingPathComponent("cloud-settings.json"))) as! [String: Any]
+        let userID = try XCTUnwrap(settings["userID"] as? String)
+        let savedSession = Data("{\"access_token\":\"test-access\",\"refresh_token\":\"test-refresh\",\"expires_at\":4102444800,\"user\":{\"id\":\"\(userID)\"}}".utf8)
+        let reopenedStore = FinanceStore(directory: directory)
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [SyncStubProtocol.self]
+        let reopenedCloud = CloudSync(store: reopenedStore, transport: URLSession(configuration: config),
+            sessionReader: { _ in savedSession }, sessionWriter: { _, _ in })
+        await reopenedCloud.prepare(store: reopenedStore)
+        XCTAssertNil(reopenedCloud.error)
+        XCTAssertEqual(reopenedCloud.pending.map(\.id), [capture.id])
+        XCTAssertEqual(reopenedStore.notifications.unreadCount, 0)
+        SyncStubProtocol.handler = { _ in throw URLError(.notConnectedToInternet) }
+        await reopenedCloud.synchronize(inBackground: true, showWalletProgress: true)
+        XCTAssertEqual(reopenedCloud.pending.map(\.id), [capture.id])
+        XCTAssertEqual(reopenedStore.activeNotice?.message, "Покупки ждут проверки")
+        XCTAssertEqual(reopenedStore.activeNotice?.kind, .warning)
+        XCTAssertEqual(reopenedStore.activeNotice?.actions, [.inbox])
+        await reopenedCloud.finishPendingWrites()
+        await reopenedStore.notifications.flush()
+    }
+
     func testPausedStartupDoesNotShowWalletProgressOrContactServer() async throws {
         defer { try? cleanup() }
         try await prepare()
@@ -540,7 +610,7 @@ final class CloudSyncTests: XCTestCase {
         XCTAssertEqual(pendingCounts, [1])
         XCTAssertEqual(cloud.pending.map(\.id), [incomplete])
         XCTAssertEqual(store.notifications.events.filter { $0.kind == .review }.map(\.sourceID), [incomplete])
-        XCTAssertEqual(store.activeNotice?.message, "Загружено из Apple Shortcuts: 3")
+        XCTAssertEqual(store.activeNotice?.message, "Покупки ждут проверки")
         XCTAssertEqual(store.activeNotice?.kind, .warning)
         XCTAssertFalse(store.isDeferringUpdates)
         XCTAssertFalse(store.activeNotice?.isInProgress == true)
