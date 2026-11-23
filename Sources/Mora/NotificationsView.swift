@@ -23,28 +23,28 @@ struct AppNotificationBell: View {
     @EnvironmentObject private var store: FinanceStore
     @Environment(\.colorScheme) private var scheme
     @Environment(\.openWindow) private var openWindow
-    @State private var presented = false
-    @State private var preparing = false
-    @State private var preparedPanel: NSHostingView<AnyView>?
+    @StateObject private var presenter = NotificationPopoverPresenter()
+
+    private func panel(_ rows: [NotificationListEntry], close: @escaping () -> Void) -> AnyView {
+        let openWindow = openWindow
+        return AnyView(NotificationsPanel(notifications: notifications, initialRows: rows, close: close)
+            .environmentObject(store).environmentObject(cloud)
+            .environment(\.colorScheme, scheme)
+            .environment(\.notificationWindowOpener, { id in openWindow(id: id) })
+            .environment(\.locale, L10n.locale).tint(.moraGreen))
+    }
 
     var body: some View {
         let needsReview = !cloud.pending.isEmpty
         Button {
-            if presented { presented = false; return }
-            guard !preparing else { return }
-            Task { @MainActor in
-                preparing = true
-                notifications.markRecentRead()
-                let rows = await notifications.preparePage()
-                let content = NotificationsPanel(notifications: notifications, initialRows: rows, close: { presented = false })
+            let history = notifications, store = store, cloud = cloud
+            let scheme = scheme, openWindow = openWindow
+            presenter.toggle(notifications: history) { rows, close in
+                AnyView(NotificationsPanel(notifications: history, initialRows: rows, close: close)
                     .environmentObject(store).environmentObject(cloud)
                     .environment(\.colorScheme, scheme)
                     .environment(\.notificationWindowOpener, { id in openWindow(id: id) })
-                    .environment(\.locale, L10n.locale).tint(.moraGreen)
-                // Complete the first native layout and drawing before the popover animates.
-                preparedPanel = NotificationPanelRendering.prepare(content)
-                preparing = false
-                presented = true
+                    .environment(\.locale, L10n.locale).tint(.moraGreen))
             }
         } label: {
             Image(systemName: needsReview ? "bell.fill" : "bell")
@@ -68,31 +68,111 @@ struct AppNotificationBell: View {
         .help(L("Уведомления приложения"))
         .accessibilityLabel(L("Уведомления приложения"))
         .accessibilityValue(needsReview ? L("Покупок на проверке: \(cloud.pending.count)") : L("Непрочитанных: \(notifications.unreadCount)"))
-        .popover(isPresented: $presented, arrowEdge: .bottom) {
-            if let preparedPanel {
-                PreparedNotificationPanel(view: preparedPanel).frame(width: 420, height: 500)
-                    .onDisappear { self.preparedPanel = nil }
+        .background(NotificationPopoverAnchor(presenter: presenter).allowsHitTesting(false))
+        .task(id: notifications.recentEvents) {
+            await presenter.warmUp(notifications: notifications, content: panel)
+        }
+    }
+}
+
+/// AppKit owns the hosting controller for the entire presentation. A closing popover
+/// cannot remove the contents of a newer one, and size never depends on optional SwiftUI state.
+@MainActor
+final class NotificationPopoverPresenter: NSObject, ObservableObject, NSPopoverDelegate {
+    weak var anchor: NSView?
+    private(set) var popover: NSPopover?
+    private var preparation: Task<Void, Never>?
+    private var requestID: UUID?
+    private var cachedController: NSHostingController<AnyView>?
+    private var cachedEvents: [AppNotification] = []
+    var isPreparing: Bool { preparation != nil }
+
+    private func displayEvents(_ notifications: AppNotifications) -> [AppNotification] {
+        notifications.recentEvents.map { var event = $0; event.isRead = true; return event }
+    }
+
+    func warmUp(notifications: AppNotifications,
+                content: @escaping @MainActor ([NotificationListEntry], @escaping () -> Void) -> AnyView) async {
+        if popover?.isShown == true { notifications.markRecentRead(); return }
+        let key = displayEvents(notifications)
+        guard cachedController == nil || cachedEvents != key else { return }
+        let rows = await notifications.preparePage()
+        guard !Task.isCancelled, popover?.isShown != true, displayEvents(notifications) == key else { return }
+        let controller = NSHostingController(rootView: content(rows, { [weak self] in self?.close() }))
+        controller.preferredContentSize = NSSize(width: 420, height: 500)
+        controller.view.frame = NSRect(x: 0, y: 0, width: 420, height: 500)
+        controller.view.layoutSubtreeIfNeeded()
+        cachedController = controller
+        cachedEvents = key
+    }
+
+    func toggle(notifications: AppNotifications,
+                content: @escaping @MainActor ([NotificationListEntry], @escaping () -> Void) -> AnyView) {
+        if isPreparing || popover?.isShown == true { close(); return }
+        notifications.markRecentRead()
+        if let cachedController, cachedEvents == displayEvents(notifications) {
+            show(cachedController)
+            return
+        }
+        let id = UUID()
+        requestID = id
+        preparation = Task { @MainActor [weak self] in
+            defer {
+                if self?.requestID == id { self?.preparation = nil; self?.requestID = nil }
             }
+            await self?.warmUp(notifications: notifications, content: content)
+            guard let self, self.requestID == id, !Task.isCancelled, let controller = self.cachedController else { return }
+            self.show(controller)
         }
+    }
+
+    private func show(_ controller: NSHostingController<AnyView>) {
+        guard let anchor, anchor.window != nil else { return }
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.animates = false
+        popover.delegate = self
+        popover.contentViewController = controller
+        popover.contentSize = NSSize(width: 420, height: 500)
+        self.popover = popover
+        popover.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .minY)
+        popover.contentSize = NSSize(width: 420, height: 500)
+    }
+
+    func close() {
+        requestID = nil
+        preparation?.cancel(); preparation = nil
+        let current = popover
+        popover = nil
+        current?.performClose(nil)
+        current?.contentViewController = nil
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        guard let closed = notification.object as? NSPopover, closed === popover else { return }
+        popover = nil
+        closed.contentViewController = nil
     }
 }
 
-@MainActor enum NotificationPanelRendering {
-    static func prepare<Content: View>(_ content: Content) -> NSHostingView<AnyView> {
-        let host = NSHostingView(rootView: AnyView(content))
-        host.frame = NSRect(x: 0, y: 0, width: 420, height: 500)
-        host.layoutSubtreeIfNeeded()
-        if let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
-            host.cacheDisplay(in: host.bounds, to: bitmap)
-        }
-        return host
+private struct NotificationPopoverAnchor: NSViewRepresentable {
+    let presenter: NotificationPopoverPresenter
+    func makeNSView(context: Context) -> NotificationPopoverAnchorView {
+        let view = NotificationPopoverAnchorView()
+        view.presenter = presenter; presenter.anchor = view
+        return view
+    }
+    func updateNSView(_ nsView: NotificationPopoverAnchorView, context: Context) {
+        presenter.anchor = nsView
     }
 }
 
-private struct PreparedNotificationPanel: NSViewRepresentable {
-    let view: NSHostingView<AnyView>
-    func makeNSView(context: Context) -> NSHostingView<AnyView> { view }
-    func updateNSView(_ nsView: NSHostingView<AnyView>, context: Context) {}
+private final class NotificationPopoverAnchorView: NSView {
+    weak var presenter: NotificationPopoverPresenter?
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { presenter?.close() }
+    }
 }
 
 struct ToolbarGlassStyle<S: InsettableShape>: ViewModifier {
@@ -191,7 +271,6 @@ struct NotificationsPanel: View {
         }
         .frame(width: 420, height: 500)
         .task(id: notifications.recentEvents) {
-            notifications.markRecentRead()
             let prepared = await notifications.preparePage()
             guard !Task.isCancelled else { return }
             if rows != prepared { rows = prepared }
