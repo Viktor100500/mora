@@ -90,6 +90,9 @@ public struct CloudCapture: Codable, Identifiable, Equatable, Sendable {
     public var card_linked: Bool? = nil
     /// New configured senders must identify a card before automatic booking.
     public var card_required: Bool? = nil
+    public var wallet_notification: Bool? = nil
+    public var event_id: UUID? = nil
+    public var review_account_id: UUID? = nil
     /// A purchase from a card that has no account yet waits for the user's choice.
     public var awaitsCardLink: Bool { (card_id != nil && card_linked != true) || (card_required == true && card_id == nil) }
 

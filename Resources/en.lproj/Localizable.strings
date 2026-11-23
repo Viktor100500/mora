@@ -640,3 +640,5 @@
 "Ключ может только добавлять расходы: в основной счет или в счета, выбранные для его карт. Он не позволяет читать операции. При потере телефона отзовите ключ." = "The key can only add expenses: to the main account or to the accounts chosen for its cards. It cannot read transactions. Revoke the key if the phone is lost.";
 "Карт пока нет. Оплатите любой картой из автоматизации — она появится здесь." = "No cards yet. Pay with any card from the automation and it will appear here.";
 "Карта: %@" = "Card: %@";
+"Проверьте покупку из уведомления Wallet" = "Review the purchase from the Wallet notification";
+"Wallet не передал продавца" = "Wallet did not pass the merchant";

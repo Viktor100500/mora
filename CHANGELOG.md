@@ -1,5 +1,12 @@
 # Changelog
 
+## iPhone 1.0.69 · Mac 1.7.23 — 2026-11-22
+
+iPhone 1.0.69 (build 70) · Mac 1.7.23 (build 102)
+
+- Wallet purchases that arrive only as notifications appear in the shared review inbox on iPhone and Mac. Saving or dismissing them updates the same item on both devices.
+- Wallet day and time labels such as “Sunday” are skipped when reading the merchant. Outstanding notifications are parsed again before their first upload.
+
 ## iPhone 1.0.68 · Mac 1.7.22 — 2026-11-17
 
 iPhone 1.0.68 (build 69) · Mac 1.7.22 (build 101)

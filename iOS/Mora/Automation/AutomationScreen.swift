@@ -320,7 +320,8 @@ struct JournalHeadline<Badge: View>: View {
             default: alert.wallet == true ? ("Уведомление без покупки: пропущено", "minus", "gray")
                 : ("Не покупка: пропущено, текст не сохранён", "minus", "gray")
             }
-        case .review: ("Новый формат: проверьте один раз", "hand.tap", "orange")
+        case .review: (alert.reviewReason, "hand.tap", "orange")
+        case .delivered where alert.wallet == true: ("Передано на проверку в общую базу", "icloud", "green")
         case .logged: ("Только журнал: отправка в общую базу не включена", "list.bullet", "gray")
         case .waiting: ("Сохранено на iPhone, уйдёт при появлении интернета", "clock", "orange")
         case .delivered: (alert.serverState == "recorded" ? "Расход записан" : "Доставлено, ждёт проверки в Mora", "checkmark", "green")

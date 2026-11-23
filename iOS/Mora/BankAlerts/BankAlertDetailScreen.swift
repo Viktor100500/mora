@@ -6,6 +6,7 @@ import FinanceCore
 struct BankAlertDetailScreen: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var cloud: CloudSync
+    @EnvironmentObject private var router: AppRouter
     @State var alert: BankAlert
     /// Where the same purchase was found again, from the journal.
     var duplicate: String?
@@ -13,7 +14,7 @@ struct BankAlertDetailScreen: View {
     @State private var working = false
     @State private var result: String?
 
-    private var editable: Bool { alert.needsUser || (alert.state == .duplicate && !alert.text.isEmpty) }
+    private var editable: Bool { !alert.awaitsWalletReviewUpload && (alert.needsUser || (alert.state == .duplicate && !alert.text.isEmpty)) }
     /// Only the format is remembered: the purchase itself already came another way.
     private var learnOnly: Bool { alert.state == .duplicate }
     private var words: [(text: String, range: Range<String.Index>)] {
@@ -78,8 +79,27 @@ struct BankAlertDetailScreen: View {
                     Text(L("Формат запоминается, только если сумма и продавец взяты из текста сообщения."))
                 }
             }
-            Section {
-                Button(role: .destructive) { BankAlertLog.remove(alert.id); dismiss() } label: { Label(L("Удалить из журнала"), systemImage: "trash") }
+            if alert.wallet == true, let capture = cloud.pending.first(where: { $0.event_id == alert.id }) {
+                Section {
+                    Button { router.open(.walletReview(capture)) } label: {
+                        Label(L("Проверьте покупку из уведомления Wallet"), systemImage: "checkmark.circle")
+                    }
+                }
+            } else if alert.awaitsWalletReviewUpload {
+                Section {
+                    Button {
+                        Task {
+                            await WalletBackgroundDelivery.run()
+                            await cloud.refreshLists()
+                            if let current = BankAlertLog.alerts().first(where: { $0.id == alert.id }) { alert = current }
+                        }
+                    } label: { Label(L("Синхронизировать сейчас"), systemImage: "arrow.clockwise") }
+                }
+            }
+            if !alert.awaitsWalletReviewUpload {
+                Section {
+                    Button(role: .destructive) { BankAlertLog.remove(alert.id); dismiss() } label: { Label(L("Удалить из журнала"), systemImage: "trash") }
+                }
             }
         }
         .wrappingTitle(L(alert.wallet == true ? "Уведомление Wallet" : "Сообщение банка"))

@@ -204,4 +204,55 @@ final class BankAlertLogTests: XCTestCase {
         XCTAssertEqual(body["p_amount"], "12.5")
         XCTAssertEqual(body["p_event_id"], alert.id.uuidString.lowercased())
     }
+
+    func testLegacyWalletNotificationUploadsForSharedReview() async throws {
+        let sender = WalletSender(projectURL: URL(string: "https://example.supabase.co")!, publicKey: "sb_publishable_test",
+                                  token: String(repeating: "a", count: 64), tokenID: UUID(), householdID: UUID(), label: "Test iPhone")
+        var alert = BankAlert(receivedAt: start, source: "Chase", text: "Title: Chase\nSubtitle: Sunday\nBody: Online Store\n$12.50", state: .review)
+        alert.wallet = true; alert.amount = "12.5"; alert.currency = "USD"; alert.merchant = "Sunday"
+        try BankAlertLog.save(alert, in: directory)
+        let eventID = alert.id.uuidString.lowercased()
+        let delivery = BankAlertDelivery(directory: directory) { request in
+            XCTAssertEqual(request.url?.lastPathComponent, "mora_capture_wallet_review")
+            let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: String])
+            XCTAssertEqual(body["p_event_id"], eventID)
+            XCTAssertEqual(body["p_merchant"], "Online Store")
+            XCTAssertFalse(body.values.contains { $0.contains("Sunday") })
+            let response = try XCTUnwrap(HTTPURLResponse(url: XCTUnwrap(request.url), statusCode: 200, httpVersion: nil, headerFields: nil))
+            return (Data(#"{"state":"pending"}"#.utf8), response)
+        }
+        await delivery.deliverWaiting(with: sender)
+        let saved = try XCTUnwrap(BankAlertLog.alerts(in: directory).first)
+        XCTAssertEqual(saved.state, .delivered)
+        XCTAssertEqual(saved.serverState, "pending")
+        XCTAssertEqual(saved.merchant, "Online Store")
+        XCTAssertFalse(saved.needsUser)
+    }
+
+    func testUnacknowledgedWalletReviewKeepsItsEventAndCannotBeDeletedLocally() async throws {
+        let sender = WalletSender(projectURL: URL(string: "https://example.supabase.co")!, publicKey: "sb_publishable_test",
+                                  token: String(repeating: "a", count: 64), tokenID: UUID(), householdID: UUID(), label: "Test iPhone")
+        var alert = BankAlert(receivedAt: start, source: "Wallet", text: "Subtitle: Sunday\nBody: $33.76", state: .review)
+        alert.wallet = true; alert.amount = "33.76"; alert.currency = "USD"; alert.merchant = "Sunday"
+        try BankAlertLog.save(alert, in: directory)
+        let eventID = alert.id.uuidString.lowercased()
+        let delivery = BankAlertDelivery(directory: directory) { request in
+            XCTAssertEqual(request.url?.lastPathComponent, "mora_capture_wallet_review")
+            let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.httpBody)) as? [String: String])
+            XCTAssertEqual(body["p_event_id"], eventID)
+            XCTAssertEqual(body["p_merchant"], "")
+            XCTAssertEqual(body["p_card"], "")
+            throw URLError(.timedOut)
+        }
+        await delivery.deliverWaiting(with: sender)
+        let deleted = await delivery.skip(alert.id)
+        XCTAssertFalse(deleted, "a lost response may already have created the shared review")
+        await delivery.deliverWaiting(with: sender)
+        let saved = try XCTUnwrap(BankAlertLog.alerts(in: directory).first)
+        XCTAssertEqual(saved.state, .review)
+        XCTAssertEqual(saved.attempts, 2)
+        XCTAssertEqual(saved.merchant, "")
+        XCTAssertTrue(saved.awaitsWalletReviewUpload)
+        XCTAssertEqual(saved.reviewReason, "Wallet не передал продавца")
+    }
 }

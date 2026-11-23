@@ -244,7 +244,11 @@ enum WalletBackgroundDelivery {
     }
 
     static func scheduleIfNeeded() async {
-        guard await WalletDelivery.shared.hasWaiting else { return }
+        guard WalletSender.current() != nil else { return }
+        async let wallet = WalletDelivery.shared.hasWaiting
+        async let alerts = BankAlertDelivery.shared.hasWaiting
+        let pending = await (wallet, alerts)
+        guard pending.0 || pending.1 else { return }
         let request = BGAppRefreshTaskRequest(identifier: identifier)
         request.earliestBeginDate = Date(timeIntervalSinceNow: 5 * 60)
         try? BGTaskScheduler.shared.submit(request)
