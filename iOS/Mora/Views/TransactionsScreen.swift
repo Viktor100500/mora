@@ -64,8 +64,8 @@ struct TransactionsScreen: View {
             }
             .listStyle(.insetGrouped)
             .environment(\.editMode, $editMode)
-            .refreshable { await store.reloadFromDisk(); await cloud.refresh() }
-            .searchable(text: $filters.text, prompt: L("Описание, заметки, теги"))
+            .settledRefreshable { await store.reloadFromDisk(); await cloud.refresh() }
+            .searchable(text: $filters.text, placement: .navigationBarDrawer(displayMode: .always), prompt: L("Описание, заметки, теги"))
             .navigationTitle(L("Операции"))
             .toolbar { toolbar }
             .safeAreaInset(edge: .bottom) { if editMode.isEditing { bulkBar } }
@@ -88,7 +88,13 @@ struct TransactionsScreen: View {
                     if !request.query.text.isEmpty { try await Task.sleep(for: .milliseconds(150)) }
                     let value = try await BackgroundWork.shared.perform { try request.query.prepare(in: snapshot) }
                     guard !Task.isCancelled, request == self.request else { return }
-                    withAnimation(.easeInOut(duration: 0.25)) { result = value; selection.formIntersection(value.ids) }
+                    // A sync can update only rates or metadata. Do not rebuild an
+                    // identical list, or animate its navigation/search geometry.
+                    if result?.rows != value.rows || result?.income != value.income || result?.expense != value.expense {
+                        var update = SwiftUI.Transaction(animation: nil)
+                        update.disablesAnimations = true
+                        withTransaction(update) { result = value; selection.formIntersection(value.ids) }
+                    }
                 } catch is CancellationError {
                 } catch { store.error = error.localizedDescription }
             }

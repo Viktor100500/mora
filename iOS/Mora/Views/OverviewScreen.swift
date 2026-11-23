@@ -6,6 +6,7 @@ struct OverviewScreen: View {
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var cloud: CloudSync
     @AppStorage("mora.hideAmounts") private var hideAmounts = false
+    @ScaledMetric(relativeTo: .body) private var transactionIconSize = 44
     @State private var trendDetail: TrendDetail = .months
     private var ledger: Ledger { store.ledger }
     private var currency: String { store.baseCurrency }
@@ -46,7 +47,7 @@ struct OverviewScreen: View {
                         .accessibilityLabel(L("Новая операция"))
                 }
             }
-            .refreshable {
+            .settledRefreshable {
                 await store.reloadFromDisk()
                 async let rates: Void = store.refreshExchangeRates()
                 async let sync: Void = cloud.refresh()
@@ -144,7 +145,7 @@ struct OverviewScreen: View {
                 ForEach(rows) { transaction in
                     Button { router.open(.transaction(transaction)) } label: { TransactionRow(transaction: transaction, ledger: ledger) }
                         .buttonStyle(.plain)
-                    if transaction.id != rows.last?.id { Divider().padding(.leading, 52) }
+                    if transaction.id != rows.last?.id { Divider().padding(.leading, min(transactionIconSize, 60) + 12) }
                 }
             }
         }

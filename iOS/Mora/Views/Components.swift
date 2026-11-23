@@ -4,6 +4,9 @@ import FinanceCore
 
 struct TransactionRow: View {
     @EnvironmentObject private var categorizer: MerchantCategorizer
+    @Environment(\.dynamicTypeSize) private var typeSize
+    @ScaledMetric(relativeTo: .body) private var iconDimension = 44
+    @AppStorage("mora.hideAmounts") private var amountsHidden = false
     let transaction: Transaction
     private let category: Category?
     private let account: Account?
@@ -29,14 +32,15 @@ struct TransactionRow: View {
 
     private var conversionText: String? {
         transaction.conversion.map { conversion in
-            "\(DisplayMoney.string(abs(conversion.originalAmount), currency: conversion.originalCurrency)) · Visa \(Money.plain(conversion.rate))\(conversion.feePercent == 0 ? "" : " + " + Money.plain(conversion.feePercent) + "%")"
+            DisplayMoney.string(abs(conversion.originalAmount), currency: conversion.originalCurrency)
         }
     }
-    private var amount: some View {
+    private var amountLabel: some View {
         FinancialText(DisplayMoney.signed(transaction, currency: account?.currency ?? "RUB"))
             .font(.body.weight(.semibold))
             .foregroundStyle(transaction.kind == .income ? Color.moraGreen : .primary)
-            .lineLimit(1).fixedSize()
+            .monospacedDigit()
+            .lineLimit(1)
     }
     private var time: some View {
         Text(showsDate ? transaction.date.formatted(.dateTime.day().month(.abbreviated).hour().minute().locale(L10n.locale))
@@ -48,57 +52,84 @@ struct TransactionRow: View {
             if transaction.categoryID == nil && categorizer.pendingTransactionIDs.contains(transaction.id) {
                 TransactionCategoryProgress()
             } else {
-                Text(subtitle).lineLimit(1)
+                Text(subtitle).lineLimit(typeSize.isAccessibilitySize ? nil : 1)
             }
         }.font(.caption).foregroundStyle(.secondary)
     }
+    private var merchant: some View {
+        Text(transaction.merchant).font(.body.weight(.medium))
+            .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
             IconTile(icon: transaction.kind == .transfer ? "arrow.left.arrow.right" : category?.icon ?? "tag",
-                     color: category?.color ?? (transaction.kind == .income ? "green" : "gray"), size: 40)
-            // A description that fits on one line shares it with the amount. A longer one
-            // gets the whole row width, and the amount moves down to the category line,
-            // so neither the description nor a long amount is cut on small iPhones.
-            ViewThatFits(in: .horizontal) {
-                compact
-                expanded
-            }
-        }
-        .padding(.vertical, 2)
-        .contentShape(Rectangle())
-    }
-
-    private var compact: some View {
-        HStack(spacing: 8) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(transaction.merchant).font(.body.weight(.medium)).lineLimit(1).fixedSize()
-                // Secondary lines take the width that is left and never decide the layout.
-                Text(" ").font(.caption).frame(maxWidth: .infinity).overlay(alignment: .leading) { subtitleText }
-                if let conversionText {
-                    Text(" ").font(.caption2).frame(maxWidth: .infinity)
-                        .overlay(alignment: .leading) { FinancialText(conversionText).font(.caption2).foregroundStyle(.secondary).lineLimit(1) }
+                     color: category?.color ?? (transaction.kind == .income ? "green" : "gray"), size: min(iconDimension, 60))
+                .padding(.top, 1)
+            VStack(alignment: .leading, spacing: 4) {
+                TransactionHeadingLayout(stacked: typeSize.isAccessibilitySize) {
+                    merchant
+                    amountLabel.minimumScaleFactor(0.65)
+                }
+                subtitleText
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        originalAmount
+                        Spacer(minLength: 0)
+                        time
+                    }
+                    VStack(alignment: .leading, spacing: 3) {
+                        originalAmount
+                        time
+                    }
                 }
             }
-            VStack(alignment: .trailing, spacing: 3) { amount; time }
+        }
+        .padding(.vertical, 5)
+        .alignmentGuide(.listRowSeparatorLeading) { _ in min(iconDimension, 60) + 12 }
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder private var originalAmount: some View {
+        if let conversionText {
+            FinancialText(conversionText).font(.caption2).foregroundStyle(.secondary)
+                .lineLimit(1).fixedSize()
+                .accessibilityLabel(L("Исходная сумма: \(amountsHidden ? FinancialPrivacy.mask(conversionText) : conversionText)"))
         }
     }
 
-    private var expanded: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(transaction.merchant).font(.body.weight(.medium)).lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                subtitleText
-                Spacer(minLength: 0)
-                amount
-            }
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                if let conversionText { FinancialText(conversionText).font(.caption2).foregroundStyle(.secondary).lineLimit(1) }
-                Spacer(minLength: 0)
-                time
-            }
-        }
+}
+
+/// Measure the amount first, then wrap the merchant into its remaining column.
+/// ViewThatFits uses an unwrapped title's ideal width and needlessly stacks it.
+private struct TransactionHeadingLayout: Layout {
+    var stacked: Bool
+
+    private func sizes(width: CGFloat, subviews: Subviews) -> (CGSize, CGSize, Bool) {
+        let amount = subviews[1].sizeThatFits(.unspecified)
+        let vertical = stacked || amount.width + 12 + min(96, width * 0.4) > width
+        let titleWidth = vertical ? width : max(0, width - amount.width - 12)
+        return (subviews[0].sizeThatFits(ProposedViewSize(width: titleWidth, height: nil)),
+                subviews[1].sizeThatFits(ProposedViewSize(width: min(amount.width, width), height: nil)), vertical)
+    }
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? subviews.reduce(12) { $0 + $1.sizeThatFits(.unspecified).width }
+        let (title, amount, vertical) = sizes(width: width, subviews: subviews)
+        return CGSize(width: width, height: vertical ? title.height + 4 + amount.height : max(title.height, amount.height))
+    }
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let (title, amount, vertical) = sizes(width: bounds.width, subviews: subviews)
+        let titleProposal = ProposedViewSize(width: vertical ? bounds.width : bounds.width - amount.width - 12, height: title.height)
+        subviews[0].place(at: bounds.origin, proposal: titleProposal)
+        let amountProposal = ProposedViewSize(width: amount.width, height: amount.height)
+        let baselineOffset = subviews[0].dimensions(in: titleProposal)[.firstTextBaseline]
+            - subviews[1].dimensions(in: amountProposal)[.firstTextBaseline]
+        subviews[1].place(at: CGPoint(x: bounds.maxX - amount.width,
+            y: bounds.minY + (vertical ? title.height + 4 : baselineOffset)), proposal: amountProposal)
     }
 }
 
@@ -476,5 +507,121 @@ private struct ScrollViewFinder: UIViewRepresentable {
             box.scrollView = parent as? UIScrollView
             if let scrollView = box.scrollView { box.expandedTop = max(box.expandedTop, scrollView.adjustedContentInset.top) }
         }
+    }
+}
+
+extension View {
+    /// UIKit owns one refresh gesture and its settling animation. SwiftUI data
+    /// updates do not replace the control or animate the navigation/search layout.
+    func settledRefreshable(action: @escaping @MainActor () async -> Void) -> some View {
+        modifier(SettledRefreshModifier(action: action))
+    }
+}
+
+private struct SettledRefreshModifier: ViewModifier {
+    let action: @MainActor () async -> Void
+    @State private var refreshing = false
+
+    func body(content: Content) -> some View {
+        content
+            .transaction { transaction in
+                if refreshing { transaction.animation = nil; transaction.disablesAnimations = true }
+            }
+            .background(RefreshScrollAnchor {
+                refreshing = true
+                await action()
+                refreshing = false
+            })
+    }
+}
+
+private struct RefreshScrollAnchor: UIViewRepresentable {
+    let action: @MainActor () async -> Void
+
+    func makeCoordinator() -> ScrollRefreshCoordinator { ScrollRefreshCoordinator(action: action) }
+    func makeUIView(context: Context) -> RefreshScrollProbe {
+        let view = RefreshScrollProbe()
+        view.isUserInteractionEnabled = false
+        view.attach = { [weak coordinator = context.coordinator] view in coordinator?.attach(from: view) }
+        return view
+    }
+    func updateUIView(_ view: RefreshScrollProbe, context: Context) {
+        context.coordinator.action = action
+        view.scheduleAttachment()
+    }
+    static func dismantleUIView(_ view: RefreshScrollProbe, coordinator: ScrollRefreshCoordinator) { coordinator.detach() }
+}
+
+private final class RefreshScrollProbe: UIView {
+    var attach: ((UIView) -> Void)?
+    override func didMoveToWindow() { super.didMoveToWindow(); scheduleAttachment() }
+    override func layoutSubviews() { super.layoutSubviews(); scheduleAttachment() }
+    func scheduleAttachment() {
+        Task { @MainActor [weak self] in
+            guard let self, window != nil else { return }
+            attach?(self)
+        }
+    }
+}
+
+@MainActor
+final class ScrollRefreshCoordinator: NSObject {
+    var action: @MainActor () async -> Void
+    private(set) weak var scrollView: UIScrollView?
+    let control = UIRefreshControl()
+    private var task: Task<Void, Never>?
+
+    init(action: @escaping @MainActor () async -> Void) {
+        self.action = action
+        super.init()
+        control.addTarget(self, action: #selector(refresh), for: .valueChanged)
+    }
+    func attach(from probe: UIView) {
+        guard scrollView == nil else { return }
+        var parent = probe.superview
+        while let current = parent {
+            if let scroll = current as? UIScrollView ?? Self.findScroll(in: current) {
+                scrollView = scroll
+                scroll.refreshControl = control
+                return
+            }
+            parent = current.superview
+        }
+    }
+    private static func findScroll(in view: UIView) -> UIScrollView? {
+        for child in view.subviews {
+            if let scroll = child as? UIScrollView { return scroll }
+            if let scroll = findScroll(in: child) { return scroll }
+        }
+        return nil
+    }
+    @objc private func refresh() {
+        guard task == nil else { return }
+        task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await action()
+            guard !Task.isCancelled else { return }
+            finish()
+            task = nil
+        }
+    }
+    private func finish() {
+        control.endRefreshing()
+        guard let scrollView else { return }
+        scrollView.layoutIfNeeded()
+        // Only repair the overscroll left by this gesture. If the user scrolled
+        // into the list while loading, keep that position and their search focus.
+        guard !scrollView.isDragging, !scrollView.isDecelerating,
+              scrollView.contentOffset.y < -scrollView.adjustedContentInset.top else { return }
+        UIView.animate(withDuration: 0.28, delay: 0, options: [.beginFromCurrentState, .allowUserInteraction]) {
+            scrollView.setContentOffset(CGPoint(x: scrollView.contentOffset.x, y: -scrollView.adjustedContentInset.top), animated: false)
+            scrollView.superview?.layoutIfNeeded()
+        }
+    }
+    func detach() {
+        task?.cancel(); task = nil
+        control.endRefreshing()
+        if scrollView?.refreshControl === control { scrollView?.refreshControl = nil }
+        scrollView = nil
     }
 }

@@ -1,5 +1,13 @@
 # Changelog
 
+## iPhone 1.0.73 — 2026-11-23
+
+iPhone 1.0.73 (build 74) · Mac unchanged
+
+- Transaction rows share one composition on Overview and Transactions: larger category tiles align with the title, merchant and amount share a baseline, account details have their own line, and the footer shows the original amount and time. Long names wrap without moving above the icon; large amounts and accessibility text can use a stacked heading. Detailed conversion rates remain in the transaction editor.
+- Pull to refresh uses one native refresh control per screen and restores only remaining overscroll after completion. Scrolling during loading keeps its position.
+- The transaction search field keeps its navigation-bar placement. Sync results update without a list-wide animation, and unchanged results are not republished.
+
 ## iPhone 1.0.72 · Mac 1.7.28 — 2026-11-23
 
 iPhone 1.0.72 (build 73) · Mac 1.7.28 (build 107)

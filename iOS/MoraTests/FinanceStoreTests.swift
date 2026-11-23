@@ -1,4 +1,5 @@
 import XCTest
+import SwiftUI
 import FinanceCore
 @testable import MoraiOS
 
@@ -181,5 +182,97 @@ final class FinanceStoreTests: XCTestCase {
         XCTAssertEqual(store.summary(in: Date()).income, 900, "The cache is reset when the ledger changes")
         XCTAssertEqual(store.trend(ending: Date()).last?.income, 900)
         XCTAssertEqual(store.dailyExpenses(in: Date()), [:])
+    }
+}
+
+
+@MainActor
+final class RefreshLayoutTests: XCTestCase {
+    func testRefreshSettlesOverscrollAndKeepsAChangedScrollPosition() async throws {
+        for movedDuringRefresh in [false, true] {
+            let scroll = UIScrollView(frame: CGRect(x: 0, y: 0, width: 375, height: 600))
+            scroll.contentSize = CGSize(width: 375, height: 1600)
+            scroll.contentInset.top = 96
+            let container = UIView(frame: scroll.frame), probe = UIView()
+            container.addSubview(scroll); container.addSubview(probe)
+            let started = expectation(description: "refresh started")
+            var finish: CheckedContinuation<Void, Never>?
+            var calls = 0
+            let coordinator = ScrollRefreshCoordinator {
+                calls += 1; started.fulfill()
+                await withCheckedContinuation { finish = $0 }
+            }
+            coordinator.attach(from: probe)
+            XCTAssertTrue(scroll.refreshControl === coordinator.control)
+            scroll.contentOffset.y = -200
+            coordinator.control.beginRefreshing()
+            coordinator.control.sendActions(for: .valueChanged)
+            await fulfillment(of: [started], timeout: 2)
+            coordinator.control.sendActions(for: .valueChanged)
+            if movedDuringRefresh { scroll.contentOffset.y = 140 }
+            finish?.resume()
+            for _ in 0..<60 where coordinator.control.isRefreshing { try await Task.sleep(for: .milliseconds(10)) }
+            try await Task.sleep(for: .milliseconds(350))
+            XCTAssertEqual(calls, 1, "Repeated pulls must share the in-progress request")
+            XCTAssertFalse(coordinator.control.isRefreshing)
+            XCTAssertEqual(scroll.contentOffset.y, movedDuringRefresh ? 140 : -scroll.adjustedContentInset.top, accuracy: 0.5)
+            coordinator.detach()
+            XCTAssertNil(scroll.refreshControl)
+        }
+    }
+
+    func testNavigationAndSearchReturnToTheirRestingGeometry() async throws {
+        let scene = try XCTUnwrap(UIApplication.shared.connectedScenes.first as? UIWindowScene)
+        for list in [false, true] {
+            let started = expectation(description: "screen refresh started")
+            var finish: CheckedContinuation<Void, Never>?
+            let host = UIHostingController(rootView: RefreshHarness(list: list) {
+                started.fulfill()
+                await withCheckedContinuation { finish = $0 }
+            })
+            let window = UIWindow(windowScene: scene)
+            window.rootViewController = host; window.makeKeyAndVisible()
+            defer { window.isHidden = true; window.rootViewController = nil }
+            host.view.layoutIfNeeded()
+            try await Task.sleep(for: .milliseconds(350))
+            func descendants(_ view: UIView) -> [UIView] { [view] + view.subviews.flatMap(descendants) }
+            let attached = descendants(host.view).compactMap { $0 as? UIScrollView }.filter { $0.refreshControl != nil }
+            XCTAssertEqual(attached.count, 1)
+            let scroll = try XCTUnwrap(attached.first), control = try XCTUnwrap(scroll.refreshControl)
+            let before = scroll.contentOffset.y
+            let searchBefore = descendants(host.view).compactMap { $0 as? UISearchTextField }.first.map { $0.convert($0.bounds, to: host.view) }
+            scroll.contentOffset.y = before - 100
+            control.beginRefreshing(); control.sendActions(for: .valueChanged)
+            await fulfillment(of: [started], timeout: 2)
+            finish?.resume()
+            for _ in 0..<60 where control.isRefreshing { try await Task.sleep(for: .milliseconds(10)) }
+            try await Task.sleep(for: .milliseconds(400))
+            XCTAssertEqual(scroll.contentOffset.y, before, accuracy: 0.5, "The large title must return to its resting offset")
+            if let searchBefore {
+                let search = try XCTUnwrap(descendants(host.view).compactMap { $0 as? UISearchTextField }.first)
+                XCTAssertEqual(search.convert(search.bounds, to: host.view).minY, searchBefore.minY, accuracy: 0.5)
+            }
+        }
+    }
+
+}
+
+private struct RefreshHarness: View {
+    let list: Bool
+    let action: @MainActor () async -> Void
+    @State private var query = ""
+    var body: some View {
+        NavigationStack {
+            if list {
+                List(0..<20) { Text("Row \($0)") }
+                    .settledRefreshable(action: action)
+                    .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always))
+                    .navigationTitle("Transactions")
+            } else {
+                ScrollView { VStack { ForEach(0..<20) { Text("Row \($0)").frame(height: 60) } } }
+                    .settledRefreshable(action: action)
+                    .navigationTitle("Overview")
+            }
+        }
     }
 }
