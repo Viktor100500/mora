@@ -299,12 +299,36 @@ struct TrendChart: View {
 /// Category share ring. Tapping a sector shows that category in the center;
 /// categories under 5% share one "Other" sector.
 struct CategoryDonut: View {
-    @AppStorage("mora.hideAmounts") private var hidden = false
     let totals: [CategoryTotal]
     let expense: Decimal
     let currency: String
+
+    private struct SliceIdentity: Hashable {
+        let id: UUID?
+        let amount: Decimal
+    }
+
+    var body: some View {
+        let slices = totals.filter { $0.amount > 0 && $0.amount.double.isFinite }
+            .groupingSmallShares(name: L("Другое"))
+        CategoryDonutContent(slices: slices, expense: expense, currency: currency)
+            // A new dataset gets fresh selection and sector geometry. In particular,
+            // do not interpolate disappearing sectors with MonthSwitcher's spring:
+            // Charts can produce NaN angles and trap while drawing rounded arcs.
+            .id(slices.map { SliceIdentity(id: $0.id, amount: $0.amount) })
+            .transaction {
+                $0.animation = nil
+                $0.disablesAnimations = true
+            }
+    }
+}
+
+private struct CategoryDonutContent: View {
+    @AppStorage("mora.hideAmounts") private var hidden = false
+    let slices: [CategoryTotal]
+    let expense: Decimal
+    let currency: String
     @State private var angle: Double?
-    private var slices: [CategoryTotal] { totals.groupingSmallShares(name: L("Другое")) }
 
     private var selected: CategoryTotal? {
         guard let angle else { return nil }
@@ -344,7 +368,6 @@ struct CategoryDonut: View {
             }
         }
         .accessibilityHidden(hidden)
-        .animation(.easeInOut(duration: 0.2), value: selected?.id)
     }
 }
 

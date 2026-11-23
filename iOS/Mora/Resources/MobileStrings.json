@@ -1,4 +1,5 @@
 {
+  "Покупка уже передана из сообщения или уведомления: запуск не отправлен": "The purchase was already sent from a message or notification: this run was not sent",
   "3 месяца": "3 months",
   "AI-агент записывает операции в вашу общую базу Supabase, а Mora забирает их при синхронизации. Сначала подключите общую базу.": "The AI agent records transactions in your shared Supabase database, and Mora picks them up when it syncs. Connect the shared database first.",
   "Apple Pay включён": "Apple Pay is on",

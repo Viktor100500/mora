@@ -1,5 +1,12 @@
 # Changelog
 
+## iPhone 1.0.70 — 2026-11-22
+
+iPhone 1.0.70 (build 71) · Mac unchanged
+
+- Category rings replace their data without inheriting the month switcher's spring animation, preventing invalid intermediate sector geometry in Charts when switching months on Overview or Analytics.
+- Selecting a different set of category amounts clears the previous ring selection. Non-positive or non-finite category values are excluded from chart input.
+
 ## Mac 1.7.24 — 2026-11-22
 
 Mac 1.7.24 (build 103)

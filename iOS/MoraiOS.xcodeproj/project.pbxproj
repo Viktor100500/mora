@@ -23,6 +23,7 @@
 		47DF943863B3B7E04EFFE1BA /* CloudSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F6A6EC2D5631B2FD2C571AD /* CloudSync.swift */; };
 		5AE34127A645E0401C5747E3 /* Privacy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EDE0057776581121FB80FCE /* Privacy.swift */; };
 		5BBED0ADBF01093A70E94AD4 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B8D07C72F2ADAD285B72897 /* RootView.swift */; };
+		5F5441B81770B10AFE1BFB1B /* CategoryDonutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6CCAFBF8475032C044CDAFA /* CategoryDonutTests.swift */; };
 		5FC30B7EB94BBB5B7C508FD5 /* MoreScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = B73290723DB39F73BF342AFD /* MoreScreen.swift */; };
 		60096CF674B3199D24AB1AB5 /* MoraApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6F4E44FD82A4CF0B2F08C570 /* MoraApp.swift */; };
 		650885242DBE201F24A31FB8 /* AIImportScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45201D32ED9DE875ED483E1D /* AIImportScreen.swift */; };
@@ -122,6 +123,7 @@
 		D7E91B2AD778BDBDC0998D00 /* WalletAutomationGuide.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletAutomationGuide.swift; sourceTree = "<group>"; };
 		E344C9591051D2195C1A02FB /* WalletSetupScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalletSetupScreen.swift; sourceTree = "<group>"; };
 		E483F765535A3F985A7852BA /* BankAlertLog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BankAlertLog.swift; sourceTree = "<group>"; };
+		E6CCAFBF8475032C044CDAFA /* CategoryDonutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CategoryDonutTests.swift; sourceTree = "<group>"; };
 		EE756E00CFE55BCF3B16D45B /* Mora Bank SMS.shortcut */ = {isa = PBXFileReference; path = "Mora Bank SMS.shortcut"; sourceTree = "<group>"; };
 		F2416F36C6721CE96EB36684 /* FinanceStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinanceStore.swift; sourceTree = "<group>"; };
 		F3E78F6ACDBE2C140769209A /* ChangeDescription.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ChangeDescription.swift; path = ../Sources/Mora/ChangeDescription.swift; sourceTree = "<group>"; };
@@ -309,6 +311,7 @@
 			isa = PBXGroup;
 			children = (
 				B2E47E92A35BAFC3B83CF672 /* BankAlertLogTests.swift */,
+				E6CCAFBF8475032C044CDAFA /* CategoryDonutTests.swift */,
 				C0318B2C398473B18013456E /* FinanceStoreTests.swift */,
 				B496B3B0EE4A5574647F3A61 /* LocalizationTests.swift */,
 				3A4E9DA3F49721E1DF85F7FB /* WalletRunLogTests.swift */,
@@ -426,6 +429,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				ED5B2909D756EDDE51A1BB4B /* BankAlertLogTests.swift in Sources */,
+				5F5441B81770B10AFE1BFB1B /* CategoryDonutTests.swift in Sources */,
 				93EFDDAE568584166D654CE1 /* FinanceStoreTests.swift in Sources */,
 				EE55AA1EA36D48FFC1AC6E74 /* LocalizationTests.swift in Sources */,
 				7C02E4373E115058FD1C15E1 /* WalletRunLogTests.swift in Sources */,
@@ -576,7 +580,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 70;
+				CURRENT_PROJECT_VERSION = 71;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
@@ -590,7 +594,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.69;
+				MARKETING_VERSION = 1.0.70;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -653,7 +657,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 70;
+				CURRENT_PROJECT_VERSION = 71;
 				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -673,7 +677,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 1.0.69;
+				MARKETING_VERSION = 1.0.70;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
