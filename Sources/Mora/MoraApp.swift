@@ -198,10 +198,12 @@ struct ContentView: View {
         .overlay(alignment: .bottomTrailing) {
             currencyWarning.frame(maxWidth: 680).padding(24).transition(.opacity)
         }
-        .modifier(FloatingNotificationOverlay(event: store.activeNotice, close: { store.notice = nil }))
         .overlay {
             if showingLaunchScreen { LaunchScreen().ignoresSafeArea().transition(.opacity) }
         }
+        .modifier(FloatingNotificationOverlay(
+            event: showingLaunchScreen && store.activeNotice?.isInProgress != true ? nil : store.activeNotice,
+            close: { store.notice = nil }))
         .smoothUpdates(value: page)
         .smoothUpdates(value: month)
         .onDisappear { monthPreparation?.cancel() }
@@ -230,8 +232,8 @@ struct ContentView: View {
             await withCheckedContinuation { continuation in
                 withAnimation(.easeInOut(duration: reduceMotion ? 0.15 : 0.6)) {
                     showingLaunchScreen = false
-                } completion: {
                     store.endLaunchPresentation()
+                } completion: {
                     if store.isDemo && !didSeeWelcome && !CommandLine.arguments.contains("--demo") && sheet == nil {
                         sheet = .welcome
                     }

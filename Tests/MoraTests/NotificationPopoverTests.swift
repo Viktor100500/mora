@@ -5,7 +5,113 @@ import FinanceCore
 @testable import Mora
 
 @MainActor
+private final class BellMouseTarget: NSObject {
+    var action: () -> Void = {}
+    @objc func press(_ sender: NSButton) { action() }
+}
+
+@MainActor
 final class NotificationPopoverTests: XCTestCase {
+    func testRealBellMouseDownAndMouseUpToggleAnAnimatedPopoverInsteadOfReopeningIt() async throws {
+        _ = NSApplication.shared
+        let previousApplication = NSWorkspace.shared.frontmostApplication
+        let previousPolicy = NSApp.activationPolicy()
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+        defer {
+            NSApp.setActivationPolicy(previousPolicy)
+            if NSWorkspace.shared.frontmostApplication?.processIdentifier == ProcessInfo.processInfo.processIdentifier {
+                previousApplication?.activate(options: [])
+            }
+        }
+        let history = AppNotifications()
+        history.record("Synthetic notification")
+        let window = NSWindow(contentRect: NSRect(x: 100, y: 100, width: 700, height: 700),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        let button = NSButton(frame: NSRect(x: 580, y: 620, width: 40, height: 40))
+        button.title = "Bell"; button.bezelStyle = .circular
+        window.contentView?.addSubview(button)
+        window.makeKeyAndOrderFront(nil)
+        defer { window.orderOut(nil); window.contentView = nil }
+        try await Task.sleep(for: .milliseconds(100))
+        let presenter = NotificationPopoverPresenter()
+        presenter.anchor = button
+        defer { presenter.detach() }
+        let target = BellMouseTarget()
+        var actions = 0
+        let content: @MainActor ([NotificationListEntry], @escaping () -> Void) -> AnyView = { _, _ in
+            AnyView(Text("Synthetic notification history").frame(width: 420, height: 500))
+        }
+        target.action = {
+            actions += 1
+            presenter.toggle(notifications: history, content: content)
+        }
+        button.target = target; button.action = #selector(BellMouseTarget.press(_:))
+        await presenter.warmUp(notifications: history, content: content)
+        func click(_ point: NSPoint) throws {
+            let timestamp = ProcessInfo.processInfo.systemUptime
+            let down = try XCTUnwrap(NSEvent.mouseEvent(with: .leftMouseDown, location: point, modifierFlags: [],
+                timestamp: timestamp, windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 1))
+            let up = try XCTUnwrap(NSEvent.mouseEvent(with: .leftMouseUp, location: point, modifierFlags: [],
+                timestamp: timestamp + 0.01, windowNumber: window.windowNumber, context: nil, eventNumber: 2, clickCount: 1, pressure: 0))
+            NSApp.postEvent(up, atStart: true)
+            NSApp.postEvent(down, atStart: true)
+            let event = try XCTUnwrap(NSApp.nextEvent(matching: .leftMouseDown, until: Date().addingTimeInterval(1), inMode: .default, dequeue: true))
+            NSApp.sendEvent(event)
+            if let remaining = NSApp.nextEvent(matching: .leftMouseUp, until: Date(), inMode: .default, dequeue: true) { NSApp.sendEvent(remaining) }
+        }
+        func settle() async throws {
+            for _ in 0..<200 {
+                if !presenter.isPreparing && !presenter.isOpening && !presenter.isClosing { break }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+        }
+        let bell = button.convert(NSPoint(x: 20, y: 20), to: nil)
+        try click(bell)
+        try await settle()
+        XCTAssertEqual(actions, 1)
+        let opened = try XCTUnwrap(presenter.popover)
+        XCTAssertTrue(opened.isShown)
+        XCTAssertEqual(opened.animates, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
+        try click(bell)
+        if presenter.isClosing {
+            XCTAssertNotNil(opened.contentViewController, "Closing animation must retain the panel contents")
+        }
+        try await settle()
+        XCTAssertEqual(actions, 2)
+        XCTAssertNil(presenter.popover, "The bell mouse-down must not dismiss before mouse-up reopens it")
+        // Three more clicks, including clicks during open/close animations, end open.
+        try click(bell)
+        try await Task.sleep(for: .milliseconds(30))
+        try click(bell)
+        try click(bell)
+        try await settle()
+        XCTAssertEqual(actions, 5)
+        XCTAssertTrue(presenter.popover?.isShown == true)
+        XCTAssertEqual(presenter.popover?.contentSize, NSSize(width: 420, height: 500))
+        try click(NSPoint(x: 30, y: 30))
+        try await settle()
+        XCTAssertNil(presenter.popover, "An outside click must still dismiss the panel")
+        try click(bell)
+        try await settle()
+        let popupWindow = try XCTUnwrap(presenter.popover?.contentViewController?.view.window)
+        let escape = try XCTUnwrap(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: popupWindow.windowNumber, context: nil,
+            characters: "\u{1B}", charactersIgnoringModifiers: "\u{1B}", isARepeat: false, keyCode: 53))
+        NSApp.postEvent(escape, atStart: true)
+        if let event = NSApp.nextEvent(matching: .keyDown, until: Date().addingTimeInterval(0.05), inMode: .default, dequeue: true) {
+            NSApp.sendEvent(event)
+        }
+        try await settle()
+        XCTAssertNil(presenter.popover, "Escape must dismiss the application-defined popover")
+        try click(bell)
+        try await settle()
+        NotificationCenter.default.post(name: NSApplication.didResignActiveNotification, object: NSApp)
+        try await settle()
+        XCTAssertNil(presenter.popover, "Switching apps must dismiss the panel")
+        await history.flush()
+    }
+
     func testSwiftUIToolbarKeepsTheSameAnchorWhenUnreadStateAndHistoryChange() async throws {
         _ = NSApplication.shared
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("MoraBellAnchor-\(UUID())")
@@ -64,7 +170,7 @@ final class NotificationPopoverTests: XCTestCase {
         defer { window.orderOut(nil); window.contentView = nil }
         let presenter = NotificationPopoverPresenter()
         presenter.anchor = anchor
-        defer { presenter.close() }
+        defer { presenter.detach() }
         let content: @MainActor ([NotificationListEntry], @escaping () -> Void) -> AnyView = { rows, close in
             XCTAssertLessThanOrEqual(rows.count, 100)
             return AnyView(NotificationsPanel(notifications: history, initialRows: rows, close: close)
@@ -74,9 +180,12 @@ final class NotificationPopoverTests: XCTestCase {
         await presenter.warmUp(notifications: history, content: content)
         XCTAssertNil(presenter.popover)
         XCTAssertEqual(history.unreadCount, 100, "Preloading must not mark notifications as read")
-        func waitForOpening() async throws {
-            for _ in 0..<100 where presenter.isPreparing { try await Task.sleep(for: .milliseconds(10)) }
-            try await Task.sleep(for: .milliseconds(20))
+        func waitForOpening(_ target: NotificationPopoverPresenter? = nil) async throws {
+            let target = target ?? presenter
+            for _ in 0..<200 {
+                if !target.isPreparing && !target.isOpening && !target.isClosing { break }
+                try await Task.sleep(for: .milliseconds(10))
+            }
         }
         var previous: NSPopover?
         var durations: [Duration] = []
@@ -87,6 +196,7 @@ final class NotificationPopoverTests: XCTestCase {
             durations.append(started.duration(to: .now))
             let current = try XCTUnwrap(presenter.popover, "Opening \(index) must have content")
             XCTAssertTrue(current.isShown, "Opening \(index) must display a real native popover")
+            XCTAssertEqual(current.animates, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
             XCTAssertEqual(current.contentSize, NSSize(width: 420, height: 500))
             XCTAssertEqual(current.contentViewController?.view.bounds.size, NSSize(width: 420, height: 500))
             XCTAssertGreaterThanOrEqual(current.contentViewController?.view.window?.frame.height ?? 0, 500)
@@ -110,12 +220,13 @@ final class NotificationPopoverTests: XCTestCase {
             previous = current
             if index.isMultiple(of: 2) { presenter.close() }
             else { current.performClose(nil) }
+            try await waitForOpening()
             XCTAssertFalse(current.isShown)
         }
         // Repeated clicks while background preparation is suspended cancel the old request.
         let cold = NotificationPopoverPresenter()
         cold.anchor = anchor
-        defer { cold.close() }
+        defer { cold.detach() }
         cold.toggle(notifications: history, content: content)
         cold.toggle(notifications: history, content: content)
         try await Task.sleep(for: .milliseconds(30))
@@ -123,10 +234,11 @@ final class NotificationPopoverTests: XCTestCase {
         cold.toggle(notifications: history, content: content)
         cold.toggle(notifications: history, content: content)
         cold.toggle(notifications: history, content: content)
-        for _ in 0..<100 where cold.isPreparing { try await Task.sleep(for: .milliseconds(10)) }
+        try await waitForOpening(cold)
         XCTAssertTrue(cold.popover?.isShown == true)
         XCTAssertEqual(cold.popover?.contentSize, NSSize(width: 420, height: 500))
         cold.close()
+        try await waitForOpening(cold)
         let empty = AppNotifications()
         presenter.toggle(notifications: empty) { rows, close in
             AnyView(NotificationsPanel(notifications: empty, initialRows: rows, close: close)
@@ -137,6 +249,7 @@ final class NotificationPopoverTests: XCTestCase {
         XCTAssertEqual(presenter.popover?.contentSize, NSSize(width: 420, height: 500))
         print("Real notification popovers: 20 open/close cycles, maximum opening including settling: \(durations.max() ?? .zero)")
         presenter.close()
+        try await waitForOpening()
         await history.flush()
     }
 }

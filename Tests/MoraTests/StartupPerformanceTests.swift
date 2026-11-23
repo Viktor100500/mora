@@ -6,6 +6,64 @@ import FinanceCore
 
 @MainActor
 final class StartupPerformanceTests: XCTestCase {
+    func testCloudLoadingNoticeIsActuallyVisibleAboveTheLaunchScreen() async throws {
+        _ = NSApplication.shared
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("MoraLaunchProgress-\(UUID())")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var ledger = Ledger.empty
+        ledger.preferences.automaticRates = false
+        ledger.accounts = [Account(name: "Synthetic account", currency: "USD")]
+        try LedgerFile.encode(ledger).write(to: directory.appendingPathComponent("ledger.json"))
+        let store = FinanceStore(directory: directory), cloud = CloudSync()
+        await store.load()
+        let id = store.beginProgressNotice("Загружаем покупки из Wallet…")
+        let suite = "MoraProgress-\(UUID())"
+        let preferences = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { preferences.removePersistentDomain(forName: suite) }
+        preferences.set(false, forKey: "mora.merchantCategories.online")
+        let categorizer = MerchantCategorizer(preferences: preferences, lookup: { _ in nil })
+        let host = NSHostingView(rootView: ContentView(page: .constant(.overview), sheet: .constant(nil))
+            .environmentObject(store).environmentObject(cloud).environmentObject(categorizer)
+            .preferredColorScheme(.dark))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1320, height: 900),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = host
+        defer { window.contentView = nil }
+        try await Task.sleep(for: .milliseconds(200))
+        func snapshot() throws -> NSBitmapImageRep {
+            host.layoutSubtreeIfNeeded()
+            let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+            return bitmap
+        }
+        let withNotice = try snapshot()
+        XCTAssertEqual(store.activeNotice?.id, id)
+        XCTAssertTrue(store.activeNotice?.isInProgress == true)
+        if let path = ProcessInfo.processInfo.environment["MORA_LAUNCH_PROGRESS_SNAPSHOT"] {
+            try withNotice.representation(using: .png, properties: [:])?.write(to: URL(fileURLWithPath: path))
+        }
+        store.notice = nil
+        try await Task.sleep(for: .milliseconds(300))
+        let withoutNotice = try snapshot()
+        var changed = 0
+        // The offscreen window keeps particles still; the animated loading dots
+        // are outside this region. Only a visible cloud banner changes this edge.
+        for y in stride(from: 0, to: withNotice.pixelsHigh, by: 4) {
+            for x in stride(from: withNotice.pixelsWide / 2, to: withNotice.pixelsWide, by: 4) {
+                guard let a = withNotice.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                      let b = withoutNotice.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+                let difference = abs(a.redComponent - b.redComponent) + abs(a.greenComponent - b.greenComponent) + abs(a.blueComponent - b.blueComponent)
+                if difference > 0.1 { changed += 1 }
+            }
+        }
+        XCTAssertGreaterThan(changed, 300, "A progress event hidden under the splash is not a visible startup notification")
+        window.contentView = nil
+        await cloud.finishPendingWrites()
+        await categorizer.finishPendingWrites()
+        await store.notifications.flush()
+    }
+
     func testFirstNotificationPanelRenderWithLargeHistory() async throws {
         _ = NSApplication.shared
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("MoraNotificationPerformance-\(UUID())")

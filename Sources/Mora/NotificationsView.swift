@@ -85,6 +85,11 @@ final class NotificationPopoverPresenter: NSObject, ObservableObject, NSPopoverD
     private var requestID: UUID?
     private var cachedController: NSHostingController<AnyView>?
     private var cachedEvents: [AppNotification] = []
+    private var queuedOpen: (@MainActor () -> Void)?
+    private var eventMonitor: Any?
+    private var resignObserver: NSObjectProtocol?
+    private(set) var isOpening = false
+    private(set) var isClosing = false
     var isPreparing: Bool { preparation != nil }
 
     private func displayEvents(_ notifications: AppNotifications) -> [AppNotification] {
@@ -93,11 +98,14 @@ final class NotificationPopoverPresenter: NSObject, ObservableObject, NSPopoverD
 
     func warmUp(notifications: AppNotifications,
                 content: @escaping @MainActor ([NotificationListEntry], @escaping () -> Void) -> AnyView) async {
-        if popover?.isShown == true { notifications.markRecentRead(); return }
+        if popover != nil {
+            if !isClosing { notifications.markRecentRead() }
+            return
+        }
         let key = displayEvents(notifications)
         guard cachedController == nil || cachedEvents != key else { return }
         let rows = await notifications.preparePage()
-        guard !Task.isCancelled, popover?.isShown != true, displayEvents(notifications) == key else { return }
+        guard !Task.isCancelled, popover == nil, displayEvents(notifications) == key else { return }
         let controller = NSHostingController(rootView: content(rows, { [weak self] in self?.close() }))
         controller.preferredContentSize = NSSize(width: 420, height: 500)
         controller.view.frame = NSRect(x: 0, y: 0, width: 420, height: 500)
@@ -108,7 +116,13 @@ final class NotificationPopoverPresenter: NSObject, ObservableObject, NSPopoverD
 
     func toggle(notifications: AppNotifications,
                 content: @escaping @MainActor ([NotificationListEntry], @escaping () -> Void) -> AnyView) {
-        if isPreparing || popover?.isShown == true { close(); return }
+        if isClosing {
+            if queuedOpen == nil {
+                queuedOpen = { [weak self] in self?.toggle(notifications: notifications, content: content) }
+            } else { queuedOpen = nil }
+            return
+        }
+        if isPreparing || popover != nil { close(); return }
         notifications.markRecentRead()
         if let cachedController, cachedEvents == displayEvents(notifications) {
             show(cachedController)
@@ -129,29 +143,91 @@ final class NotificationPopoverPresenter: NSObject, ObservableObject, NSPopoverD
     private func show(_ controller: NSHostingController<AnyView>) {
         guard let anchor, anchor.window != nil else { return }
         let popover = NSPopover()
-        popover.behavior = .transient
-        popover.animates = false
+        // Handle outside clicks ourselves so a bell mouse-down does not dismiss
+        // the popover before the same click's button action can toggle it closed.
+        popover.behavior = .applicationDefined
+        popover.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         popover.delegate = self
         popover.contentViewController = controller
         popover.contentSize = NSSize(width: 420, height: 500)
         self.popover = popover
+        isOpening = true
+        installDismissalObservers()
         popover.show(relativeTo: anchor.bounds, of: anchor, preferredEdge: .minY)
         popover.contentSize = NSSize(width: 420, height: 500)
     }
 
     func close() {
+        queuedOpen = nil
         requestID = nil
         preparation?.cancel(); preparation = nil
+        guard let current = popover else { removeDismissalObservers(); return }
+        guard !isClosing else { return }
+        isClosing = true
+        current.performClose(nil)
+    }
+
+    func detach() {
+        queuedOpen = nil; requestID = nil
+        preparation?.cancel(); preparation = nil
+        removeDismissalObservers()
         let current = popover
-        popover = nil
+        popover = nil; isOpening = false; isClosing = false
+        current?.animates = false
         current?.performClose(nil)
         current?.contentViewController = nil
     }
 
+    func popoverDidShow(_ notification: Notification) {
+        guard let shown = notification.object as? NSPopover, shown === popover else { return }
+        isOpening = false
+        if isClosing { shown.performClose(nil) }
+    }
+
+    func popoverWillClose(_ notification: Notification) {
+        guard let closing = notification.object as? NSPopover, closing === popover else { return }
+        isClosing = true
+    }
+
     func popoverDidClose(_ notification: Notification) {
         guard let closed = notification.object as? NSPopover, closed === popover else { return }
-        popover = nil
+        popover = nil; isOpening = false; isClosing = false
         closed.contentViewController = nil
+        removeDismissalObservers()
+        let reopen = queuedOpen
+        queuedOpen = nil
+        reopen?()
+    }
+
+    private func installDismissalObservers() {
+        removeDismissalObservers()
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .keyDown]) { [weak self] event in
+            let consumed = MainActor.assumeIsolated {
+                guard let self else { return false }
+                if event.type == .keyDown {
+                    if event.keyCode == 53 { self.close(); return true }
+                } else { self.dismissIfOutside(event) }
+                return false
+            }
+            return consumed ? nil : event
+        }
+        resignObserver = NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification,
+            object: NSApp, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.close() }
+            }
+    }
+
+    private func removeDismissalObservers() {
+        if let eventMonitor { NSEvent.removeMonitor(eventMonitor); self.eventMonitor = nil }
+        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver); self.resignObserver = nil }
+    }
+
+    private func dismissIfOutside(_ event: NSEvent) {
+        guard let popover else { return }
+        if event.window === popover.contentViewController?.view.window { return }
+        if event.type == .leftMouseDown, let anchor, event.window === anchor.window,
+           anchor.bounds.contains(anchor.convert(event.locationInWindow, from: nil)) { return }
+        close()
     }
 }
 
@@ -171,7 +247,7 @@ private final class NotificationPopoverAnchorView: NSView {
     weak var presenter: NotificationPopoverPresenter?
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window == nil { presenter?.close() }
+        if window == nil { presenter?.detach() }
     }
 }
 
