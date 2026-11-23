@@ -8,6 +8,13 @@ Mac 1.7.27 (build 106)
 - Restored the native notification panel opening and closing animation. Its contents remain attached until the closing animation completes.
 - Clicking the bell again closes the open panel. Outside clicks, Escape, and app deactivation still dismiss it; clicks during an animation preserve the final open or closed state.
 
+## iPhone 1.0.71 — 2026-11-23
+
+iPhone 1.0.71 (build 72) · Mac unchanged
+
+- All tab-bar icons and labels now share one proportional size based on the available width and the widest localized title. Longer titles no longer shrink independently from their neighbours.
+- The layout accounts for the raised Liquid Glass selection, including proportional lens growth on narrow screens. Sizes update together after width or language changes; roomy layouts retain the original size.
+
 ## Mac 1.7.26 — 2026-11-22
 
 Mac 1.7.26 (build 105)
