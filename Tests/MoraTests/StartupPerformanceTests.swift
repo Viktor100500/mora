@@ -28,8 +28,10 @@ final class StartupPerformanceTests: XCTestCase {
         let clock = ContinuousClock(), drawingStarted = clock.now
         let view = NotificationsPanel(notifications: notifications, initialRows: rows, close: {})
             .environmentObject(store).environmentObject(CloudSync())
-        let host = NotificationPanelRendering.prepare(view)
-        print("Notification layout/render completed before presentation: \(drawingStarted.duration(to: clock.now))")
+        let host = NSHostingView(rootView: view)
+        host.frame = NSRect(x: 0, y: 0, width: 420, height: 500)
+        host.layoutSubtreeIfNeeded()
+        print("Notification bounded layout prepared: \(drawingStarted.duration(to: clock.now))")
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 420, height: 500), styleMask: [.titled], backing: .buffered, defer: false)
         let start = clock.now
         window.contentView = host

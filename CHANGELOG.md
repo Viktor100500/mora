@@ -1,5 +1,12 @@
 # Changelog
 
+## Mac 1.7.26 — 2026-11-22
+
+Mac 1.7.26 (build 105)
+
+- Fixed the notification menu occasionally opening as an empty bubble. Each presentation now owns its content and fixed size for its entire lifetime.
+- Removed offscreen bitmap rendering on click and the system popover resize animation. Fast repeated clicks cancel pending openings safely.
+
 ## Mac 1.7.25 — 2026-11-22
 
 Mac 1.7.25 (build 104)
