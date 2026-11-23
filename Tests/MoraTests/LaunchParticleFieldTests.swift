@@ -49,7 +49,7 @@ final class LaunchParticleFieldTests: XCTestCase {
         field.resize(to: CGSize(width: 2080, height: 1400))
         XCTAssertEqual(field.particles[0].position.x, original.position.x * 2, accuracy: 0.001)
         XCTAssertEqual(field.particles[0].position.y, original.position.y * 2, accuracy: 0.001)
-        XCTAssertEqual(field.particles.count, 140)
+        XCTAssertEqual(field.particles.count, 210)
         field.resize(to: .zero)
         XCTAssertEqual(field.size, CGSize(width: 2080, height: 1400))
     }

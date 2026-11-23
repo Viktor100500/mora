@@ -26,6 +26,8 @@ final class FinanceStore: ObservableObject {
     }
     @Published private(set) var activeNotice: AppNotification?
     private var noticeDismissal: Task<Void, Never>?
+    private var launchPresentation = false
+    private var deferredNoticeDismissal: (UUID, Duration)?
     var notice: String? {
         get { activeNotice?.message }
         set { if let newValue { showNotice(newValue) } else { activeNotice = nil } }
@@ -168,7 +170,16 @@ final class FinanceStore: ObservableObject {
         noticeDismissal?.cancel()
         dismissNotice(id, after: dismissAfter)
     }
+    func beginLaunchPresentation() { launchPresentation = true }
+    func endLaunchPresentation() {
+        launchPresentation = false
+        if let (id, delay) = deferredNoticeDismissal, activeNotice?.id == id {
+            dismissNotice(id, after: delay)
+        }
+        deferredNoticeDismissal = nil
+    }
     private func dismissNotice(_ id: UUID, after delay: Duration) {
+        if launchPresentation { deferredNoticeDismissal = (id, delay); return }
         noticeDismissal = Task { [weak self] in
             do { try await Task.sleep(for: delay) } catch { return }
             if self?.activeNotice?.id == id { self?.activeNotice = nil }
