@@ -39,7 +39,8 @@ public struct WalletReviewDraft: Sendable {
                     formatter.string(from: capture.date)].filter { !$0.isEmpty }.joined(separator: " · ")
         amount = Money.parse(capture.amount).flatMap { $0 > 0 ? Money.plain($0) : nil } ?? ""
         date = capture.date
-        accountID = ledger.account(capture.account_id)?.archived == false ? capture.account_id : nil
+        let suggestedAccount = capture.review_account_id ?? capture.account_id
+        accountID = ledger.account(suggestedAccount)?.archived == false ? suggestedAccount : nil
         let explicit = capture.currency.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
         if Locale.isoCurrencyCodeSet.contains(explicit) { currency = explicit }
         else {
@@ -95,7 +96,7 @@ public struct WalletReviewDraft: Sendable {
     /// not waiting for the user.
     public static func canBookAutomatically(_ capture: CloudCapture, in ledger: Ledger) -> Bool {
         // A new card waits for the user's account choice; it is never guessed.
-        guard !capture.awaitsCardLink else { return false }
+        guard capture.wallet_notification != true, !capture.awaitsCardLink else { return false }
         let draft = WalletReviewDraft(capture: capture, ledger: ledger)
         return draft.accountID.flatMap(ledger.account) != nil && !draft.merchant.isEmpty
             && automaticAmount(capture.amount) != nil && draft.currency != unknownCurrency

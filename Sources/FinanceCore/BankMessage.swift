@@ -70,9 +70,12 @@ public enum BankMessage {
         let text = normalized(subtitle) + "\n" + normalized(body)
         guard ignoredReason(text) == nil, !contains(text, incomeWords) else { return nil }
         let lines = text.components(separatedBy: "\n").filter { !$0.isEmpty }
-        guard let priced = lines.last(where: { !amounts(in: $0).isEmpty }), let amount = amounts(in: priced).last,
-              priced.hasSuffix(amount.text) else { return nil }
-        let line = lines.map { $0 == priced ? String($0.dropLast(amount.text.count)).trimmingCharacters(in: .whitespaces) : $0 }
+        guard let index = lines.lastIndex(where: { !amounts(in: $0).isEmpty }),
+              let amount = amounts(in: lines[index]).last,
+              lines[index][amount.range.upperBound...].trimmingCharacters(in: CharacterSet(charactersIn: " .")).isEmpty else { return nil }
+        var fields = lines
+        fields[index] = String(lines[index][..<amount.range.lowerBound])
+        let line = fields.lazy.map { $0.trimmingCharacters(in: CharacterSet(charactersIn: " ·•,:–—")) }
             .first { $0.contains(where: \.isLetter) && amounts(in: $0).isEmpty } ?? ""
         // The place follows the merchant: "…, Jersey City, NJ".
         var parts = line.components(separatedBy: ", ")

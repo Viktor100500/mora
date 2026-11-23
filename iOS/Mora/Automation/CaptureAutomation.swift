@@ -28,7 +28,7 @@ enum CaptureAutomation: String, CaseIterable, Identifiable, Sendable {
     var summary: String {
         switch self {
         case .walletTransaction: L("Записывает каждую оплату Apple Pay сразу после касания.")
-        case .walletNotification: L("Дописывает сумму и продавца, когда Wallet сообщает их позже, например за проезд.")
+        case .walletNotification: L("Дополняет покупку Wallet или отправляет уведомление на проверку в общую базу.")
         case .bankSMS: L("Читает покупки из SMS банка, в том числе по картам без Apple Pay.")
         case .bankNotification: L("Читает покупки из уведомлений приложений банков и карт.")
         }

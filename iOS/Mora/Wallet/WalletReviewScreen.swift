@@ -18,7 +18,12 @@ import FinanceCore
         if alerts != self.alerts { self.alerts = alerts }
     }
 
-    func count(with cloud: CloudSync) -> Int { broken.count + bank.count + cloud.pending.count }
+    func count(with cloud: CloudSync) -> Int { broken.count + localBank(with: cloud).count + cloud.pending.count }
+
+    private func localBank(with cloud: CloudSync) -> [BankAlert] {
+        let synced = Set(cloud.pending.compactMap(\.event_id))
+        return bank.filter { !synced.contains($0.id) }
+    }
 
     /// Newest first, each with the automation it came from.
     func items(cloud: CloudSync) -> [ReviewItem] {
@@ -27,11 +32,11 @@ import FinanceCore
                        reason: $0.amount.isEmpty ? "Wallet не передал сумму" : "Wallet не передал продавца",
                        origin: .iPhone($0), source: .walletTransaction)
         }
-        let messages = bank.map {
+        let messages = localBank(with: cloud).map {
             ReviewItem(id: $0.id, merchant: $0.merchant.isEmpty ? $0.source : $0.merchant,
                        amount: [$0.amount, $0.currency].filter { !$0.isEmpty }.joined(separator: " "), date: $0.receivedAt,
                        card: $0.source.isEmpty ? "" : $0.card,
-                       reason: $0.state == .failed ? ($0.lastError ?? "Сервер не принял покупку") : "Новый формат: проверьте один раз",
+                       reason: $0.reviewReason,
                        origin: .bank($0), source: CaptureAutomation.source(of: $0))
         }
         let server = cloud.pending.map { capture in
@@ -45,6 +50,7 @@ import FinanceCore
 
     /// The local run or message a server purchase was sent from, if it was this iPhone.
     private func source(of capture: CloudCapture, cloud: CloudSync) -> CaptureAutomation? {
+        if capture.wallet_notification == true { return .walletNotification }
         if runs.contains(where: { cloud.review(for: $0)?.id == capture.id }) { return .walletTransaction }
         let alert = alerts.first {
             $0.state == .delivered && abs($0.receivedAt.timeIntervalSince(capture.date)) < 1 && $0.merchant == capture.merchant
@@ -66,6 +72,11 @@ struct ReviewItem: Identifiable {
     let source: CaptureAutomation?
     /// Reached the shared database from another device or without a local record.
     var fromServer = false
+
+    var canDeleteLocally: Bool {
+        if case .bank(let alert) = origin { return !alert.awaitsWalletReviewUpload || alert.attempts == 0 }
+        return true
+    }
 }
 
 struct ReviewRow: View {
@@ -115,7 +126,9 @@ struct WalletReviewScreen: View {
                     Button { open(item) } label: { ReviewRow(item: item) }
                         .buttonStyle(.plain)
                         .swipeActions {
-                            Button(role: .destructive) { deleting = item } label: { Label(L("Удалить"), systemImage: "trash") }.tint(.red)
+                            if item.canDeleteLocally {
+                                Button(role: .destructive) { deleting = item } label: { Label(L("Удалить"), systemImage: "trash") }.tint(.red)
+                            }
                         }
                 }
             } footer: {
@@ -128,7 +141,7 @@ struct WalletReviewScreen: View {
                 BankAlertDetailScreen(alert: alert, duplicate: AutomationJournal.duplicateNote(for: alert, alerts: queue.alerts))
             }
         }
-        .refreshable { queue.reload(); await cloud.refreshLists() }
+        .refreshable { await WalletBackgroundDelivery.run(); await cloud.refreshLists(); queue.reload() }
         .onAppear(perform: queue.reload)
         .onChange(of: router.sheet == nil) { _, closed in if closed { queue.reload() } }
         .confirmationDialog(L("Удалить покупку?"), isPresented: Binding(get: { deleting != nil }, set: { if !$0 { deleting = nil } }),
@@ -151,7 +164,9 @@ struct WalletReviewScreen: View {
             switch item.origin {
             case .iPhone(let run): await WalletDelivery.shared.skip(run.id)
             case .server(let capture): await cloud.dismissCapture(capture)
-            case .bank(let alert): await BankAlertDelivery.shared.skip(alert.id)
+            case .bank(let alert):
+                if let capture = cloud.pending.first(where: { $0.event_id == alert.id }) { await cloud.dismissCapture(capture) }
+                else if !(await BankAlertDelivery.shared.skip(alert.id)) { await cloud.refreshLists() }
             }
             queue.reload()
             // Back in the list only if the delete failed.

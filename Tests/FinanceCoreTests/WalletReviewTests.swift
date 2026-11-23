@@ -95,6 +95,21 @@ final class WalletReviewTests: XCTestCase {
         XCTAssertEqual(WalletReviewDraft(capture: try capture(account: account, currency: "CAD"), ledger: ledger).currency, "CAD")
     }
 
+    func testWalletNotificationStaysInReviewEvenWithCompleteFieldsAndLinkedAccount() throws {
+        var ledger = Ledger.empty
+        let account = Account(name: "Chase", currency: "USD")
+        ledger.accounts = [account]
+        let unavailableAccount = try XCTUnwrap(UUID(uuidString: "00000000-0000-0000-0000-000000000000"))
+        var item = try capture(account: unavailableAccount, currency: "USD", card: (UUID(), "Chase", true))
+        XCTAssertFalse(WalletReviewDraft.canBookAutomatically(item, in: ledger))
+        item.wallet_notification = true
+        item.review_account_id = account.id
+        let draft = WalletReviewDraft(capture: item, ledger: ledger)
+        XCTAssertEqual(draft.accountID, account.id)
+        XCTAssertEqual(draft.merchant, "Test cafe")
+        XCTAssertFalse(WalletReviewDraft.canBookAutomatically(item, in: ledger))
+    }
+
     func testWalletSameCurrencyFeeIsAppliedOnceAndLastAmountUsesPurchasePrice() async throws {
         var ledger = Ledger.empty
         var account = Account(name: "USD", currency: "USD"); account.sameCurrencyFeePercent = 2

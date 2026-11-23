@@ -46,6 +46,18 @@ final class BankMessageTests: XCTestCase {
         Mesto: NJT BUS MY-TIX NEWARK US
         """
 
+    func testWalletNotificationPreservesMerchantNamesWithoutDateFiltering() throws {
+        for merchant in ["Sunday", "Sunday, Nov 22", "Sunday at 19:15", "Воскресенье", "Today", "Sunday in Brooklyn"] {
+            let payment = try XCTUnwrap(BankMessage.walletNotification(subtitle: merchant, body: "$12.50"))
+            XCTAssertEqual(payment.merchant, merchant)
+            XCTAssertEqual(payment.amount, Decimal(string: "12.50"))
+        }
+        let online = try XCTUnwrap(BankMessage.walletNotification(subtitle: "Sunday", body: "$33.76"))
+        XCTAssertEqual(online.merchant, "Sunday")
+        XCTAssertEqual(online.amount, Decimal(string: "33.76"))
+        XCTAssertEqual(online.currency, "USD")
+    }
+
     func testRaiffeisenSerbiaFields() throws {
         let value = try parsed(raiffeisen)
         XCTAssertEqual(value.amount, Decimal(string: "8.4"))
