@@ -113,6 +113,7 @@ struct ContentView: View {
     @State private var reloadingCloud = false
     @State private var walletSettingsRequestID: UUID?
     @State private var showingLaunchScreen = true
+    @State private var interfacePrepared = false
     @AppStorage("mora.hideAmounts") private var hideAmounts = false
     @State private var sidebarWidth = SidebarLayout.idealWidth
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -132,7 +133,7 @@ struct ContentView: View {
         }
     }
 
-    var body: some View {
+    private var applicationContent: some View {
         NavigationSplitView {
             let limits = sidebarLimits
             sidebar
@@ -182,8 +183,16 @@ struct ContentView: View {
                 .background(scheme == .dark ? Color(nsColor: .windowBackgroundColor) : Color(red: 0.965, green: 0.965, blue: 0.95))
             }
         }
-        .opacity(showingLaunchScreen ? 0 : 1)
-        .accessibilityHidden(showingLaunchScreen)
+    }
+
+    var body: some View {
+        ZStack {
+            if interfacePrepared {
+                applicationContent
+                    .opacity(showingLaunchScreen ? 0 : 1)
+                    .accessibilityHidden(showingLaunchScreen)
+            } else { Color.clear }
+        }
         .frame(minWidth: 1040, minHeight: 700)
         .disabled(store.isLoading || store.isTerminating)
         .overlay(alignment: .bottomTrailing) {
@@ -197,24 +206,47 @@ struct ContentView: View {
         .smoothUpdates(value: month)
         .onDisappear { monthPreparation?.cancel() }
         .task {
+            let launchStarted = ContinuousClock.now
+            store.beginLaunchPresentation()
+            defer { store.endLaunchPresentation() }
             cloud.preparePresentation = { [categorizer] store in await categorizer.process(store: store, duringSync: true) }
             await cloud.prepare(store: store)
+            await store.refreshExchangeRates()
+            await cloud.synchronize(inBackground: true, showWalletProgress: true)
+            await categorizer.process(store: store, duringSync: true)
+            await store.prepareReportsForPresentation(in: month)
+            await store.prepareTrendForPresentation(in: month, detail: .months)
             guard !Task.isCancelled else { return }
-            withAnimation(.easeInOut(duration: reduceMotion ? 0.15 : 0.6)) {
-                showingLaunchScreen = false
-            } completion: {
-                if store.isDemo && !didSeeWelcome && !CommandLine.arguments.contains("--demo") && sheet == nil {
-                    sheet = .welcome
+            // Build charts and toolbar while fully covered; the fade only changes opacity.
+            var mounting = SwiftUI.Transaction(animation: nil)
+            mounting.disablesAnimations = true
+            withTransaction(mounting) { interfacePrepared = true }
+            await Task.yield()
+            do {
+                try await Task.sleep(for: .milliseconds(100))
+                try await LaunchTiming.waitForMinimum(since: launchStarted)
+            } catch { return }
+            guard !Task.isCancelled else { return }
+            await withCheckedContinuation { continuation in
+                withAnimation(.easeInOut(duration: reduceMotion ? 0.15 : 0.6)) {
+                    showingLaunchScreen = false
+                } completion: {
+                    store.endLaunchPresentation()
+                    if store.isDemo && !didSeeWelcome && !CommandLine.arguments.contains("--demo") && sheet == nil {
+                        sheet = .welcome
+                    }
+                    continuation.resume()
                 }
             }
-            // Start with the interface reveal, before the first server response.
-            // The launch overlay covers the notice during its fade-out.
-            await cloud.synchronize(inBackground: true, showWalletProgress: true)
+            // Polling and categorization begin after the transition has completed.
             async let sync: Void = cloud.run(store: store)
             async let categories: Void = categorizer.run(store: store)
             _ = await (sync, categories)
         }
-        .onReceive(dataRefresh) { _ in Task { @MainActor in  await store.reloadFromDisk()  } }
+        .onReceive(dataRefresh) { _ in
+            guard !showingLaunchScreen else { return }
+            Task { @MainActor in await store.reloadFromDisk() }
+        }
         .onReceive(store.notifications.$navigation) { request in
             if let request {
                 // Resolve the destination layout before scrolling to a section on that page.
@@ -226,8 +258,8 @@ struct ContentView: View {
                 }
             }
         }
-        .task(id: "\(store.ledger.preferences.automaticRates)-\(store.isDemo)") {
-            guard store.ledger.preferences.automaticRates else { return }
+        .task(id: "\(store.ledger.preferences.automaticRates)-\(store.isDemo)-\(showingLaunchScreen)") {
+            guard !showingLaunchScreen, store.ledger.preferences.automaticRates else { return }
             while !Task.isCancelled {
                 await store.refreshExchangeRates()
                 do { try await Task.sleep(for: .seconds(900)) } catch { return }
@@ -236,7 +268,7 @@ struct ContentView: View {
         .onChange(of: language) { _, _ in Task { await store.reloadFromDisk() } }
         .onChange(of: store.revision) { if !showingLaunchScreen { cloud.localChanged() } }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await store.refreshExchangeRates() } }
+            if phase == .active && !showingLaunchScreen { Task { await store.refreshExchangeRates() } }
         }
         .onChange(of: store.ledger.preferences) { _, preferences in
             if !page.isVisible(in: preferences) { page = .overview }
@@ -244,16 +276,16 @@ struct ContentView: View {
         .toolbarBackground(.hidden, for: .windowToolbar)
         .toolbar(removing: .sidebarToggle)
         .toolbar {
-            if !showingLaunchScreen {
+            if interfacePrepared {
                 if #available(macOS 26.0, *) {
                     ToolbarSpacer(.flexible, placement: .primaryAction)
                     ToolbarItem(placement: .primaryAction) {
-                        HStack(spacing: 10) { importControl; reloadControl; transactionControls }
+                        HStack(spacing: 10) { importControl; reloadControl; transactionControls }.opacity(showingLaunchScreen ? 0 : 1)
                     }
                         .sharedBackgroundVisibility(.hidden)
                 } else {
                     ToolbarItemGroup(placement: .primaryAction) {
-                        HStack(spacing: 10) { importControl; reloadControl; transactionControls }
+                        HStack(spacing: 10) { importControl; reloadControl; transactionControls }.opacity(showingLaunchScreen ? 0 : 1)
                     }
                 }
             }

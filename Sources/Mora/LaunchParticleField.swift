@@ -26,7 +26,7 @@ struct LaunchParticleField {
             }
         }
         size = newSize
-        let count = Int(min(140, max(54, newSize.width * newSize.height / 10_000)))
+        let count = Int(min(210, max(81, newSize.width * newSize.height / 10_000 * 1.5)))
         if particles.count > count { particles.removeLast(particles.count - count) }
         while particles.count < count {
             let angle = Double.random(in: 0..<(2 * .pi)), speed = Double.random(in: 24...44)

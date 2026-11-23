@@ -1,6 +1,17 @@
 import SwiftUI
 import FinanceCore
 
+private struct NotificationWindowOpenerKey: EnvironmentKey {
+    static let defaultValue: (@MainActor @Sendable (String) -> Void)? = nil
+}
+
+private extension EnvironmentValues {
+    var notificationWindowOpener: (@MainActor @Sendable (String) -> Void)? {
+        get { self[NotificationWindowOpenerKey.self] }
+        set { self[NotificationWindowOpenerKey.self] = newValue }
+    }
+}
+
 private enum NotificationStyle {
     static let attention = Color(red: 0.78, green: 0.25, blue: 0.17)
     static let review = Color(red: 0.72, green: 0.49, blue: 0.05)
@@ -9,11 +20,33 @@ private enum NotificationStyle {
 struct AppNotificationBell: View {
     @ObservedObject var notifications: AppNotifications
     @EnvironmentObject private var cloud: CloudSync
+    @EnvironmentObject private var store: FinanceStore
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.openWindow) private var openWindow
     @State private var presented = false
+    @State private var preparing = false
+    @State private var preparedPanel: NSHostingView<AnyView>?
 
     var body: some View {
         let needsReview = !cloud.pending.isEmpty
-        Button { presented.toggle() } label: {
+        Button {
+            if presented { presented = false; return }
+            guard !preparing else { return }
+            Task { @MainActor in
+                preparing = true
+                notifications.markRecentRead()
+                let rows = await notifications.preparePage()
+                let content = NotificationsPanel(notifications: notifications, initialRows: rows, close: { presented = false })
+                    .environmentObject(store).environmentObject(cloud)
+                    .environment(\.colorScheme, scheme)
+                    .environment(\.notificationWindowOpener, { id in openWindow(id: id) })
+                    .environment(\.locale, L10n.locale).tint(.moraGreen)
+                // Complete the first native layout and drawing before the popover animates.
+                preparedPanel = NotificationPanelRendering.prepare(content)
+                preparing = false
+                presented = true
+            }
+        } label: {
             Image(systemName: needsReview ? "bell.fill" : "bell")
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(needsReview ? NotificationStyle.review : Color.primary)
@@ -36,9 +69,30 @@ struct AppNotificationBell: View {
         .accessibilityLabel(L("Уведомления приложения"))
         .accessibilityValue(needsReview ? L("Покупок на проверке: \(cloud.pending.count)") : L("Непрочитанных: \(notifications.unreadCount)"))
         .popover(isPresented: $presented, arrowEdge: .bottom) {
-            NotificationsPanel(notifications: notifications, close: { presented = false })
+            if let preparedPanel {
+                PreparedNotificationPanel(view: preparedPanel).frame(width: 420, height: 500)
+                    .onDisappear { self.preparedPanel = nil }
+            }
         }
     }
+}
+
+@MainActor enum NotificationPanelRendering {
+    static func prepare<Content: View>(_ content: Content) -> NSHostingView<AnyView> {
+        let host = NSHostingView(rootView: AnyView(content))
+        host.frame = NSRect(x: 0, y: 0, width: 420, height: 500)
+        host.layoutSubtreeIfNeeded()
+        if let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) {
+            host.cacheDisplay(in: host.bounds, to: bitmap)
+        }
+        return host
+    }
+}
+
+private struct PreparedNotificationPanel: NSViewRepresentable {
+    let view: NSHostingView<AnyView>
+    func makeNSView(context: Context) -> NSHostingView<AnyView> { view }
+    func updateNSView(_ nsView: NSHostingView<AnyView>, context: Context) {}
 }
 
 struct ToolbarGlassStyle<S: InsettableShape>: ViewModifier {
@@ -55,12 +109,19 @@ struct ToolbarGlassStyle<S: InsettableShape>: ViewModifier {
     }
 }
 
-private struct NotificationsPanel: View {
+struct NotificationsPanel: View {
     @ObservedObject var notifications: AppNotifications
     @EnvironmentObject private var cloud: CloudSync
     @EnvironmentObject private var store: FinanceStore
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.notificationWindowOpener) private var notificationWindowOpener
     var close: () -> Void
+    @State private var rows: [NotificationListEntry]
+
+    init(notifications: AppNotifications, initialRows: [NotificationListEntry] = [], close: @escaping () -> Void) {
+        self.notifications = notifications; self.close = close
+        _rows = State(initialValue: initialRows)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -78,7 +139,8 @@ private struct NotificationsPanel: View {
                 Button {
                     close()
                     store.notifications.request(.inbox)
-                    openWindow(id: "main")
+                    if let notificationWindowOpener { notificationWindowOpener("main") }
+                    else { openWindow(id: "main") }
                 } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "exclamationmark.circle.fill").font(.title2)
@@ -105,25 +167,88 @@ private struct NotificationsPanel: View {
             } else {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(notifications.events) { event in
-                            NotificationRow(event: event, onNavigate: close)
+                        ForEach(rows) { row in
+                            NotificationRow(entry: row, onNavigate: close)
                             Divider().padding(.leading, 48)
                         }
                     }
                 }
             }
+            Divider()
+            HStack {
+                Text(L("Последние 100 событий")).font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Button(L("Полная история в настройках")) {
+                    close()
+                    notifications.request(.page(.settings))
+                    if let notificationWindowOpener { notificationWindowOpener("main") }
+                    else { openWindow(id: "main") }
+                }.buttonStyle(.link).font(.caption)
+            }.padding(12)
             if let error = notifications.storageError {
                 Text(error).font(.caption).foregroundStyle(NotificationStyle.attention).padding(12)
             }
         }
         .frame(width: 420, height: 500)
-        .onAppear { notifications.markAllRead() }
-        .onChange(of: notifications.events) { _, _ in notifications.markAllRead() }
+        .task(id: notifications.recentEvents) {
+            notifications.markRecentRead()
+            let prepared = await notifications.preparePage()
+            guard !Task.isCancelled else { return }
+            if rows != prepared { rows = prepared }
+        }
+    }
+}
+
+struct NotificationHistoryView: View {
+    @ObservedObject var notifications: AppNotifications
+    @Environment(\.dismiss) private var dismiss
+    @State private var snapshot: [AppNotification] = []
+    @State private var rows: [NotificationListEntry] = []
+    @State private var loading = false
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(L("История уведомлений")).font(.title2.weight(.semibold))
+                Spacer()
+                Button(L("Закрыть")) { dismiss() }.keyboardShortcut(.cancelAction)
+            }.padding(20)
+            Divider()
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    ForEach(rows) { row in
+                        NotificationRow(entry: row, onNavigate: { dismiss() })
+                        Divider().padding(.leading, 48)
+                    }
+                    if loading { ProgressView().padding(20) }
+                    else if rows.count < snapshot.count {
+                        Button(L("Показать ещё 100")) { Task { await loadNextPage() } }.padding(20)
+                    } else if rows.isEmpty {
+                        Text(L("Пока нет уведомлений")).foregroundStyle(.secondary).padding(30)
+                    }
+                }
+            }
+            Divider()
+            Text(L("Все события сохраняются на этом Mac.")).font(.caption).foregroundStyle(.secondary).padding(14)
+        }
+        .frame(width: 680, height: 640)
+        .task {
+            snapshot = notifications.events
+            await loadNextPage()
+        }
+    }
+    private func loadNextPage() async {
+        guard !loading else { return }
+        loading = true
+        let page = await notifications.preparePage(offset: rows.count, from: snapshot)
+        guard !Task.isCancelled else { loading = false; return }
+        rows += page
+        loading = false
     }
 }
 
 private struct NotificationRow: View {
-    let event: AppNotification
+    let entry: NotificationListEntry
+    private var event: AppNotification { entry.event }
     var onNavigate: () -> Void
     private var icon: String {
         switch event.kind {
@@ -148,7 +273,7 @@ private struct NotificationRow: View {
                 Text(L(event.message)).font(.callout.weight(.medium)).fixedSize(horizontal: false, vertical: true)
                 if let detail = event.detail { FinancialText(detail).font(.caption).foregroundStyle(.primary.opacity(0.78)) }
                 if event.isResolved { Text(L("Больше не требует проверки")).font(.caption.weight(.medium)).foregroundStyle(Color.moraGreen) }
-                Text(event.date.formatted(.dateTime.day().month(.abbreviated).hour().minute().locale(L10n.locale)))
+                Text(entry.dateLabel)
                     .font(.caption2).foregroundStyle(.secondary)
                 NotificationActions(event: event, onNavigate: onNavigate)
             }.frame(maxWidth: .infinity, alignment: .leading)
@@ -174,6 +299,7 @@ struct NotificationActionButton: View {
     @EnvironmentObject private var store: FinanceStore
     @EnvironmentObject private var cloud: CloudSync
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.notificationWindowOpener) private var notificationWindowOpener
     @State private var confirmingRollback = false
     private var available: Bool {
         if case .review(let id) = action { return cloud.pending.contains { $0.id == id } }
@@ -216,7 +342,8 @@ struct NotificationActionButton: View {
     private func navigate(_ destination: NotificationNavigation.Destination, window: String) {
         onNavigate()
         store.notifications.request(destination)
-        openWindow(id: window)
+        if let notificationWindowOpener { notificationWindowOpener(window) }
+        else { openWindow(id: window) }
     }
 }
 

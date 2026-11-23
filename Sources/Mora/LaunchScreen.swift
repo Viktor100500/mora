@@ -148,16 +148,25 @@ final class LaunchParticleView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let context = NSGraphicsContext.current?.cgContext else { return }
         let particles = field.particles, limit = field.connectionDistance
+        // Batch links by opacity instead of issuing a separate stroke for every pair.
+        let paths = (0..<16).map { _ in CGMutablePath() }
+        let squaredLimit = limit * limit
         context.setLineWidth(0.65)
         for first in particles.indices {
             for second in particles.indices where second > first {
                 let a = particles[first].position, b = particles[second].position
-                let distance = hypot(a.x - b.x, a.y - b.y)
+                let dx = a.x - b.x, dy = a.y - b.y
+                let squaredDistance = dx * dx + dy * dy
+                guard squaredDistance < squaredLimit else { continue }
+                let distance = sqrt(squaredDistance)
                 let opacity = LaunchParticleField.connectionOpacity(distance: distance, limit: limit)
-                guard opacity > 0 else { continue }
-                context.setStrokeColor(CGColor(red: 0.49, green: 0.77, blue: 0.62, alpha: opacity))
-                context.move(to: a); context.addLine(to: b); context.strokePath()
+                let bucket = min(15, Int(opacity / 0.46 * 16))
+                paths[bucket].move(to: a); paths[bucket].addLine(to: b)
             }
+        }
+        for (index, path) in paths.enumerated() where !path.isEmpty {
+            context.setStrokeColor(CGColor(red: 0.49, green: 0.77, blue: 0.62, alpha: (Double(index) + 0.5) / 16 * 0.46))
+            context.addPath(path); context.strokePath()
         }
         for particle in particles {
             let brightness = 0.6 + 0.18 * sin(field.elapsed * 0.7 + particle.phase)

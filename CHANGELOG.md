@@ -7,6 +7,14 @@ iPhone 1.0.70 (build 71) · Mac unchanged
 - Category rings replace their data without inheriting the month switcher's spring animation, preventing invalid intermediate sector geometry in Charts when switching months on Overview or Analytics.
 - Selecting a different set of category amounts clears the previous ring selection. Non-positive or non-finite category values are excluded from chart input.
 
+## Mac 1.7.25 — 2026-11-22
+
+Mac 1.7.25 (build 104)
+
+- The launch animation stays visible for at least three seconds and until initial data, cloud purchases, categories and reports are ready. The interface is prepared before the fade, with 50% more particles and batched connection drawing.
+- The notification menu shows only the latest 100 events, prepared in the background. The complete local history is available in Settings with pages of 100 events.
+- Review reminder timers begin after the launch screen disappears, so the three-second reminder stays visible.
+
 ## Mac 1.7.24 — 2026-11-22
 
 Mac 1.7.24 (build 103)

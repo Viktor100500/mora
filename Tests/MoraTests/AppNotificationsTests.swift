@@ -101,6 +101,28 @@ final class AppNotificationsTests: XCTestCase {
         withExtendedLifetime(observation) {}
     }
 
+    func testRecentMenuKeepsOneHundredAndTheArchiveRetainsEveryPage() async throws {
+        let directory = try temporaryDirectory(); defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("notification-history.json")
+        let history = AppNotifications(fileURL: file)
+        for index in 0..<250 { history.record("Synthetic event \(index)") }
+        history.markRecentRead()
+        XCTAssertEqual(history.recentEvents.count, 100)
+        XCTAssertEqual(history.unreadCount, 0)
+        XCTAssertTrue(history.events.prefix(100).allSatisfy(\.isRead))
+        XCTAssertTrue(history.events.dropFirst(100).allSatisfy { !$0.isRead })
+        let first = await history.preparePage(), second = await history.preparePage(offset: 100)
+        let last = await history.preparePage(offset: 200)
+        XCTAssertEqual(first.count, 100); XCTAssertEqual(second.count, 100); XCTAssertEqual(last.count, 50)
+        XCTAssertEqual(Set((first + second + last).map(\.id)).count, 250)
+        await history.flush()
+        let restored = AppNotifications(fileURL: file)
+        await restored.load()
+        XCTAssertEqual(restored.events.count, 250)
+        XCTAssertEqual(restored.recentEvents.first?.message, "Synthetic event 249")
+        XCTAssertEqual(restored.events.last?.message, "Synthetic event 0")
+    }
+
     func testDamagedHistoryIsPreserved() async throws {
         let directory = try temporaryDirectory(); defer { try? FileManager.default.removeItem(at: directory) }
         let file = directory.appendingPathComponent("notification-history.json")

@@ -115,6 +115,7 @@ struct ImportView: View {
 }
 
 struct SettingsView: View {
+    @State private var showingNotificationHistory = false
     @Binding var walletReviewScrollRequest: UUID?
     @State private var walletReviewHighlight: UUID?
     @EnvironmentObject private var cloud: CloudSync
@@ -133,6 +134,13 @@ struct SettingsView: View {
     var body: some View {
         VStack(spacing: CardLayout.spacing) {
             LanguageSettingsCard()
+            Card {
+                HStack {
+                    SectionHeading(title: L("История уведомлений"), subtitle: L("Все события сохраняются на этом Mac."))
+                    Spacer()
+                    Button(L("Открыть историю")) { showingNotificationHistory = true }
+                }
+            }
             Card {
                 VStack(alignment: .leading, spacing: 22) {
                     SectionHeading(title: L("Валюты и отображение"), subtitle: L("Все отчеты и бюджеты используют базовую валюту"))
@@ -243,6 +251,9 @@ struct SettingsView: View {
             }
         }
         .onAppear { selectedBase = ledger.preferences.baseCurrency }
+        .sheet(isPresented: $showingNotificationHistory) {
+            NotificationHistoryView(notifications: store.notifications)
+        }
         .confirmationDialog(L("Заменить текущие данные резервной копией?"), isPresented: Binding(get: { restoreLedger != nil }, set: { if !$0 { restoreLedger = nil } }), titleVisibility: .visible) { if let backup = restoreLedger { Button(L("Восстановить \(backup.transactions.count) операций")) { Task { @MainActor in  await store.restore(backup); selectedBase = store.ledger.preferences.baseCurrency; restoreLedger = nil  } } } } message: { Text(L("Копия проверена. Текущие данные будут заменены; предыдущая версия сохранится в автоматической резервной копии. При необходимости сначала экспортируйте текущую копию.")) }
     }
     private func rateText(_ rate: Decimal) -> String {
