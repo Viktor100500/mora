@@ -76,47 +76,12 @@ public enum BankMessage {
         var fields = lines
         fields[index] = String(lines[index][..<amount.range.lowerBound])
         let line = fields.lazy.map { $0.trimmingCharacters(in: CharacterSet(charactersIn: " ·•,:–—")) }
-            .first { $0.contains(where: \.isLetter) && amounts(in: $0).isEmpty && !walletDateLabel($0) } ?? ""
+            .first { $0.contains(where: \.isLetter) && amounts(in: $0).isEmpty } ?? ""
         // The place follows the merchant: "…, Jersey City, NJ".
         var parts = line.components(separatedBy: ", ")
         if parts.count >= 3, let region = parts.last, region.count == 2, region == region.uppercased() { parts.removeLast(2) }
         return Parsed(amount: amount.value, currency: amount.currency, merchant: cleanMerchant(parts.joined(separator: ", ")),
                       cardLast4: nil, direction: .expense, automatic: false, amountText: amount.text, merchantText: line, wallet: true)
-    }
-
-    /// A date can appear as the subtitle or as its own line in the body.
-    private static let walletDayLabels: Set<String> = {
-        let formatter = DateFormatter()
-        var labels = ["today", "yesterday", "сегодня", "вчера"]
-        for locale in [Locale(identifier: "en_US"), Locale(identifier: "ru_RU"), .current] {
-            formatter.locale = locale
-            labels += formatter.weekdaySymbols + formatter.shortWeekdaySymbols
-        }
-        return Set(labels.map { $0.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".")) })
-    }()
-
-    private static let walletMonthLabels: Set<String> = {
-        let formatter = DateFormatter()
-        return Set([Locale(identifier: "en_US"), Locale(identifier: "ru_RU"), .current].flatMap { locale in
-            formatter.locale = locale
-            return (formatter.monthSymbols + formatter.shortMonthSymbols).map {
-                $0.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
-            }
-        })
-    }()
-
-    private static func walletDateLabel(_ text: String) -> Bool {
-        let label = text.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: "."))
-        if walletDayLabels.contains(label) { return true }
-        // A weekday followed by a time or a numeric date is metadata, too.
-        let pieces = label.split(maxSplits: 1, whereSeparator: { $0 == "," || $0.isWhitespace })
-        guard pieces.count == 2, let day = pieces.first, let suffix = pieces.last,
-              walletDayLabels.contains(String(day).trimmingCharacters(in: CharacterSet(charactersIn: "."))) else { return false }
-        if suffix.range(of: #"^\s*(?:at\s+)?[0-9]{1,2}[:./][0-9]{1,2}"#, options: .regularExpression) != nil { return true }
-        let dateParts = suffix.split(whereSeparator: \.isWhitespace)
-        guard dateParts.count >= 2 else { return false }
-        let month = dateParts[0].trimmingCharacters(in: CharacterSet(charactersIn: "."))
-        return walletMonthLabels.contains(month) && dateParts[1].trimmingCharacters(in: CharacterSet(charactersIn: ",")).allSatisfy(\.isNumber)
     }
 
     // MARK: Filters
