@@ -548,12 +548,13 @@ private struct ScrollViewFinder: UIViewRepresentable {
 extension View {
     /// UIKit owns one refresh gesture and its settling animation. SwiftUI data
     /// updates do not replace the control or animate the navigation/search layout.
-    func settledRefreshable(action: @escaping @MainActor () async -> Void) -> some View {
-        modifier(SettledRefreshModifier(action: action))
+    func settledRefreshable(inScrollContent: Bool = false, action: @escaping @MainActor () async -> Void) -> some View {
+        modifier(SettledRefreshModifier(inScrollContent: inScrollContent, action: action))
     }
 }
 
 private struct SettledRefreshModifier: ViewModifier {
+    let inScrollContent: Bool
     let action: @MainActor () async -> Void
     @State private var refreshing = false
 
@@ -562,7 +563,7 @@ private struct SettledRefreshModifier: ViewModifier {
             .transaction { transaction in
                 if refreshing { transaction.animation = nil; transaction.disablesAnimations = true }
             }
-            .background(RefreshScrollAnchor {
+            .background(RefreshScrollAnchor(inScrollContent: inScrollContent) {
                 refreshing = true
                 await action()
                 refreshing = false
@@ -571,13 +572,16 @@ private struct SettledRefreshModifier: ViewModifier {
 }
 
 private struct RefreshScrollAnchor: UIViewRepresentable {
+    let inScrollContent: Bool
     let action: @MainActor () async -> Void
 
     func makeCoordinator() -> ScrollRefreshCoordinator { ScrollRefreshCoordinator(action: action) }
     func makeUIView(context: Context) -> RefreshScrollProbe {
         let view = RefreshScrollProbe()
         view.isUserInteractionEnabled = false
-        view.attach = { [weak coordinator = context.coordinator] view in coordinator?.attach(from: view) }
+        view.attach = { [weak coordinator = context.coordinator] view in
+            coordinator?.attach(from: view, inScrollContent: inScrollContent)
+        }
         return view
     }
     func updateUIView(_ view: RefreshScrollProbe, context: Context) {
@@ -611,11 +615,14 @@ final class ScrollRefreshCoordinator: NSObject {
         super.init()
         control.addTarget(self, action: #selector(refresh), for: .valueChanged)
     }
-    func attach(from probe: UIView) {
+    func attach(from probe: UIView, inScrollContent: Bool = false) {
         guard scrollView == nil else { return }
         var parent = probe.superview
         while let current = parent {
-            if let scroll = current as? UIScrollView ?? Self.findScroll(in: current) {
+            // A probe inside ScrollView content must attach only to its enclosing scroll view.
+            // A List-level probe sits outside its UIKit scroll view and needs the subtree lookup.
+            let scroll = current as? UIScrollView ?? (inScrollContent ? nil : Self.findScroll(in: current))
+            if let scroll {
                 scrollView = scroll
                 scroll.refreshControl = control
                 return

@@ -1,5 +1,11 @@
 # Changelog
 
+## iPhone 1.0.75 — 2026-11-24
+
+iPhone 1.0.75 (build 76) · Mac unchanged
+
+- Overview shows its native progress indicator when pulled down to refresh. The control attaches to Overview's own scroll view, so pulling on another tab cannot take its place.
+
 ## Cloud — 2026-11-24
 
 Shared database only · iPhone and Mac unchanged

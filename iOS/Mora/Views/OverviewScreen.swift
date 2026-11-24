@@ -34,6 +34,12 @@ struct OverviewScreen: View {
                 }
                 .padding(.horizontal, 16).padding(.bottom, 24)
                 .scrollsToTopOnReselect(.overview)
+                .settledRefreshable(inScrollContent: true) {
+                    await store.reloadFromDisk()
+                    async let rates: Void = store.refreshExchangeRates()
+                    async let sync: Void = cloud.refresh()
+                    _ = await (rates, sync)
+                }
             }
             .background(Color.moraBackground)
             .navigationTitle(L("Обзор"))
@@ -46,12 +52,6 @@ struct OverviewScreen: View {
                     Button { router.open(.transaction(nil)) } label: { Image(systemName: "plus.circle.fill").font(.title3) }
                         .accessibilityLabel(L("Новая операция"))
                 }
-            }
-            .settledRefreshable {
-                await store.reloadFromDisk()
-                async let rates: Void = store.refreshExchangeRates()
-                async let sync: Void = cloud.refresh()
-                _ = await (rates, sync)
             }
         }
     }

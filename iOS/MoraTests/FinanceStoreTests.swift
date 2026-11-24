@@ -188,6 +188,25 @@ final class FinanceStoreTests: XCTestCase {
 
 @MainActor
 final class RefreshLayoutTests: XCTestCase {
+    func testScrollContentRefreshAttachesToItsEnclosingScrollView() {
+        let host = UIView(), overview = UIScrollView(), content = UIView(), probe = UIView()
+        let unrelatedScroll = UIScrollView()
+        host.addSubview(unrelatedScroll)
+        host.addSubview(content)
+        content.addSubview(probe)
+        let coordinator = ScrollRefreshCoordinator {}
+
+        coordinator.attach(from: probe, inScrollContent: true)
+        XCTAssertNil(coordinator.scrollView)
+        XCTAssertNil(unrelatedScroll.refreshControl)
+
+        host.addSubview(overview)
+        overview.addSubview(content)
+        coordinator.attach(from: probe, inScrollContent: true)
+        XCTAssertTrue(overview.refreshControl === coordinator.control)
+        coordinator.detach()
+    }
+
     func testRefreshSettlesOverscrollAndKeepsAChangedScrollPosition() async throws {
         for movedDuringRefresh in [false, true] {
             let scroll = UIScrollView(frame: CGRect(x: 0, y: 0, width: 375, height: 600))
@@ -269,9 +288,13 @@ private struct RefreshHarness: View {
                     .searchable(text: $query, placement: .navigationBarDrawer(displayMode: .always))
                     .navigationTitle("Transactions")
             } else {
-                ScrollView { VStack { ForEach(0..<20) { Text("Row \($0)").frame(height: 60) } } }
-                    .settledRefreshable(action: action)
-                    .navigationTitle("Overview")
+                ScrollView {
+                    LazyVStack {
+                        ForEach(0..<20) { Text("Row \($0)").frame(height: 60) }
+                    }
+                    .settledRefreshable(inScrollContent: true, action: action)
+                }
+                .navigationTitle("Overview")
             }
         }
     }
