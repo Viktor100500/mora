@@ -710,6 +710,40 @@ try {
     await denied(()=>rpc(anon,'mora_list_capture_duplicates',[h]));
     await denied(()=>rpc(owner,'mora_wallet_duplicate_transaction',[null,{}]));
   });
+  await admin.query(await fs.readFile(path.join(here,'../supabase/migrations/20261124050000_paired_notification_duplicates.sql'),'utf8'));
+  await check('a Wallet notification and a bank-app message of one purchase are booked once in either order',async()=>{
+    const phone=await rpc(owner,'mora_create_phone_token',[h,eurAccount,'Paired channel test']);
+    const at='2026-10-13T21:32:00Z', bankAt='2026-10-13T21:32:07Z';
+    const notify=(merchant,amount,when=at)=>rpc(anon,'mora_capture_wallet_review',[phone.token,uuid(),amount,'USD',merchant,when,'Issuer bank']);
+    // The bank app names the card differently; that label is unlinked, so the message waits for review.
+    const bank=(merchant,amount,when=bankAt)=>rpc(anon,'mora_capture_payment',[phone.token,uuid(),amount,'USD',merchant,when,'Bank app ··5109']);
+    const booked=(id,merchant,original,when=at)=>({id:uuid(),date:when,merchant,amount:Math.round(original*90)/-100,accountID:eurAccount,kind:'expense',note:'',tags:[],
+      conversion:{originalAmount:-original,originalCurrency:'USD',accountCurrency:'EUR',rate:0.9,date:when,provider:'Visa'}});
+    const ledgerSize=async()=>(await rpc(owner,'mora_get_household',[h])).snapshot.transactions.length;
+    // Notification reviewed first (and renamed), bank message arrives afterwards.
+    const wallet=await notify('Uber','11.75');
+    assert.equal(wallet.state,'pending');
+    await rpc(owner,'mora_review_capture',[h,wallet.id,booked(wallet.id,'Uber Eats',11.75)]);
+    const before=await ledgerSize();
+    const message=await bank('UBER *BLUESTONELANE SAN FRANCISCOUS','11.75');
+    assert.equal(message.state,'duplicate'); assert.equal(message.duplicate,true); assert.equal(message.next_step,null);
+    assert.equal(await ledgerSize(),before);
+    assert((await rpc(member,'mora_list_capture_duplicates',[h])).some(c=>c.id===message.id && c.transaction_id===wallet.id));
+    // A second bank message of the same price is another purchase, not a second duplicate.
+    assert.equal((await bank('UBER *TRIP','11.75','2026-10-13T21:33:00Z')).state,'pending');
+    // Bank message pending first; booking it closes the later notification's review.
+    const early=await bank('YETTEL D.O.O. BEOGRAD','7.40','2026-10-13T22:00:07Z');
+    assert.equal(early.state,'pending');
+    const late=await notify('Yettel','7.40','2026-10-13T22:00:00Z');
+    assert.equal(late.state,'pending');
+    await rpc(owner,'mora_review_capture',[h,early.id,booked(early.id,'YETTEL D.O.O. BEOGRAD',7.4,'2026-10-13T22:00:07Z')]);
+    assert((await rpc(member,'mora_list_capture_duplicates',[h])).some(c=>c.id===late.id && c.transaction_id===early.id));
+    assert(!(await rpc(member,'mora_list_pending',[h])).some(c=>c.id===late.id));
+    // Different merchant, price or time stays a separate purchase.
+    for(const [merchant,amount,when] of [['Lyft','11.75',bankAt],['UBER *EATS','11.76',bankAt],['UBER *EATS','11.75','2026-10-13T21:40:00Z']]) {
+      assert.equal((await bank(merchant,amount,when)).state,'pending');
+    }
+  });
   await check('manual review rates preserve provenance and validate converted amounts',async()=>{
     const phone=await rpc(owner,'mora_create_phone_token',[h,eurAccount,'Manual rate test']);
     const received=await rpc(anon,'mora_capture_wallet_review',[phone.token,uuid(),'10','USD','Manual FX',date,'']);

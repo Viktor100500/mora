@@ -1,5 +1,13 @@
 # Changelog
 
+## Cloud — 2026-11-24
+
+Shared database only · iPhone and Mac unchanged
+
+- A Wallet notification and a bank-app message (or a Wallet Transaction run) about the same purchase from one iPhone are booked once, in either arrival order. When one side is booked, the other is marked as a duplicate and leaves review; it is not booked automatically either.
+- This pairing compares the phone key, original currency and amount, and a two-minute window, but not the account, because different card labels of one card can be linked to different accounts. A second message from the same channel stays a separate purchase.
+- Merchant names match when they share a word of at least four characters or one contains the other, e.g. "Uber" and "UBER *BLUESTONELANE SAN FRANCISCOUS". Before, an exact match was required.
+
 ## iPhone 1.0.74 — 2026-11-23
 
 iPhone 1.0.74 (build 75) · Mac unchanged
