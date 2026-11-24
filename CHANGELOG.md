@@ -1,5 +1,12 @@
 # Changelog
 
+## iPhone 1.0.74 — 2026-11-23
+
+iPhone 1.0.74 (build 75) · Mac unchanged
+
+- Transaction rows are rebuilt around three parts: a 44 pt category tile centered on the whole row, the merchant with its category and account, and the amount in a capsule with the date beneath it in the same style as the details. When the merchant fits on one line beside the amount and the details take at most two lines, the amount stands at the trailing edge; otherwise it moves under the text. Nothing is truncated.
+- Expenses by category: the category tile is centered on the name and its meter together instead of sitting at the top of the row; long category names wrap.
+
 ## iPhone 1.0.73 — 2026-11-23
 
 iPhone 1.0.73 (build 74) · Mac unchanged

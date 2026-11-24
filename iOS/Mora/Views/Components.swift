@@ -4,7 +4,6 @@ import FinanceCore
 
 struct TransactionRow: View {
     @EnvironmentObject private var categorizer: MerchantCategorizer
-    @Environment(\.dynamicTypeSize) private var typeSize
     @ScaledMetric(relativeTo: .body) private var iconDimension = 44
     @AppStorage("mora.hideAmounts") private var amountsHidden = false
     let transaction: Transaction
@@ -21,7 +20,9 @@ struct TransactionRow: View {
         self.showsDate = showsDate
     }
 
-    private var subtitle: String {
+    private var iconSize: CGFloat { min(iconDimension, 60) }
+
+    private var details: String {
         var parts = [transaction.kind == .transfer ? L("Перевод") : category?.name ?? L("Без категории")]
         if transaction.kind == .transfer {
             if let removed = transaction.removedTransferAccountName { parts.append(L("удаленный счет: \(removed)")) }
@@ -30,106 +31,135 @@ struct TransactionRow: View {
         return parts.joined(separator: " · ")
     }
 
-    private var conversionText: String? {
-        transaction.conversion.map { conversion in
-            DisplayMoney.string(abs(conversion.originalAmount), currency: conversion.originalCurrency)
-        }
+    private var dateText: String {
+        showsDate ? transaction.date.formatted(.dateTime.day().month(.abbreviated).hour().minute().locale(L10n.locale))
+                  : transaction.date.formatted(.dateTime.hour().minute().locale(L10n.locale))
     }
-    private var amountLabel: some View {
-        FinancialText(DisplayMoney.signed(transaction, currency: account?.currency ?? "RUB"))
-            .font(.body.weight(.semibold))
-            .foregroundStyle(transaction.kind == .income ? Color.moraGreen : .primary)
-            .monospacedDigit()
-            .lineLimit(1)
+
+    private var merchant: some View {
+        Text(transaction.merchant).font(.body.weight(.semibold))
+            .fixedSize(horizontal: false, vertical: true)
     }
-    private var time: some View {
-        Text(showsDate ? transaction.date.formatted(.dateTime.day().month(.abbreviated).hour().minute().locale(L10n.locale))
-                       : transaction.date.formatted(.dateTime.hour().minute().locale(L10n.locale)))
-            .font(.caption2).foregroundStyle(.secondary).lineLimit(1).fixedSize()
-    }
-    private var subtitleText: some View {
+
+    @ViewBuilder private var detailsText: some View {
         Group {
             if transaction.categoryID == nil && categorizer.pendingTransactionIDs.contains(transaction.id) {
                 TransactionCategoryProgress()
             } else {
-                Text(subtitle).lineLimit(typeSize.isAccessibilitySize ? nil : 1)
+                Text(details).fixedSize(horizontal: false, vertical: true)
             }
-        }.font(.caption).foregroundStyle(.secondary)
+        }.font(.subheadline).foregroundStyle(.secondary)
     }
-    private var merchant: some View {
-        Text(transaction.merchant).font(.body.weight(.medium))
-            .lineLimit(typeSize.isAccessibilitySize ? nil : 2)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
+
+    /// The amount is its own object: a capsule that never shrinks or wraps.
+    private var amountChip: some View {
+        let income = transaction.kind == .income
+        return FinancialText(DisplayMoney.signed(transaction, currency: account?.currency ?? "RUB"))
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(income ? Color.moraGreen : .primary)
+            .lineLimit(1)
+            .padding(.horizontal, 10).padding(.vertical, 4)
+            .background(income ? Color.moraGreen.opacity(0.14) : Color(.tertiarySystemFill), in: Capsule())
+            .fixedSize()
+    }
+
+    /// Original amount (for conversions) and date: the caption that travels with the amount.
+    private var amountCaption: some View {
+        HStack(spacing: 4) {
+            if let conversion = transaction.conversion {
+                let text = DisplayMoney.string(abs(conversion.originalAmount), currency: conversion.originalCurrency)
+                FinancialText(text)
+                    .accessibilityLabel(L("Исходная сумма: \(amountsHidden ? FinancialPrivacy.mask(text) : text)"))
+                Text(verbatim: "·").accessibilityHidden(true)
+            }
+            Text(dateText)
+        }
+        .font(.subheadline).foregroundStyle(.secondary).lineLimit(1).fixedSize()
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .center, spacing: 12) {
             IconTile(icon: transaction.kind == .transfer ? "arrow.left.arrow.right" : category?.icon ?? "tag",
-                     color: category?.color ?? (transaction.kind == .income ? "green" : "gray"), size: min(iconDimension, 60))
-                .padding(.top, 1)
-            VStack(alignment: .leading, spacing: 4) {
-                TransactionHeadingLayout(stacked: typeSize.isAccessibilitySize) {
-                    merchant
-                    amountLabel.minimumScaleFactor(0.65)
-                }
-                subtitleText
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .firstTextBaseline, spacing: 8) {
-                        originalAmount
-                        Spacer(minLength: 0)
-                        time
-                    }
-                    VStack(alignment: .leading, spacing: 3) {
-                        originalAmount
-                        time
-                    }
-                }
+                     color: category?.color ?? (transaction.kind == .income ? "green" : "gray"), size: iconSize)
+            // Order is also the VoiceOver order: name, amount, details, original amount and date.
+            TransactionContentLayout {
+                merchant
+                amountChip
+                detailsText
+                amountCaption
             }
         }
-        .padding(.vertical, 5)
-        .alignmentGuide(.listRowSeparatorLeading) { _ in min(iconDimension, 60) + 12 }
+        .padding(.vertical, 6)
+        .alignmentGuide(.listRowSeparatorLeading) { _ in iconSize + 12 }
         .contentShape(Rectangle())
         .accessibilityElement(children: .combine)
     }
-
-    @ViewBuilder private var originalAmount: some View {
-        if let conversionText {
-            FinancialText(conversionText).font(.caption2).foregroundStyle(.secondary)
-                .lineLimit(1).fixedSize()
-                .accessibilityLabel(L("Исходная сумма: \(amountsHidden ? FinancialPrivacy.mask(conversionText) : conversionText)"))
-        }
-    }
-
 }
 
-/// Measure the amount first, then wrap the merchant into its remaining column.
-/// ViewThatFits uses an unwrapped title's ideal width and needlessly stacks it.
-private struct TransactionHeadingLayout: Layout {
-    var stacked: Bool
+/// Subviews: merchant, amount capsule, details, and the caption with the date.
+/// The amount group (capsule over caption) stands at the trailing edge, centered on
+/// the text, when the merchant fits on one line beside it and the details take at most
+/// two lines there. Otherwise the group moves under the text. Nothing is truncated.
+private struct TransactionContentLayout: Layout {
+    private let spacing: CGFloat = 12
+    private let lineSpacing: CGFloat = 2
+    private let amountGap: CGFloat = 6
 
-    private func sizes(width: CGFloat, subviews: Subviews) -> (CGSize, CGSize, Bool) {
-        let amount = subviews[1].sizeThatFits(.unspecified)
-        let vertical = stacked || amount.width + 12 + min(96, width * 0.4) > width
-        let titleWidth = vertical ? width : max(0, width - amount.width - 12)
-        return (subviews[0].sizeThatFits(ProposedViewSize(width: titleWidth, height: nil)),
-                subviews[1].sizeThatFits(ProposedViewSize(width: min(amount.width, width), height: nil)), vertical)
+    private struct Frames { var items: [CGRect]; var size: CGSize }
+
+    private func frames(width: CGFloat, subviews: Subviews) -> Frames {
+        let title = subviews[0], details = subviews[2]
+        let chip = subviews[1].sizeThatFits(.unspecified), caption = subviews[3].sizeThatFits(.unspecified)
+        let groupWidth = max(chip.width, caption.width)
+        let column = width - spacing - groupWidth
+        let detailsHeight = { (w: CGFloat) in details.sizeThatFits(ProposedViewSize(width: w, height: nil)).height }
+        let detailsLine = details.sizeThatFits(.unspecified).height
+        let inline = column > 0
+            && title.sizeThatFits(.unspecified).width <= column
+            && detailsHeight(column) < detailsLine * 2.5  // at most two lines, leading included
+
+        let textWidth = inline ? column : width
+        let titleSize = title.sizeThatFits(ProposedViewSize(width: textWidth, height: nil))
+        let detailsSize = CGSize(width: textWidth, height: detailsHeight(textWidth))
+        let textHeight = titleSize.height + lineSpacing + detailsSize.height
+        var items = [CGRect](repeating: .zero, count: 4)
+
+        if inline {
+            let groupHeight = chip.height + lineSpacing + caption.height
+            let height = max(textHeight, groupHeight)
+            let textY = (height - textHeight) / 2, groupY = (height - groupHeight) / 2
+            items[0] = CGRect(x: 0, y: textY, width: textWidth, height: titleSize.height)
+            items[2] = CGRect(x: 0, y: textY + titleSize.height + lineSpacing, width: textWidth, height: detailsSize.height)
+            items[1] = CGRect(origin: CGPoint(x: width - chip.width, y: groupY), size: chip)
+            items[3] = CGRect(origin: CGPoint(x: width - caption.width, y: groupY + chip.height + lineSpacing), size: caption)
+            return Frames(items: items, size: CGSize(width: width, height: height))
+        }
+
+        items[0] = CGRect(x: 0, y: 0, width: width, height: titleSize.height)
+        items[2] = CGRect(x: 0, y: titleSize.height + lineSpacing, width: width, height: detailsSize.height)
+        let chipY = textHeight + amountGap
+        items[1] = CGRect(origin: CGPoint(x: 0, y: chipY), size: chip)
+        var height = chipY + chip.height
+        if chip.width + 8 + caption.width <= width {
+            items[3] = CGRect(origin: CGPoint(x: chip.width + 8, y: chipY + (chip.height - caption.height) / 2), size: caption)
+        } else {
+            items[3] = CGRect(origin: CGPoint(x: 0, y: height + lineSpacing), size: caption)
+            height += lineSpacing + caption.height
+        }
+        return Frames(items: items, size: CGSize(width: width, height: height))
     }
+
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? subviews.reduce(12) { $0 + $1.sizeThatFits(.unspecified).width }
-        let (title, amount, vertical) = sizes(width: width, subviews: subviews)
-        return CGSize(width: width, height: vertical ? title.height + 4 + amount.height : max(title.height, amount.height))
+        let width = proposal.width ?? subviews.prefix(2).reduce(spacing) { $0 + $1.sizeThatFits(.unspecified).width }
+        return frames(width: width, subviews: subviews).size
     }
+
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let (title, amount, vertical) = sizes(width: bounds.width, subviews: subviews)
-        let titleProposal = ProposedViewSize(width: vertical ? bounds.width : bounds.width - amount.width - 12, height: title.height)
-        subviews[0].place(at: bounds.origin, proposal: titleProposal)
-        let amountProposal = ProposedViewSize(width: amount.width, height: amount.height)
-        let baselineOffset = subviews[0].dimensions(in: titleProposal)[.firstTextBaseline]
-            - subviews[1].dimensions(in: amountProposal)[.firstTextBaseline]
-        subviews[1].place(at: CGPoint(x: bounds.maxX - amount.width,
-            y: bounds.minY + (vertical ? title.height + 4 : baselineOffset)), proposal: amountProposal)
+        let layout = frames(width: bounds.width, subviews: subviews)
+        for (index, frame) in layout.items.enumerated() {
+            subviews[index].place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
+                                  proposal: ProposedViewSize(frame.size))
+        }
     }
 }
 
@@ -407,15 +437,20 @@ struct CategoryShareRow: View {
     let expense: Decimal
     let currency: String
     var body: some View {
-        VStack(spacing: 6) {
-            HStack(spacing: 10) {
-                IconTile(icon: total.icon, color: total.color, size: 30)
-                Text(total.name).font(.subheadline).lineLimit(1)
-                Spacer(minLength: 6)
-                FinancialText(DisplayMoney.string(total.amount, currency: currency)).font(.subheadline.weight(.medium))
-                Text("\(percent(total.amount, of: expense))%").font(.caption).foregroundStyle(.secondary).frame(minWidth: 34, alignment: .trailing)
+        // The tile is centered on the whole text-and-meter block, not on the first line.
+        HStack(alignment: .center, spacing: 10) {
+            IconTile(icon: total.icon, color: total.color, size: 36)
+            VStack(spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(total.name).font(.subheadline)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    FinancialText(DisplayMoney.string(total.amount, currency: currency)).font(.subheadline.weight(.medium)).fixedSize()
+                    Text("\(percent(total.amount, of: expense))%").font(.caption).foregroundStyle(.secondary)
+                        .frame(minWidth: 34, alignment: .trailing).fixedSize()
+                }
+                Meter(progress: expense > 0 ? (total.amount / expense).double : 0, color: .token(total.color))
             }
-            Meter(progress: expense > 0 ? (total.amount / expense).double : 0, color: .token(total.color)).padding(.leading, 40)
         }
     }
 }
@@ -625,3 +660,37 @@ final class ScrollRefreshCoordinator: NSObject {
         scrollView = nil
     }
 }
+
+#if DEBUG
+private enum TransactionRowPreviewData {
+    static let account = Account(name: "Основной счёт")
+    static let groceries = Category(name: "Продукты", icon: "basket", color: "green")
+    static let travel = Category(name: "Путешествия и отдых за границей", icon: "airplane", color: "purple")
+    static let salary = Category(name: "Зарплата", icon: "banknote", color: "green", kind: .income)
+    static var ledger: Ledger {
+        var ledger = Ledger()
+        ledger.accounts = [account]
+        ledger.categories = [groceries, travel, salary]
+        return ledger
+    }
+    static let transactions = [
+        Transaction(date: .now, merchant: "Билеты", amount: 18_000, accountID: account.id, categoryID: travel.id),
+        Transaction(date: .now, merchant: "Продукты на неделю в Перекрёстке у дома", amount: 8_900, accountID: account.id, categoryID: groceries.id),
+        Transaction(date: .now, merchant: "Ремонт", amount: 245_990, accountID: account.id, categoryID: groceries.id),
+        Transaction(date: .now, merchant: "Зарплата", amount: 120_000, accountID: account.id, categoryID: salary.id, kind: .income),
+    ]
+}
+
+private struct TransactionRowPreview: View {
+    var body: some View {
+        List(TransactionRowPreviewData.transactions) { transaction in
+            TransactionRow(transaction: transaction, ledger: TransactionRowPreviewData.ledger)
+        }
+        .environmentObject(MerchantCategorizer())
+    }
+}
+
+#Preview("Rows") { TransactionRowPreview() }
+#Preview("Rows · dark") { TransactionRowPreview().preferredColorScheme(.dark) }
+#Preview("Rows · AX") { TransactionRowPreview().dynamicTypeSize(.accessibility2) }
+#endif
