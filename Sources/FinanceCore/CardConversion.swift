@@ -66,10 +66,7 @@ public struct CardConversion: Codable, Equatable, Sendable {
               Locale.isoCurrencyCodeSet.contains(accountCurrency), originalCurrency != accountCurrency else {
             throw LedgerError.invalid("Некорректный пересчет валюты операции.")
         }
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency; formatter.currencyCode = accountCurrency
-        var raw = originalAmount * rate * (1 + feePercent / 100), rounded = Decimal()
-        NSDecimalRound(&rounded, &raw, formatter.maximumFractionDigits, .plain)
+        let rounded = CurrencyPrecision.rounded(originalAmount * rate * (1 + feePercent / 100), currency: accountCurrency)
         guard rounded != 0, !rounded.isNaN else { throw LedgerError.invalid("Сумма после пересчета меньше минимальной единицы валюты счета.") }
         return rounded
     }

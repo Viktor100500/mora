@@ -754,6 +754,53 @@ try {
     const booked=await rpc(owner,'mora_review_capture',[h,received.id,tx]);
     assert.equal(booked.snapshot.transactions.find(t=>t.id.toLowerCase()===received.id).conversion.provider,'Manual');
   });
+  await admin.query(await fs.readFile(path.join(here,'../supabase/migrations/20261128001502_wallet_capture_sources_and_consistent_precision.sql'),'utf8'));
+  await admin.query(await fs.readFile(path.join(here,'../supabase/migrations/20261128002038_wallet_legacy_source_recovery.sql'),'utf8'));
+  await check('explicit capture sources reconcile Wallet Transaction and bank notifications across routed accounts',async()=>{
+    const phone=await rpc(owner,'mora_create_phone_token',[h,eurAccount,'Source test']);
+    const when='2026-11-24T18:40:22Z';
+    const send=(source,merchant,amount,at=when,card=source==='wallet_transaction'?'Visa Debit':'Bank app ··5109')=>
+      rpc(anon,'mora_capture_payment_from_source',[phone.token,uuid(),amount,'USD',merchant,at,card,source]);
+    const reviewed=(merchant,amount,at=when)=>({id:uuid(),date:at,merchant,amount:-amount*0.9,accountID:eurAccount,kind:'expense',note:'',tags:[],
+      conversion:{originalAmount:-amount,originalCurrency:'USD',accountCurrency:'EUR',rate:0.9,date:at,provider:'Visa'}});
+    const wallet=await send('wallet_transaction','Metropolitan Transportation Authority','3');
+    await rpc(owner,'mora_review_capture',[h,wallet.id,reviewed('Metropolitan Transportation Authority',3)]);
+    const before=(await rpc(owner,'mora_get_household',[h])).snapshot.transactions.length;
+    const bank=await send('bank_notification','MTA*NYCT PAYGO NEW YORK','3','2026-11-24T18:40:37Z');
+    assert.equal(bank.state,'duplicate');
+    assert.equal((await rpc(owner,'mora_get_household',[h])).snapshot.transactions.length,before);
+    assert((await rpc(member,'mora_list_capture_duplicates',[h])).some(c=>c.id===bank.id && c.transaction_id===wallet.id));
+    // Another event from the same channel is not swallowed by the earlier pair.
+    assert.equal((await send('bank_notification','MTA*NYCT PAYGO NEW YORK','3')).state,'pending');
+    const other=await rpc(owner,'mora_create_phone_token',[h,eurAccount,'Other phone']);
+    assert.equal((await rpc(anon,'mora_capture_payment_from_source',[other.token,uuid(),'3','USD','MTA*NYCT PAYGO NEW YORK',when,'Other card','bank_notification'])).state,'pending');
+    // Reverse order, including the different PATH processor and display names.
+    const at='2026-11-24T19:00:00Z';
+    const early=await send('bank_notification','PATH TAPP PAYGO CP JERSEY CITY','3.25',at);
+    const late=await send('wallet_transaction','Port Authority of New York & New Jersey','3.25',at);
+    await rpc(owner,'mora_review_capture',[h,late.id,{...reviewed('Port Authority of New York & New Jersey',3.25,at),amount:-2.93}]);
+    assert((await rpc(owner,'mora_list_capture_duplicates',[h])).some(c=>c.id===early.id && c.transaction_id===late.id));
+    const snapshot=(await rpc(owner,'mora_get_household',[h])).snapshot;
+    await rpc(member,'mora_review_capture',[h,early.id,reviewed('Do not append stale review',100,at)]);
+    assert.deepEqual((await rpc(owner,'mora_get_household',[h])).snapshot,snapshot);
+    await denied(()=>rpc(anon,'mora_capture_payment_from_source',['0'.repeat(64),uuid(),'3','USD','MTA',when,'Card','wallet_transaction']));
+    await assert.rejects(()=>send('invalid','Store','3'));
+    await denied(()=>rpc(owner,'mora_currency_decimals',['RSD']));
+  });
+  await check('RSD conversion uses two ISO minor units and rejects display-rounded whole dinars',async()=>{
+    assert.deepEqual((await admin.query(`select public.mora_currency_decimals(c) units from unnest(array['RSD','EUR','JPY','KWD','CLF']) c`)).rows.map(r=>r.units),[2,2,0,3,4]);
+    const rsd=uuid().toUpperCase();
+    let current=await rpc(owner,'mora_get_household',[h]);
+    current.snapshot.accounts.push({id:rsd,name:'RSD precision',currency:'RSD',kind:'checking',openingBalance:0,color:'green',archived:false});
+    assert.equal(await rpc(owner,'mora_save_household',[h,current.version,current.snapshot]),true);
+    const phone=await rpc(owner,'mora_create_phone_token',[h,rsd,'RSD precision']);
+    const capture=await rpc(anon,'mora_capture_payment_from_source',[phone.token,uuid(),'3','USD','Precision store',date,'','wallet_transaction']);
+    const transaction={id:uuid(),date,merchant:'Precision store',amount:-322.43,accountID:rsd,kind:'expense',note:'',tags:[],
+      conversion:{originalAmount:-3,originalCurrency:'USD',accountCurrency:'RSD',rate:107.477244,date,provider:'Visa'}};
+    await assert.rejects(()=>rpc(owner,'mora_review_capture',[h,capture.id,{...transaction,amount:-322}]));
+    const result=await rpc(owner,'mora_review_capture',[h,capture.id,transaction]);
+    assert.equal(result.snapshot.transactions.find(t=>t.id.toLowerCase()===capture.id).amount,-322.43);
+  });
   assert(saved.includes('-123456789012.123456'));
   await fs.mkdir(path.join(here,'fixtures'),{recursive:true});
   await fs.writeFile(path.join(here,'fixtures/backend-ledger.json'),saved+'\n');

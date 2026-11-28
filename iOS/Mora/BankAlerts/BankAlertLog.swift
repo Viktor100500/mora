@@ -439,17 +439,20 @@ actor BankAlertDelivery {
     }
 
     static func request(for alert: BankAlert, with sender: WalletSender) -> URLRequest {
-        let endpoint = alert.awaitsWalletReviewUpload ? "mora_capture_wallet_review" : "mora_capture_payment"
+        let endpoint = alert.awaitsWalletReviewUpload ? "mora_capture_wallet_review" : "mora_capture_payment_from_source"
         var request = URLRequest(url: sender.projectURL.appending(path: "rest/v1/rpc/\(endpoint)"), timeoutInterval: 10)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(sender.publicKey, forHTTPHeaderField: "apikey")
-        let body: [String: String] = [
+        var body: [String: String] = [
             "p_token": sender.token, "p_event_id": alert.id.uuidString.lowercased(),
             "p_amount": alert.amount, "p_currency": alert.currency, "p_merchant": alert.merchant,
             "p_occurred_at": alert.receivedAt.ISO8601Format(),
             "p_card": alert.wallet == true && alert.source == "Wallet" ? "" : alert.card,
         ]
+        if !alert.awaitsWalletReviewUpload {
+            body["p_source"] = alert.wallet == true ? "wallet_notification" : alert.channel == .sms ? "bank_sms" : "bank_notification"
+        }
         request.httpBody = try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
         return request
     }

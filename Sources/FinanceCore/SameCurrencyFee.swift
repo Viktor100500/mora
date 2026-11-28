@@ -14,10 +14,8 @@ public struct SameCurrencyFee: Codable, Equatable, Sendable {
               !percent.isNaN, Locale.isoCurrencyCodeSet.contains(currency) else {
             throw LedgerError.invalid("Некорректная комиссия операции.")
         }
-        let formatter = NumberFormatter(); formatter.numberStyle = .currency; formatter.currencyCode = currency
-        var raw = originalAmount * (1 + percent / 100), rounded = Decimal()
-        NSDecimalRound(&rounded, &raw, formatter.maximumFractionDigits, .plain)
-        let minorUnit = (0..<formatter.maximumFractionDigits).reduce(Decimal(1)) { value, _ in value / 10 }
+        var rounded = CurrencyPrecision.rounded(originalAmount * (1 + percent / 100), currency: currency)
+        let minorUnit = (0..<CurrencyPrecision.minorUnits(for: currency)).reduce(Decimal(1)) { value, _ in value / 10 }
         let adjustment = roundingAdjustment ?? 0
         guard !adjustment.isNaN, abs(adjustment) <= minorUnit else { throw LedgerError.invalid("Некорректное округление комиссии.") }
         rounded += adjustment
@@ -87,9 +85,7 @@ public extension Ledger {
     /// Split a charged amount without changing the total or applying the fee twice.
     func allocatingPurchaseFee(from original: Transaction, first: Transaction, second: Transaction) throws -> (Transaction, Transaction) {
         guard let fee = original.sameCurrencyFee, let account = account(original.accountID) else { return (first, second) }
-        let formatter = NumberFormatter(); formatter.numberStyle = .currency; formatter.currencyCode = account.currency
-        var raw = fee.originalAmount * abs(first.amount) / abs(original.amount), firstOriginal = Decimal()
-        NSDecimalRound(&firstOriginal, &raw, formatter.maximumFractionDigits, .plain)
+        let firstOriginal = CurrencyPrecision.rounded(fee.originalAmount * abs(first.amount) / abs(original.amount), currency: account.currency)
         let secondOriginal = fee.originalAmount - firstOriginal
         guard firstOriginal < 0, secondOriginal < 0 else { throw LedgerError.invalid("Не удалось разделить комиссию: измените суммы частей.") }
         var firstFee = SameCurrencyFee(originalAmount: firstOriginal, percent: fee.percent)

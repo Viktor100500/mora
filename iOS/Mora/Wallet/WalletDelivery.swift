@@ -197,11 +197,12 @@ actor WalletDelivery {
     }
 
     static func request(for run: WalletRun, with sender: WalletSender) -> URLRequest {
-        var request = URLRequest(url: sender.projectURL.appending(path: "rest/v1/rpc/mora_capture_payment"), timeoutInterval: 10)
+        var request = URLRequest(url: sender.projectURL.appending(path: "rest/v1/rpc/mora_capture_payment_from_source"), timeoutInterval: 10)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(sender.publicKey, forHTTPHeaderField: "apikey")
         let body: [String: String] = [
+            "p_source": "wallet_transaction",
             "p_token": sender.token, "p_event_id": run.id.uuidString.lowercased(),
             "p_amount": run.amount, "p_currency": "", "p_merchant": run.sentMerchant,
             "p_occurred_at": run.receivedAt.ISO8601Format(), "p_card": run.card,

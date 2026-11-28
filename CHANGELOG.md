@@ -1,5 +1,16 @@
 # Changelog
 
+## iPhone 1.0.76 · Mac 1.7.29 — 2026-11-27
+
+iPhone 1.0.76 (build 77) · Mac 1.7.29 (build 108)
+
+- Open the local ledger before starting Wallet processing, cloud requests, currency refreshes or merchant categorization. Wallet progress continues while the app is usable.
+- Publish confirmed snapshots and local edits during Wallet processing; a slow quote no longer hides edits on the Mac. Bound each cloud catch-up pass so continuous incoming events cannot monopolize synchronization.
+- Use explicit currency minor units for conversion, fees and split allocation on both platforms, matching PostgreSQL. RSD retains two decimal places even when the system display formatter uses none.
+- Keep rejected Wallet captures available for review without retrying unchanged invalid payloads or delaying synchronization of unrelated changes.
+- Preserve automation source on the server so Wallet Transaction, Wallet Notification and bank messages can reconcile one purchase across different card labels and accounts. Older installed clients recover the source only from unambiguous history for the same phone and card alias.
+- Commit the capture state and transaction under the same household lock before reconciling the other channel, so both arrival orders produce one debit.
+
 ## iPhone 1.0.75 — 2026-11-24
 
 iPhone 1.0.75 (build 76) · Mac unchanged

@@ -20,6 +20,25 @@ final class CardConversionTests: XCTestCase {
     private func quote(_ amount: Decimal, _ from: String, _ to: String, _ date: Date) async throws -> CardConversion {
         CardConversion(originalAmount: amount, originalCurrency: from, accountCurrency: to, rate: Decimal(string: "0.895174")!, date: date)
     }
+    func testCurrencyPrecisionMatchesCloudInsteadOfDisplayFormatter() throws {
+        let date = Dates.parse("2026-11-24")!
+        for (currency, rate, expected) in [
+            ("RSD", "107.477244", "-322.43"),
+            ("EUR", "0.9191167279", "-2.76"),
+            ("JPY", "150.25", "-451"),
+            ("KWD", "0.30614", "-0.918")
+        ] {
+            let value = CardConversion(originalAmount: -3, originalCurrency: "USD", accountCurrency: currency,
+                rate: Decimal(string: rate)!, date: date)
+            XCTAssertEqual(try value.convertedAmount(), Decimal(string: expected), currency)
+            let decoded = try JSONDecoder().decode(CardConversion.self, from: JSONEncoder().encode(value))
+            XCTAssertEqual(try decoded.convertedAmount(), Decimal(string: expected), currency)
+        }
+        XCTAssertEqual(CurrencyPrecision.rounded(Decimal(string: "-0.000075")!, currency: "CLF"), Decimal(string: "-0.0001"))
+        let fee = SameCurrencyFee(originalAmount: Decimal(string: "-322.43")!, percent: 1)
+        XCTAssertEqual(try fee.chargedAmount(currency: "RSD"), Decimal(string: "-325.65"))
+    }
+
     func testBankFeeUsesUnroundedAmountAndSurvivesLegacyDecoding() throws {
         var account = Account(name: "Fee account", currency: "EUR", conversionFeePercent: Decimal(string: "0.23"))
         let base = CardConversion(originalAmount: -10, originalCurrency: "USD", accountCurrency: "EUR", rate: Decimal(string: "0.8014")!, date: Dates.parse("2026-10-09")!)

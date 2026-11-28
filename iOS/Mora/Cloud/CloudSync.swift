@@ -47,6 +47,7 @@ final class CloudSync: ObservableObject {
     /// The whole server inbox; `pending` shows only the purchases that need the user.
     private var inbox: [CloudCapture] = []
     private var attemptedCaptures: Set<UUID> = []
+    private var rejectedCaptures: [UUID: CloudCapture] = [:]
     /// Captures the user deleted that the server has not confirmed yet: a sync in between must not bring them back.
     private var dismissing: Set<UUID> = []
     private var synchronizing = false
@@ -113,7 +114,7 @@ final class CloudSync: ObservableObject {
     func prepare(store: FinanceStore) async {
         self.store = store
         await load()
-        if enabled && signedIn && !store.isDemo { await synchronize(inBackground: true) }
+        // The foreground task owns synchronization; preparation never waits for Wallet.
     }
     /// Polls while the scene is active; the caller cancels it in the background.
     func run() async {
@@ -312,6 +313,7 @@ final class CloudSync: ObservableObject {
             BankAlertDelivery.reconcileDuplicates(duplicates)
             if captureDuplicates != duplicates { captureDuplicates = duplicates }
         } catch CloudAPIError.response(let code, _) where code == 404 { }
+        rejectedCaptures = rejectedCaptures.filter { _, rejected in captures.contains(rejected) }
         let knownCards = Set(walletCards.map(\.id))
         if captures.contains(where: { $0.card_id.map { !knownCards.contains($0) } ?? false }) { try await loadWalletCards(id) }
         let changed = inbox != captures
@@ -529,6 +531,7 @@ final class CloudSync: ObservableObject {
         var firstError: Error?
         for capture in inbox.sorted(by: { $0.date < $1.date }) {
             try Task.checkCancellation()
+            guard rejectedCaptures[capture.id] != capture else { continue }
             do {
                 let local = try await diskLedger()
                 guard let transaction = try await WalletReviewDraft.automaticTransaction(for: capture, in: local, fetch: { amount, from, to, date in
@@ -551,7 +554,9 @@ final class CloudSync: ObservableObject {
             catch {
                 // Only a real failure needs review; offline purchases wait for the next attempt.
                 if !Self.isConnectionError(error) { attemptedCaptures.insert(capture.id) }
-                if firstError == nil { firstError = error }
+                if (error as? CloudAPIError)?.isCaptureRejection == true {
+                    rejectedCaptures[capture.id] = capture
+                } else if firstError == nil { firstError = error }
             }
         }
         // Failed captures stay in the server inbox and use the normal sync backoff.
@@ -749,6 +754,7 @@ final class CloudSync: ObservableObject {
             settings?.enabled = false; settings?.householdID = nil; settings?.householdName = ""
             try await persistSettings()
             session = nil; signedIn = false; enabled = false; householdID = nil; householdName = ""
+            rejectedCaptures = [:]
             households = []; pending = []; inbox = []; attemptedCaptures = []; processingWallet = false; walletCards = []; agents = []; newAgentURL = nil; invitation = nil; conflict = false; error = nil
         }
     }

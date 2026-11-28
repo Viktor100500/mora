@@ -211,7 +211,10 @@ final class CloudSyncTests: XCTestCase {
         await store.load()
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [SyncStubProtocol.self]
-        cloud = CloudSync(store: store, transport: URLSession(configuration: config), walletRate: walletRate, sessionWriter: { _, _ in })
+        let sessionData = OSAllocatedUnfairLock<Data?>(initialState: nil)
+        cloud = CloudSync(store: store, transport: URLSession(configuration: config), walletRate: walletRate,
+            sessionReader: { _ in sessionData.withLock { $0 } },
+            sessionWriter: { data, _ in sessionData.withLock { $0 = data } })
         let snapshot = String(decoding: try LedgerFile.encode(CloudMerge.shared(store.ledger)), as: UTF8.self)
         let envelope = "{\"household_id\":\"\(householdID)\",\"name\":\"Test\",\"version\":1,\"snapshot\":\(snapshot)}"
         SyncStubProtocol.handler = { request in
@@ -233,6 +236,55 @@ final class CloudSyncTests: XCTestCase {
         cloud = nil
         store = nil
         if let directory { try FileManager.default.removeItem(at: directory) }
+    }
+
+    func testLocalInterfaceIsVisibleAndEditableWhileFirstCloudRequestIsBlocked() async throws {
+        defer { try? cleanup() }
+        var ledger = Ledger.empty
+        ledger.preferences.automaticRates = false
+        ledger.accounts = [Account(name: "Local account", currency: "USD")]
+        ledger.transactions = [FinanceCore.Transaction(date: Date(), merchant: "Already saved", amount: -3, accountID: ledger.accounts[0].id)]
+        try await prepare(ledger: ledger)
+        let requested = expectation(description: "First cloud request after local reveal")
+        let release = DispatchSemaphore(value: 0)
+        defer { release.signal() }
+        var first = true
+        SyncStubProtocol.handler = { request in
+            if first {
+                first = false
+                requested.fulfill()
+                guard release.wait(timeout: .now() + 10) == .success else { throw URLError(.timedOut) }
+            }
+            switch request.url!.lastPathComponent {
+            case "mora_get_status": return (200, Data("{\"version\":1,\"pending_count\":0}".utf8))
+            case "mora_save_household": return (200, Data("false".utf8))
+            default: return (200, Data("[]".utf8))
+            }
+        }
+        _ = NSApplication.shared
+        let suite = "MoraBlockedLaunch-\(UUID())"
+        let preferences = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { preferences.removePersistentDomain(forName: suite) }
+        preferences.set(false, forKey: "mora.merchantCategories.online")
+        let categorizer = MerchantCategorizer(preferences: preferences, lookup: { _ in nil })
+        let host = NSHostingView(rootView: ContentView(page: .constant(.overview), sheet: .constant(nil))
+            .environmentObject(store).environmentObject(cloud).environmentObject(categorizer))
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1320, height: 900), styleMask: [.titled], backing: .buffered, defer: false)
+        window.contentView = host
+        defer { window.contentView = nil }
+        await fulfillment(of: [requested], timeout: 7)
+        func hasSplash(_ view: NSView) -> Bool { view is LaunchParticleView || view.subviews.contains(where: hasSplash) }
+        XCTAssertFalse(hasSplash(host), "A blocked cloud request must start after the local interface is revealed")
+        XCTAssertFalse(store.isLoading)
+        XCTAssertFalse(store.isDeferringUpdates)
+        XCTAssertEqual(store.ledger.transactions.count, 1)
+        await store.update { $0.accounts[0].name = "Edited while offline" }
+        XCTAssertEqual(store.ledger.accounts[0].name, "Edited while offline")
+        release.signal()
+        window.contentView = nil
+        await cloud.finishPendingWrites()
+        await categorizer.finishPendingWrites()
+        await store.notifications.flush()
     }
 
     func testStartupShowsWalletProgressBeforeFirstServerResponseAndClearsEmptyResult() async throws {
@@ -396,6 +448,48 @@ final class CloudSyncTests: XCTestCase {
         XCTAssertEqual(store.ledger.transactions.count, 1)
     }
 
+    func testRejectedCaptureDoesNotRetryOrPreventOtherLocalChangesFromSyncing() async throws {
+        defer { try? cleanup() }
+        var ledger = Ledger.empty
+        ledger.accounts = [Account(name: "EUR test", currency: "EUR")]
+        try await prepare(ledger: ledger, walletRate: { amount, from, to, date in
+            CardConversion(originalAmount: amount, originalCurrency: from, accountCurrency: to, rate: 1, date: date)
+        })
+        let capture = CloudCapture(id: UUID(), merchant: "Needs review", amount: "3", currency: "USD", account_id: ledger.accounts[0].id, date: Date())
+        let encoder = JSONEncoder(); encoder.dateEncodingStrategy = .iso8601
+        let decoder = JSONDecoder(); decoder.dateDecodingStrategy = .iso8601
+        var remote = CloudMerge.shared(store.ledger), version = 1, bookingRequests = 0, savedEdits = 0
+        func envelope() throws -> Data {
+            let snapshot = String(decoding: try encoder.encode(remote), as: UTF8.self)
+            return Data("{\"household_id\":\"\(householdID)\",\"name\":\"Test\",\"version\":\(version),\"snapshot\":\(snapshot)}".utf8)
+        }
+        struct Save: Decodable { let p_snapshot: Ledger }
+        SyncStubProtocol.handler = { request in
+            switch request.url!.lastPathComponent {
+            case "mora_get_status": return (200, Data("{\"version\":\(version),\"pending_count\":1}".utf8))
+            case "mora_get_household": return (200, try envelope())
+            case "mora_save_household":
+                remote = try decoder.decode(Save.self, from: SyncStubProtocol.requestBody(request)).p_snapshot
+                version += 1; savedEdits += 1
+                return (200, Data("true".utf8))
+            case "mora_review_capture":
+                bookingRequests += 1
+                return (400, Data("{\"message\":\"Converted amount differs\"}".utf8))
+            default: return (200, try encoder.encode([capture]))
+            }
+        }
+        await cloud.synchronize(inBackground: true)
+        XCTAssertNil(cloud.error, "A rejected purchase must not fail the whole household sync")
+        XCTAssertEqual(cloud.pending.map(\.id), [capture.id])
+        await store.update { $0.accounts[0].name = "Independent edit" }
+        await cloud.synchronize(inBackground: true)
+        XCTAssertNil(cloud.error)
+        XCTAssertEqual(bookingRequests, 1, "Unchanged invalid captures wait for review")
+        XCTAssertEqual(savedEdits, 1)
+        XCTAssertEqual(remote.accounts[0].name, "Independent edit")
+        XCTAssertTrue(store.ledger.transactions.isEmpty)
+    }
+
     func testUnchangedBackgroundPollsPublishNothing() async throws {
         defer { try? cleanup() }
         try await prepare()
@@ -533,7 +627,7 @@ final class CloudSyncTests: XCTestCase {
         XCTAssertNil(cloud.error)
     }
 
-    func testBatchPublishesOnceAndDrainsPurchasesArrivingDuringConversion() async throws {
+    func testBatchPublishesConfirmedPurchasesWhileConversionAndLocalEditsContinue() async throws {
         defer { try? cleanup() }
         var ledger = Ledger.empty
         ledger.accounts = [Account(name: "EUR test", currency: "EUR")]
@@ -551,15 +645,18 @@ final class CloudSyncTests: XCTestCase {
         try await prepare(ledger: ledger, walletRate: { amount, from, to, date in
             quoteCalls += 1
             XCTAssertEqual(self.store.activeNotice?.isInProgress, true)
-            XCTAssertTrue(self.store.isDeferringUpdates)
-            XCTAssertTrue(self.store.ledger.transactions.isEmpty)
+            XCTAssertFalse(self.store.isDeferringUpdates)
+            XCTAssertEqual(self.store.ledger.transactions.count, quoteCalls - 1)
             XCTAssertTrue(self.cloud.pending.isEmpty)
             XCTAssertFalse(self.store.notifications.events.contains { $0.kind == .review })
             if quoteCalls == 2 {
                 // Simulate the two-second disk watcher seeing the first durable write.
                 XCTAssertEqual(try LedgerFile.decode(Data(contentsOf: self.store.fileURL)).transactions.count, 1)
                 await self.store.reloadFromDisk()
-                XCTAssertTrue(self.store.ledger.transactions.isEmpty)
+                XCTAssertEqual(self.store.ledger.transactions.count, 1)
+                // User edits must become visible before the remaining quotes finish.
+                await self.store.update { $0.accounts[0].name = "Edited during quote" }
+                XCTAssertEqual(self.store.ledger.accounts[0].name, "Edited during quote")
                 remaining.append(try capture(late))
             }
             return CardConversion(originalAmount: amount, originalCurrency: from, accountCurrency: to, rate: 1, date: date)
@@ -593,8 +690,8 @@ final class CloudSyncTests: XCTestCase {
         }
         var visibleCounts: [Int] = [], pendingCounts: [Int] = []
         cloud.preparePresentation = { store in
-            XCTAssertTrue(store.ledger.transactions.isEmpty)
-            XCTAssertFalse(store.latestLedger.transactions.isEmpty)
+            XCTAssertFalse(store.ledger.transactions.isEmpty)
+            XCTAssertFalse(store.isDeferringUpdates)
             await store.update { ledger in
                 ledger.accounts[0].name = "Edited during sync"
                 let categoryID = ledger.categories.first { $0.name == "Покупки" }!.id
@@ -606,7 +703,9 @@ final class CloudSyncTests: XCTestCase {
         await cloud.synchronize(inBackground: true)
         XCTAssertNil(cloud.error)
         XCTAssertEqual(quoteCalls, 3)
-        XCTAssertEqual(visibleCounts, [3])
+        XCTAssertTrue(visibleCounts.contains(1))
+        XCTAssertTrue(visibleCounts.contains(2))
+        XCTAssertEqual(visibleCounts.last, 3)
         XCTAssertEqual(store.ledger.accounts[0].name, "Edited during sync")
         XCTAssertTrue(store.ledger.transactions.allSatisfy { $0.categoryID != nil })
         XCTAssertEqual(pendingCounts, [1])
