@@ -212,10 +212,9 @@ struct ContentView: View {
             store.beginLaunchPresentation()
             defer { store.endLaunchPresentation() }
             cloud.preparePresentation = { [categorizer] store in await categorizer.process(store: store, duringSync: true) }
-            await cloud.prepare(store: store)
-            await store.refreshExchangeRates()
-            await cloud.synchronize(inBackground: true, showWalletProgress: true)
-            await categorizer.process(store: store, duringSync: true)
+            // Launch depends only on the durable local ledger. Cloud credentials,
+            // Wallet booking, exchange rates and categorization start after reveal.
+            await store.load()
             await store.prepareReportsForPresentation(in: month)
             await store.prepareTrendForPresentation(in: month, detail: .months)
             guard !Task.isCancelled else { return }
@@ -240,8 +239,9 @@ struct ContentView: View {
                     continuation.resume()
                 }
             }
-            // Polling and categorization begin after the transition has completed.
-            async let sync: Void = cloud.run(store: store)
+            // Credentials and the first network request cannot hold the splash.
+            await cloud.prepare(store: store)
+            async let sync: Void = { await cloud.synchronize(inBackground: true, showWalletProgress: true); await cloud.run(store: store) }()
             async let categories: Void = categorizer.run(store: store)
             _ = await (sync, categories)
         }

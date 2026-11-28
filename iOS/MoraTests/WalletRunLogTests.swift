@@ -63,6 +63,7 @@ final class WalletRunLogTests: XCTestCase {
         XCTAssertEqual(saved.delivery, .delivered); XCTAssertEqual(saved.serverState, "recorded"); XCTAssertNil(saved.lastError)
 
         let bodies = try await requests.all.map { try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap($0.httpBody)) as? [String: String]) }
+        XCTAssertTrue(bodies.allSatisfy { $0["p_source"] == "wallet_transaction" })
         XCTAssertEqual(bodies.map { $0["p_event_id"] }, [run.id.uuidString.lowercased(), run.id.uuidString.lowercased()])
         XCTAssertEqual(bodies.last?["p_card"], "Chase"); XCTAssertEqual(bodies.last?["p_occurred_at"], start.ISO8601Format())
         await online.deliverWaiting(with: sender, now: start.addingTimeInterval(120))

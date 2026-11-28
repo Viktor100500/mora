@@ -23,6 +23,7 @@ final class CloudSync: ObservableObject {
     /// The whole server inbox; `pending` shows only the purchases that need the user.
     private var inbox: [CloudCapture] = []
     private var attemptedCaptures: Set<UUID> = []
+    private var rejectedCaptures: [UUID: CloudCapture] = [:]
     private var syncRequested = false
     private var stagedSyncDate: Date?
     private var importedBatchIDs: [UUID] = []
@@ -339,6 +340,7 @@ final class CloudSync: ObservableObject {
             captures.removeAll { duplicateIDs.contains($0.id) }
             store?.notifications.reconcileDuplicates(duplicates, householdID: id)
         } catch CloudAPIError.response(let code, _) where code == 404 { }
+        rejectedCaptures = rejectedCaptures.filter { _, rejected in captures.contains(rejected) }
         let knownCards = Set(walletCards.map(\.id))
         if captures.contains(where: { $0.card_id.map { !knownCards.contains($0) } ?? false }) { try await loadWalletCards(id) }
         if let previous = stagedPending {
@@ -442,14 +444,13 @@ final class CloudSync: ObservableObject {
             if showWalletProgress { self.showSyncProgress() }
             self.diagnostics?.record("sync-start-revision-\(store.revision)", taskCancelled: Task.isCancelled)
             let originalIDs = Set(store.ledger.transactions.map(\.id))
-            store.beginDeferredUpdates()
             self.stagedPending = self.inbox
             self.importedBatchIDs = []
             self.stagedSyncDate = nil
             var failure: Error?
             var stage = "sync"
             do {
-                while true {
+                for _ in 0..<3 {
                     try Task.checkCancellation()
                     stage = "snapshot"
                     try await self.syncNow()
@@ -481,8 +482,8 @@ final class CloudSync: ObservableObject {
                     self.nextAttempt = Date().addingTimeInterval(min(limit, 8 * pow(2, Double(min(self.failureCount, 5)))))
                 }
             }
-            // Disk writes stay durable throughout; only their presentation waits.
-            await store.endDeferredUpdates()
+            // Each confirmed snapshot is already visible. Local edits stay usable
+            // while a later Wallet purchase waits for its exchange-rate quote.
             let all = self.stagedPending ?? self.inbox
             self.stagedPending = nil
             self.inbox = all
@@ -527,6 +528,7 @@ final class CloudSync: ObservableObject {
         var firstError: Error?
         for capture in (stagedPending ?? inbox).sorted(by: { $0.date < $1.date }) {
             try Task.checkCancellation()
+            guard rejectedCaptures[capture.id] != capture else { continue }
             do {
                 let local = try await diskLedger()
                 let fetch = walletRate
@@ -553,7 +555,9 @@ final class CloudSync: ObservableObject {
                 if Self.isCancellation(error) { throw error }
                 // Only a real failure needs review; offline purchases wait for the next attempt.
                 if !Self.isConnectionError(error) { attemptedCaptures.insert(capture.id) }
-                if firstError == nil { firstError = error }
+                if (error as? CloudAPIError)?.isCaptureRejection == true {
+                    rejectedCaptures[capture.id] = capture
+                } else if firstError == nil { firstError = error }
             }
         }
         // Keep failed captures in the server inbox and use the normal sync backoff.
@@ -790,6 +794,7 @@ final class CloudSync: ObservableObject {
             settings?.enabled = false; settings?.householdID = nil; settings?.householdName = ""
             try await persistSettings()
             session = nil; signedIn = false; enabled = false; householdID = nil; householdName = ""
+            rejectedCaptures = [:]
             households = []; pending = []; inbox = []; attemptedCaptures = []; phoneTokens = []; walletCards = []; agents = []; newAgentURL = nil; invitation = nil; issuedToken = nil; conflict = false; error = nil
         }
     }

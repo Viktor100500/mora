@@ -137,6 +137,10 @@ public struct CloudWalletCard: Codable, Identifiable, Equatable, Sendable {
 
 public enum CloudAPIError: LocalizedError, Sendable {
     case unauthorized, response(Int, String), invalidResponse
+    public var isCaptureRejection: Bool {
+        if case .response(let code, _) = self { return code == 400 || code == 422 }
+        return false
+    }
     public var errorDescription: String? {
         switch self {
         case .unauthorized: return "Не удалось войти. Проверьте email и пароль; при истекшей сессии войдите повторно."

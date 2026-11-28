@@ -219,6 +219,7 @@ final class BankAlertLogTests: XCTestCase {
         var alert = BankAlert(receivedAt: start, source: "Bybit", text: "", state: .waiting)
         alert.amount = "12.5"; alert.currency = "EUR"; alert.merchant = "LIDL"; alert.cardLast4 = "7788"
         let body = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(BankAlertDelivery.request(for: alert, with: sender).httpBody)) as? [String: String])
+        XCTAssertEqual(body["p_source"], "bank_notification")
         XCTAssertEqual(body["p_card"], "Bybit ··7788")
         XCTAssertEqual(body["p_currency"], "EUR")
         XCTAssertEqual(body["p_amount"], "12.5")

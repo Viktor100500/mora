@@ -10,6 +10,7 @@ struct RootView: View {
     @EnvironmentObject private var reviewQueue: WalletReviewQueue
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("mora.didSeeWelcome") private var didSeeWelcome = false
+    @State private var prepared = false
 
     private var colorScheme: ColorScheme? {
         switch store.ledger.preferences.appearance { case "light": .light; case "dark": .dark; default: nil }
@@ -56,6 +57,7 @@ struct RootView: View {
             applyDebugLaunchArguments()
             #endif
             await cloud.prepare(store: store)
+            prepared = true
         }
         .onChange(of: cloud.captureDuplicates) { _, _ in reviewQueue.reload() }
         .onChange(of: cloud.pending) { _, _ in reviewQueue.reload() }
@@ -68,8 +70,8 @@ struct RootView: View {
         }
         // Keyed on foreground/background only: a brief `.inactive` (Control Center, a
         // notification banner, the app switcher) must not restart every sync and loop.
-        .task(id: scenePhase != .background) {
-            guard scenePhase != .background else { return }
+        .task(id: prepared && scenePhase != .background) {
+            guard prepared, scenePhase != .background else { return }
             reviewQueue.reload()
             await store.reloadFromDisk()
             // Purchases saved while offline go out as soon as Mora is opened.
